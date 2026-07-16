@@ -70,6 +70,17 @@ All tests run natively (no WASM needed) using the Soroban SDK test utilities.
 
 ---
 
+## Task Runner
+
+Common tasks are available via `make`:
+
+```bash
+make test        # Run all tests
+make build-wasm  # Build the contract WASM in release mode
+make clean       # Clean build artifacts
+```
+---
+
 ## Deploy to Testnet
 
 ### 1. Configure the Stellar Testnet
