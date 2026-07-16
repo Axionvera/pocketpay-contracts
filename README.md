@@ -209,10 +209,13 @@ stellar-pocketpay-contracts/
 - Admin and initialization flags use **instance** storage (tied to contract lifetime).
 
 ### Known Limitations
-- **No real token transfers**: This contract tracks balances internally but does not yet integrate with the Stellar Asset Contract (SAC) for actual XLM/token transfers. A production version should call the token contract's `transfer()` function.
-- **Single unlock time**: Locking funds multiple times overwrites the previous unlock timestamp. A production version might use per-lock entries.
+See [docs/known-limitations.md](docs/known-limitations.md) for the current constraints and future work.
+
+- **No real token transfers**: This contract tracks balances internally but does not yet integrate with the Stellar Asset Contract (SAC) for actual XLM/token transfers.
+- **Single unlock time**: Locking funds multiple times overwrites the previous unlock timestamp.
 - **No admin recovery**: There is no mechanism for the admin to recover or migrate funds.
-- **No upgrade mechanism**: The contract does not implement `upgrade()`. Consider adding this for mainnet.
+- **No upgrade mechanism**: The contract does not implement `upgrade()`.
+
 
 ---
 
