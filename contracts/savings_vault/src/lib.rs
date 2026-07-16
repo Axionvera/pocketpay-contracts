@@ -12,8 +12,6 @@
 
 #![no_std]
 
-use core::ops::Add;
-
 use soroban_sdk::{contract, contractimpl, contracttype, log, token, Address, Env};
 
 // ---------------------------------------------------------------------------
@@ -315,3 +313,5 @@ impl SavingsVault {
 
 #[cfg(test)]
 mod test;
+#[cfg(test)]
+mod test_helpers;

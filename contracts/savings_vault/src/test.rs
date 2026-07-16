@@ -2,11 +2,11 @@
 //!
 //! These tests use the Soroban SDK test utilities to simulate
 //! on-chain interactions in an isolated environment.
+// mod test_helpers;
 
 use super::*;
-use soroban_sdk::{testutils::Address as _, testutils::Ledger, Address, Env};
+use soroban_sdk::{testutils::Address as _, testutils::Ledger, Address};
 
-mod test_helpers;
 use test_helpers::*;
 
 // =========================================================================
@@ -15,24 +15,21 @@ use test_helpers::*;
 
 #[test]
 fn test_initialize() {
-    let (env, _id, client) = setup();
-    let admin = Address::generate(&env);
-    let token = Address::generate(&env);
-
-    // Should succeed the first time
+    let env = test_env();
+    let (_id, client) = init_contract(&env);
+    let admin = new_user(&env);
+    let token = new_user(&env);
     client.initialize(&admin, &token);
 }
 
 #[test]
 #[should_panic(expected = "Contract is already initialized")]
 fn test_initialize_twice_panics() {
-    let (env, _id, client) = setup();
-    let admin = Address::generate(&env);
-    let token = Address::generate(&env);
-
-    // Should succeed the first time
+    let env = test_env();
+    let (_id, client) = init_contract(&env);
+    let admin = new_user(&env);
+    let token = new_user(&env);
     client.initialize(&admin, &token);
-    // Second call should panic
     client.initialize(&admin, &token);
 }
 
@@ -79,28 +76,6 @@ fn test_deposit_negative_panics() {
 // =========================================================================
 // Withdrawal Tests
 // =========================================================================
-
-fn test_token(
-    env: Env,
-    client: SavingsVaultClient<'static>,
-) -> (
-    Env,
-    Address,
-    SavingsVaultClient<'static>,
-    token::Client<'static>,
-    token::StellarAssetClient<'static>,
-) {
-    let admin = Address::generate(&env);
-
-    let contract = env.register_stellar_asset_contract_v2(admin.clone());
-    let contract_address = contract.address();
-
-    client.initialize(&admin, &contract_address);
-
-    let token_client = token::Client::new(&env, &contract_address);
-    let token_admin = token::StellarAssetClient::new(&env, &contract_address);
-    (env.clone(), admin, client, token_client, token_admin)
-}
 
 #[test]
 fn test_withdraw() {
@@ -168,16 +143,10 @@ fn test_withdraw_more_than_balance_panics() {
 #[test]
 #[should_panic(expected = "Withdrawal amount must be greater than zero")]
 fn test_withdraw_zero_panics() {
-    let (env, current_contract_address, client) = setup();
-    let (env, _admin, client, token_client, token_admin) = test_token(env, client);
-    let user = Address::generate(&env);
-    token_admin.mint(&user, &10000);
-
-    // SAC Transfer not yet implemented for deposit so i'll mimick it by trnasfering asset(deposit_amount) from user to the contract
-    client.deposit(&user, &100);
-
-    token_client.transfer(&user, &current_contract_address, &100); // This should be removed when deposit function implements SAC
-
+    let env = test_env();
+    let (_id, client) = init_contract(&env);
+    let user = new_user(&env);
+    deposit_balance(&client, &user, 100);
     client.withdraw(&user, &0);
 }
 
@@ -195,6 +164,17 @@ fn test_withdraw_negative_panics() {
     token_client.transfer(&user, &current_contract_address, &100); // This should be removed when deposit function implements SAC
 
     client.withdraw(&user, &-10);
+}
+
+#[test]
+#[should_panic(expected = "Insufficient balance")]
+fn test_withdraw_from_empty_balance_panics() {
+    // AC: Withdrawing from an empty balance fails.
+    let (env, _id, client) = setup();
+    let user = Address::generate(&env);
+
+    // User never deposited — balance is implicitly 0
+    client.withdraw(&user, &1);
 }
 
 #[test]
@@ -219,10 +199,18 @@ fn test_failed_withdraw_does_not_change_available_balance() {
     // Strategy (no_std): perform a *valid* withdraw of the exact balance to
     // prove state is only mutated on success, paired with the should_panic
     // test below that confirms rejection happens before any write.
-    let (env, _id, client) = setup();
+    let (env, current_contract_address, client) = setup();
+    let (env, _admin, client, token_client, token_admin) = test_token(env, client);
     let user = Address::generate(&env);
+    let deposit_amount = 100;
 
-    client.deposit(&user, &100);
+    token_admin.mint(&user, &10000);
+
+    // SAC Transfer not yet implemented for deposit so i'll mimick it by trnasfering asset(deposit_amount) from user to the contract
+    client.deposit(&user, &deposit_amount);
+
+    token_client.transfer(&user, &current_contract_address, &deposit_amount); // This should be removed when deposit function implements SAC
+
     // A valid partial withdraw succeeds and leaves the remainder intact.
     client.withdraw(&user, &60);
     assert_eq!(client.get_balance(&user), 40);
@@ -397,24 +385,26 @@ fn test_can_withdraw_no_locked_funds() {
 
 #[test]
 fn test_separate_user_balances() {
-    let (env, current_contract_address, client) = setup();
+    let env = test_env();
+    let (current_contract_address, client) = init_contract(&env);
     let (env, _admin, client, token_client, token_admin) = test_token(env, client);
 
-    let alice = Address::generate(&env);
-    let bob = Address::generate(&env);
+    let alice = new_user(&env);
+    let bob = new_user(&env);
 
     token_admin.mint(&alice, &10000);
     token_admin.mint(&bob, &10000);
 
     // SAC Transfer not yet implemented for deposit so i'll mimick it by trnasfering asset(deposit_amount) from user to the contract
-    client.deposit(&alice, &1000);
-    client.deposit(&bob, &500);
+    deposit_balance(&client, &alice, 1_000);
+    deposit_balance(&client, &bob, 500);
 
     token_client.transfer(&alice, &current_contract_address, &1000); // This should be removed when deposit function implements SAC
     token_client.transfer(&bob, &current_contract_address, &500); // This should be removed when deposit function implements SAC
 
-    assert_eq!(client.get_balance(&alice), 1000);
+    assert_eq!(client.get_balance(&alice), 1_000);
     assert_eq!(client.get_balance(&bob), 500);
+
     client.withdraw(&alice, &200);
     assert_eq!(client.get_balance(&alice), 800);
     assert_eq!(client.get_balance(&bob), 500);

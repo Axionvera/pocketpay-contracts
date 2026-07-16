@@ -1,7 +1,7 @@
 // Reusable test helpers for SavingsVault contract tests.
 
 use super::*;
-use soroban_sdk::{testutils::Address as _, Address, Env};
+use soroban_sdk::{testutils::Address as _, testutils::Ledger, Address, Env};
 
 /// Returns a default test environment with all auth calls mocked.
 pub fn test_env() -> Env {
@@ -36,5 +36,39 @@ pub fn seed_balances(client: &SavingsVaultClient, user: &Address, amounts: &[i12
 
 /// Sets the ledger timestamp.
 pub fn set_ledger_timestamp(env: &Env, timestamp: u64) {
-    env.ledger().with_mut(|li| li.timestamp = timestamp);
+    // env.ledger().with_mut(|li| li.timestamp = timestamp);
+    env.ledger().set_timestamp(timestamp);
+}
+
+pub fn setup() -> (Env, Address, SavingsVaultClient<'static>) {
+    let env = Env::default();
+    // Allow all auth calls in test mode so we can focus on logic
+    env.mock_all_auths();
+
+    let contract_id = env.register(SavingsVault, ());
+    let client = SavingsVaultClient::new(&env, &contract_id);
+
+    (env, contract_id, client)
+}
+
+pub fn test_token(
+    env: Env,
+    client: SavingsVaultClient<'static>,
+) -> (
+    Env,
+    Address,
+    SavingsVaultClient<'static>,
+    token::Client<'static>,
+    token::StellarAssetClient<'static>,
+) {
+    let admin = Address::generate(&env);
+
+    let contract = env.register_stellar_asset_contract_v2(admin.clone());
+    let contract_address = contract.address();
+
+    client.initialize(&admin, &contract_address);
+
+    let token_client = token::Client::new(&env, &contract_address);
+    let token_admin = token::StellarAssetClient::new(&env, &contract_address);
+    (env.clone(), admin, client, token_client, token_admin)
 }
