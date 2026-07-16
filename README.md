@@ -1,4 +1,4 @@
-# Stellar PocketPay — Savings Vault Contract
+Stellar PocketPay — Savings Vault Contract
 ## Security Considerations
 
 > **This contract is for educational and testnet use.** Review the following before any mainnet deployment.
@@ -63,6 +63,7 @@ target/wasm32-unknown-unknown/release/savings_vault.wasm
 ### Contract size report
 
 Soroban contract size affects upload and deployment costs and can reveal unexpected binary growth. Use the release wrapper above to build and print the artifact size in both human-readable units and exact bytes:
+
 
 ```text
 WASM artifact: target/wasm32-unknown-unknown/release/savings_vault.wasm
@@ -210,6 +211,8 @@ stellar-pocketpay-contracts/
 
 ### Known Limitations
 See [docs/known-limitations.md](docs/known-limitations.md) for the current constraints and future work.
+
+
 
 - **No real token transfers**: This contract tracks balances internally but does not yet integrate with the Stellar Asset Contract (SAC) for actual XLM/token transfers.
 - **Single unlock time**: Locking funds multiple times overwrites the previous unlock timestamp.
