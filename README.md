@@ -197,12 +197,23 @@ stellar-pocketpay-contracts/
 
 ## Contributing
 
-Contributions are welcome! This project is intentionally beginner-friendly:
+Contributions are welcome! This project is intentionally beginner-friendly.
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/my-feature`)
-3. Write tests for any new functionality
-4. Submit a pull request
+See **[CONTRIBUTING.md](CONTRIBUTING.md)** for the full guide, including:
+
+- How to format code (`cargo fmt`)
+- How to lint code (`cargo clippy -- -D warnings`)
+- How to run the test suite (`cargo test`)
+- PR checklist and commit message conventions
+
+Quick start:
+
+```bash
+# Fork & clone, then verify everything is green before making changes
+cargo fmt --check
+cargo clippy --tests -- -D warnings
+cargo test
+```
 
 ---
 
