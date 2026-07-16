@@ -3,7 +3,7 @@
 
 > **This contract is for educational and testnet use.** Review the following before any mainnet deployment.
 
-See the [Admin Role](docs/admin-role.md) document for details on what the `initialize(admin)` value records, what the admin can and cannot do today, and future admin design considerations.
+See the [Admin Role](docs/admin-role.md) document for details on what the `initialize(admin)` value records, what the admin can and cannot do today, and future admin design considerations. For SDK client integration and parameter mappings, see the [SDK Compatibility Reference](docs/sdk-compatibility.md).
 
 ## Features
 
