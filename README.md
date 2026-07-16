@@ -1,8 +1,9 @@
 # Stellar PocketPay — Savings Vault Contract
+## Security Considerations
 
-A Soroban smart contract that provides a **savings vault** for the [Stellar PocketPay](https://github.com/Stellar-PocketPay) mobile wallet. Users can deposit, withdraw, and time-lock funds on the Stellar network.
+> **This contract is for educational and testnet use.** Review the following before any mainnet deployment.
 
----
+See the [Admin Role](docs/admin-role.md) document for details on what the `initialize(admin)` value records, what the admin can and cannot do today, and future admin design considerations.
 
 ## Features
 
@@ -49,12 +50,32 @@ cargo build --target wasm32-unknown-unknown
 
 # Optimized release build (recommended for deployment)
 cargo build --target wasm32-unknown-unknown --release
+
+# Optimized release build with an immediate WASM size report
+make build-release
 ```
 
 The compiled `.wasm` file will be at:
 ```
 target/wasm32-unknown-unknown/release/savings_vault.wasm
 ```
+
+### Contract size report
+
+Soroban contract size affects upload and deployment costs and can reveal unexpected binary growth. Use the release wrapper above to build and print the artifact size in both human-readable units and exact bytes:
+
+```text
+WASM artifact: target/wasm32-unknown-unknown/release/savings_vault.wasm
+WASM size: 5.73 KiB (5871 bytes)
+```
+
+To report the size of an existing release artifact without rebuilding it, run:
+
+```bash
+make wasm-size
+```
+
+The reporting command exits with an error and identifies the expected path when the WASM file is missing. CI pipelines should run `make build-release` (or `make wasm-size` after their release build) so contract-size changes remain visible in build logs.
 
 ---
 
@@ -68,6 +89,17 @@ cargo test
 
 All tests run natively (no WASM needed) using the Soroban SDK test utilities.
 
+---
+
+## Task Runner
+
+Common tasks are available via `make`:
+
+```bash
+make test        # Run all tests
+make build-wasm  # Build the contract WASM in release mode
+make clean       # Clean build artifacts
+```
 ---
 
 ## Deploy to Testnet
@@ -197,12 +229,23 @@ stellar-pocketpay-contracts/
 
 ## Contributing
 
-Contributions are welcome! This project is intentionally beginner-friendly:
+Contributions are welcome! This project is intentionally beginner-friendly.
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/my-feature`)
-3. Write tests for any new functionality
-4. Submit a pull request
+See **[CONTRIBUTING.md](CONTRIBUTING.md)** for the full guide, including:
+
+- How to format code (`cargo fmt`)
+- How to lint code (`cargo clippy -- -D warnings`)
+- How to run the test suite (`cargo test`)
+- PR checklist and commit message conventions
+
+Quick start:
+
+```bash
+# Fork & clone, then verify everything is green before making changes
+cargo fmt --check
+cargo clippy --tests -- -D warnings
+cargo test
+```
 
 ---
 
