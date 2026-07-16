@@ -219,18 +219,58 @@ fn test_lock_more_than_balance_panics() {
 }
 
 #[test]
-#[should_panic(expected = "Unlock time must be in the future")]
-fn test_lock_past_time_panics() {
+fn test_lock_funds_rejects_one_second_before_ledger_time_without_mutating_balances() {
     let (env, _id, client) = setup();
     let user = Address::generate(&env);
+    const LEDGER_TIME: u64 = 5_000;
 
     env.ledger().with_mut(|li| {
-        li.timestamp = 5_000;
+        li.timestamp = LEDGER_TIME;
     });
 
     client.deposit(&user, &100);
-    // Unlock time is before the current ledger time
-    client.lock_funds(&user, &50, &3_000);
+
+    let result = client.try_lock_funds(&user, &50, &(LEDGER_TIME - 1));
+
+    assert!(
+        result.is_err(),
+        "an unlock time before the ledger time must be rejected"
+    );
+    assert_eq!(client.get_balance(&user), 100);
+    assert_eq!(client.get_locked_balance(&user), 0);
+}
+
+#[test]
+#[should_panic(expected = "Unlock time must be in the future")]
+fn test_lock_funds_rejects_unlock_time_equal_to_ledger_time() {
+    let (env, _id, client) = setup();
+    let user = Address::generate(&env);
+    const LEDGER_TIME: u64 = 5_000;
+
+    env.ledger().with_mut(|li| {
+        li.timestamp = LEDGER_TIME;
+    });
+
+    client.deposit(&user, &100);
+    client.lock_funds(&user, &50, &LEDGER_TIME);
+}
+
+#[test]
+fn test_lock_funds_accepts_one_second_after_ledger_time() {
+    let (env, _id, client) = setup();
+    let user = Address::generate(&env);
+    const LEDGER_TIME: u64 = 5_000;
+
+    env.ledger().with_mut(|li| {
+        li.timestamp = LEDGER_TIME;
+    });
+
+    client.deposit(&user, &100);
+    client.lock_funds(&user, &50, &(LEDGER_TIME + 1));
+
+    assert_eq!(client.get_balance(&user), 50);
+    assert_eq!(client.get_locked_balance(&user), 50);
+    assert!(!client.can_withdraw(&user));
 }
 
 // =========================================================================
