@@ -4,8 +4,12 @@
 //! on-chain interactions in an isolated environment.
 // mod test_helpers;
 
+#[cfg(test)]
+extern crate std;
+
 use super::*;
 use soroban_sdk::{testutils::Address as _, testutils::Ledger, Address};
+use std::panic::{self, AssertUnwindSafe};
 
 use test_helpers::*;
 
@@ -71,6 +75,25 @@ fn test_deposit_negative_panics() {
     let (_id, client) = init_contract(&env);
     let user = new_user(&env);
     client.deposit(&user, &-50);
+}
+
+#[test]
+fn test_deposit_invalid_amounts_do_not_mutate_balance() {
+    let env = test_env();
+    let (_id, client) = init_contract(&env);
+    let user = new_user(&env);
+
+    deposit_balance(&client, &user, 100);
+    let initial_balance = client.get_balance(&user);
+
+    for amount in [0, -50] {
+        let result = panic::catch_unwind(AssertUnwindSafe(|| {
+            client.deposit(&user, &amount);
+        }));
+
+        assert!(result.is_err(), "deposit should panic for amount {amount}");
+        assert_eq!(client.get_balance(&user), initial_balance);
+    }
 }
 
 // =========================================================================
@@ -164,6 +187,28 @@ fn test_withdraw_negative_panics() {
     token_client.transfer(&user, &current_contract_address, &100); // This should be removed when deposit function implements SAC
 
     client.withdraw(&user, &-10);
+}
+
+#[test]
+fn test_withdraw_invalid_amounts_do_not_mutate_balance() {
+    let (env, current_contract_address, client) = setup();
+    let (env, _admin, client, token_client, token_admin) = test_token(env, client);
+    let user = Address::generate(&env);
+    token_admin.mint(&user, &10000);
+
+    client.deposit(&user, &100);
+    token_client.transfer(&user, &current_contract_address, &100);
+
+    let initial_balance = client.get_balance(&user);
+
+    for amount in [0, -10] {
+        let result = panic::catch_unwind(AssertUnwindSafe(|| {
+            client.withdraw(&user, &amount);
+        }));
+
+        assert!(result.is_err(), "withdraw should panic for amount {amount}");
+        assert_eq!(client.get_balance(&user), initial_balance);
+    }
 }
 
 #[test]
@@ -319,6 +364,31 @@ fn test_lock_more_than_balance_panics() {
     set_ledger_timestamp(&env, 1_000);
     deposit_balance(&client, &user, 100);
     client.lock_funds(&user, &500, &2_000);
+}
+
+#[test]
+fn test_lock_invalid_amounts_do_not_mutate_balances() {
+    let env = test_env();
+    let (_id, client) = init_contract(&env);
+    let user = new_user(&env);
+    set_ledger_timestamp(&env, 1_000);
+    deposit_balance(&client, &user, 100);
+
+    let initial_balance = client.get_balance(&user);
+    let initial_locked = client.get_locked_balance(&user);
+
+    for amount in [0, -10] {
+        let result = panic::catch_unwind(AssertUnwindSafe(|| {
+            client.lock_funds(&user, &amount, &2_000);
+        }));
+
+        assert!(
+            result.is_err(),
+            "lock_funds should panic for amount {amount}"
+        );
+        assert_eq!(client.get_balance(&user), initial_balance);
+        assert_eq!(client.get_locked_balance(&user), initial_locked);
+    }
 }
 
 #[test]
