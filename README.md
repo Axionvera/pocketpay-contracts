@@ -209,6 +209,7 @@ stellar-pocketpay-contracts/
 ---
 ## Documentation
 
+- [Savings Vault Contract Workspace](contracts/savings_vault/README.md) - Contract-specific overview, public functions, test command, and WASM build command.
 - [Architecture Documentation](docs/architecture.md) – Overview of project structure, state management, storage, SDK integration, and future extension points.
 - [Event Schema Documentation](docs/events.md) – Overview of event names, topics, payload schemas, and JSON examples for vault actions.
 
