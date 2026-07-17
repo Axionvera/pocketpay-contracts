@@ -12,7 +12,26 @@
 
 #![no_std]
 
-use soroban_sdk::{contract, contractimpl, contracttype, log, token, Address, Env};
+use soroban_sdk::{contract, contracterror, contractimpl, contracttype, log, token, Address, Env};
+
+// ---------------------------------------------------------------------------
+// Contract Error
+// ---------------------------------------------------------------------------
+
+/// All errors that can be returned by the Savings Vault contract.
+#[contracterror]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
+#[repr(u32)]
+pub enum Error {
+    /// The contract has already been initialized.
+    AlreadyInitialized = 1,
+    /// The amount provided is zero or negative.
+    InvalidAmount = 2,
+    /// The user does not have enough available balance.
+    InsufficientBalance = 3,
+    /// The unlock time must be in the future.
+    InvalidUnlockTime = 4,
+}
 
 // ---------------------------------------------------------------------------
 // Storage Keys
@@ -58,12 +77,12 @@ impl SavingsVault {
     /// # Arguments
     /// * `admin` - The address that will be recorded as the contract admin.
     ///
-    /// # Panics
-    /// Panics if the contract has already been initialized.
-    pub fn initialize(env: Env, admin: Address, token: Address) {
+    /// # Errors
+    /// Returns `Error::AlreadyInitialized` if the contract has already been initialized.
+    pub fn initialize(env: Env, admin: Address, token: Address) -> Result<(), Error> {
         // Ensure we haven't already initialized
         if env.storage().instance().has(&DataKey::Initialized) {
-            panic!("Contract is already initialized");
+            return Err(Error::AlreadyInitialized);
         }
 
         // Require the admin to have signed this transaction
@@ -75,6 +94,8 @@ impl SavingsVault {
         env.storage().instance().set(&DataKey::Token, &token);
 
         log!(&env, "Savings Vault initialized with admin: {}", admin);
+
+        Ok(())
     }
 
     // -----------------------------------------------------------------------
@@ -87,15 +108,15 @@ impl SavingsVault {
     /// * `user`   - The depositor's address (must authorize the call).
     /// * `amount` - The amount to deposit (must be > 0).
     ///
-    /// # Panics
-    /// Panics if `amount` is zero or negative.
-    pub fn deposit(env: Env, user: Address, amount: i128) {
+    /// # Errors
+    /// Returns `Error::InvalidAmount` if `amount` is zero or negative.
+    pub fn deposit(env: Env, user: Address, amount: i128) -> Result<(), Error> {
         // Authorization: only the user can deposit on their own behalf
         user.require_auth();
 
         // Validate amount
         if amount <= 0 {
-            panic!("Deposit amount must be greater than zero");
+            return Err(Error::InvalidAmount);
         }
 
         // Read current balance (default to 0 if none exists)
@@ -118,6 +139,8 @@ impl SavingsVault {
             amount,
             new_balance
         );
+
+        Ok(())
     }
 
     // -----------------------------------------------------------------------
@@ -130,16 +153,16 @@ impl SavingsVault {
     /// * `user`   - The withdrawer's address (must authorize the call).
     /// * `amount` - The amount to withdraw (must be > 0).
     ///
-    /// # Panics
-    /// - If `amount` is zero or negative.
-    /// - If `amount` exceeds the user's available balance.
-    pub fn withdraw(env: Env, user: Address, amount: i128) {
+    /// # Errors
+    /// - Returns `Error::InvalidAmount` if `amount` is zero or negative.
+    /// - Returns `Error::InsufficientBalance` if `amount` exceeds the user's available balance.
+    pub fn withdraw(env: Env, user: Address, amount: i128) -> Result<(), Error> {
         // Authorization
         user.require_auth();
 
         // Validate amount
         if amount <= 0 {
-            panic!("Withdrawal amount must be greater than zero");
+            return Err(Error::InvalidAmount);
         }
 
         // Read current balance
@@ -151,7 +174,7 @@ impl SavingsVault {
 
         // Ensure sufficient funds
         if amount > current_balance {
-            panic!("Insufficient balance");
+            return Err(Error::InsufficientBalance);
         }
         let token = env.storage().instance().get(&DataKey::Token).unwrap();
         let token_client = token::Client::new(&env, &token);
@@ -172,6 +195,8 @@ impl SavingsVault {
             amount,
             new_balance
         );
+
+        Ok(())
     }
 
     // -----------------------------------------------------------------------
@@ -203,23 +228,23 @@ impl SavingsVault {
     /// * `amount`      - The amount to lock (must be > 0).
     /// * `unlock_time` - Unix timestamp (seconds) when the funds unlock.
     ///
-    /// # Panics
-    /// - If `amount` is zero or negative.
-    /// - If `amount` exceeds the user's available balance.
-    /// - If `unlock_time` is in the past.
-    pub fn lock_funds(env: Env, user: Address, amount: i128, unlock_time: u64) {
+    /// # Errors
+    /// - Returns `Error::InvalidAmount` if `amount` is zero or negative.
+    /// - Returns `Error::InsufficientBalance` if `amount` exceeds the user's available balance.
+    /// - Returns `Error::InvalidUnlockTime` if `unlock_time` is in the past.
+    pub fn lock_funds(env: Env, user: Address, amount: i128, unlock_time: u64) -> Result<(), Error> {
         // Authorization
         user.require_auth();
 
         // Validate amount
         if amount <= 0 {
-            panic!("Lock amount must be greater than zero");
+            return Err(Error::InvalidAmount);
         }
 
         // Validate unlock time is in the future
         let current_time = env.ledger().timestamp();
         if unlock_time <= current_time {
-            panic!("Unlock time must be in the future");
+            return Err(Error::InvalidUnlockTime);
         }
 
         // Read available balance
@@ -230,7 +255,7 @@ impl SavingsVault {
             .unwrap_or(0);
 
         if amount > current_balance {
-            panic!("Insufficient balance to lock");
+            return Err(Error::InsufficientBalance);
         }
 
         // Read existing locked balance (may already have some locked)
@@ -263,6 +288,8 @@ impl SavingsVault {
             new_balance,
             new_locked
         );
+
+        Ok(())
     }
 
     /// Get the locked balance for a user.

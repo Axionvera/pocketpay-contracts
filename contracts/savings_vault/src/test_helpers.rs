@@ -24,13 +24,13 @@ pub fn new_user(env: &Env) -> Address {
 
 /// Deposits a balance for a user.
 pub fn deposit_balance(client: &SavingsVaultClient, user: &Address, amount: i128) {
-    client.deposit(user, &amount);
+    client.deposit(user, &amount).unwrap();
 }
 
 /// Seeds multiple balances for a user.
 pub fn seed_balances(client: &SavingsVaultClient, user: &Address, amounts: &[i128]) {
     for amt in amounts {
-        client.deposit(user, amt);
+        client.deposit(user, amt).unwrap();
     }
 }
 
@@ -66,7 +66,7 @@ pub fn test_token(
     let contract = env.register_stellar_asset_contract_v2(admin.clone());
     let contract_address = contract.address();
 
-    client.initialize(&admin, &contract_address);
+    client.initialize(&admin, &contract_address).unwrap();
 
     let token_client = token::Client::new(&env, &contract_address);
     let token_admin = token::StellarAssetClient::new(&env, &contract_address);

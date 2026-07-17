@@ -19,18 +19,18 @@ fn test_initialize() {
     let (_id, client) = init_contract(&env);
     let admin = new_user(&env);
     let token = new_user(&env);
-    client.initialize(&admin, &token);
+    client.initialize(&admin, &token).unwrap();
 }
 
 #[test]
-#[should_panic(expected = "Contract is already initialized")]
-fn test_initialize_twice_panics() {
+fn test_initialize_twice_fails() {
     let env = test_env();
     let (_id, client) = init_contract(&env);
     let admin = new_user(&env);
     let token = new_user(&env);
-    client.initialize(&admin, &token);
-    client.initialize(&admin, &token);
+    client.initialize(&admin, &token).unwrap();
+    let result = client.initialize(&admin, &token);
+    assert_eq!(result, Err(Error::AlreadyInitialized));
 }
 
 // =========================================================================
@@ -56,21 +56,21 @@ fn test_multiple_deposits() {
 }
 
 #[test]
-#[should_panic(expected = "Deposit amount must be greater than zero")]
-fn test_deposit_zero_panics() {
+fn test_deposit_zero_fails() {
     let env = test_env();
     let (_id, client) = init_contract(&env);
     let user = new_user(&env);
-    client.deposit(&user, &0);
+    let result = client.deposit(&user, &0);
+    assert_eq!(result, Err(Error::InvalidAmount));
 }
 
 #[test]
-#[should_panic(expected = "Deposit amount must be greater than zero")]
-fn test_deposit_negative_panics() {
+fn test_deposit_negative_fails() {
     let env = test_env();
     let (_id, client) = init_contract(&env);
     let user = new_user(&env);
-    client.deposit(&user, &-50);
+    let result = client.deposit(&user, &-50);
+    assert_eq!(result, Err(Error::InvalidAmount));
 }
 
 // =========================================================================
@@ -87,7 +87,7 @@ fn test_withdraw() {
     let deposit_amount = 500;
 
     // SAC Transfer not yet implemented for deposit so i'll mimick it by trnasfering asset(deposit_amount) from user to the contract
-    client.deposit(&user, &deposit_amount);
+    client.deposit(&user, &deposit_amount).unwrap();
 
     token_admin.mint(&user, &10000);
 
@@ -102,7 +102,7 @@ fn test_withdraw() {
     let contract_balance = token_client.balance(&current_contract_address);
     assert_eq!(&contract_balance, &500);
 
-    client.withdraw(&user, &200);
+    client.withdraw(&user, &200).unwrap();
     assert_eq!(client.get_balance(&user), 300);
 }
 
@@ -116,88 +116,88 @@ fn test_withdraw_entire_balance() {
     token_admin.mint(&user, &10000);
 
     // SAC Transfer not yet implemented for deposit so i'll mimick it by trnasfering asset(deposit_amount) from user to the contract
-    client.deposit(&user, &deposit_amount);
+    client.deposit(&user, &deposit_amount).unwrap();
 
     token_client.transfer(&user, &current_contract_address, &deposit_amount); // This should be removed when deposit function implements SAC
 
-    client.withdraw(&user, &deposit_amount);
+    client.withdraw(&user, &deposit_amount).unwrap();
     assert_eq!(client.get_balance(&user), 0);
 }
 
 #[test]
-#[should_panic(expected = "Insufficient balance")]
-fn test_withdraw_more_than_balance_panics() {
+fn test_withdraw_more_than_balance_fails() {
     let (env, current_contract_address, client) = setup();
     let (env, _admin, client, token_client, token_admin) = test_token(env, client);
     let user = Address::generate(&env);
     token_admin.mint(&user, &10000);
 
     // SAC Transfer not yet implemented for deposit so i'll mimick it by trnasfering asset(deposit_amount) from user to the contract
-    client.deposit(&user, &100);
+    client.deposit(&user, &100).unwrap();
 
     token_client.transfer(&user, &current_contract_address, &100); // This should be removed when deposit function implements SAC
 
-    client.withdraw(&user, &200);
+    let result = client.withdraw(&user, &200);
+    assert_eq!(result, Err(Error::InsufficientBalance));
 }
 
 #[test]
-#[should_panic(expected = "Withdrawal amount must be greater than zero")]
-fn test_withdraw_zero_panics() {
+fn test_withdraw_zero_fails() {
     let env = test_env();
     let (_id, client) = init_contract(&env);
     let user = new_user(&env);
     deposit_balance(&client, &user, 100);
-    client.withdraw(&user, &0);
+    let result = client.withdraw(&user, &0);
+    assert_eq!(result, Err(Error::InvalidAmount));
 }
 
 #[test]
-#[should_panic(expected = "Withdrawal amount must be greater than zero")]
-fn test_withdraw_negative_panics() {
+fn test_withdraw_negative_fails() {
     let (env, current_contract_address, client) = setup();
     let (env, _admin, client, token_client, token_admin) = test_token(env, client);
     let user = Address::generate(&env);
     token_admin.mint(&user, &10000);
 
     // SAC Transfer not yet implemented for deposit so i'll mimick it by trnasfering asset(deposit_amount) from user to the contract
-    client.deposit(&user, &100);
+    client.deposit(&user, &100).unwrap();
 
     token_client.transfer(&user, &current_contract_address, &100); // This should be removed when deposit function implements SAC
 
-    client.withdraw(&user, &-10);
+    let result = client.withdraw(&user, &-10);
+    assert_eq!(result, Err(Error::InvalidAmount));
 }
 
 #[test]
-#[should_panic(expected = "Insufficient balance")]
-fn test_withdraw_from_empty_balance_panics() {
+fn test_withdraw_from_empty_balance_fails() {
     // AC: Withdrawing from an empty balance fails.
     let (env, _id, client) = setup();
     let user = Address::generate(&env);
 
     // User never deposited — balance is implicitly 0
-    client.withdraw(&user, &1);
+    let result = client.withdraw(&user, &1);
+    assert_eq!(result, Err(Error::InsufficientBalance));
 }
 
 #[test]
-#[should_panic(expected = "Insufficient balance")]
-fn test_withdraw_exceeds_available_after_deposit_panics() {
+fn test_withdraw_exceeds_available_after_deposit_fails() {
     // AC: Withdrawing more than available balance fails.
     let (env, _id, client) = setup();
     let user = Address::generate(&env);
 
-    client.deposit(&user, &100);
+    client.deposit(&user, &100).unwrap();
     // Attempt to withdraw more than deposited
-    client.withdraw(&user, &101);
+    let result = client.withdraw(&user, &101);
+    assert_eq!(result, Err(Error::InsufficientBalance));
 }
 
 /// Verify that a successful withdraw leaves the remaining balance correct,
 /// which also proves the contract does not corrupt state on partial withdrawals.
-/// The companion panic test (`test_failed_withdraw_does_not_change_available_balance_panics`)
+/// The companion error test (`test_failed_withdraw_does_not_change_available_balance_fails`)
 /// confirms the over-withdraw is rejected before any mutation occurs.
 #[test]
 fn test_failed_withdraw_does_not_change_available_balance() {
     // AC: Failed withdrawal does not change available balance.
     // Strategy (no_std): perform a *valid* withdraw of the exact balance to
-    // prove state is only mutated on success, paired with the should_panic
+    // prove state is only mutated on success, paired with the error
     // test below that confirms rejection happens before any write.
     let (env, current_contract_address, client) = setup();
     let (env, _admin, client, token_client, token_admin) = test_token(env, client);
@@ -207,37 +207,36 @@ fn test_failed_withdraw_does_not_change_available_balance() {
     token_admin.mint(&user, &10000);
 
     // SAC Transfer not yet implemented for deposit so i'll mimick it by trnasfering asset(deposit_amount) from user to the contract
-    client.deposit(&user, &deposit_amount);
+    client.deposit(&user, &deposit_amount).unwrap();
 
     token_client.transfer(&user, &current_contract_address, &deposit_amount); // This should be removed when deposit function implements SAC
 
     // A valid partial withdraw succeeds and leaves the remainder intact.
-    client.withdraw(&user, &60);
+    client.withdraw(&user, &60).unwrap();
     assert_eq!(client.get_balance(&user), 40);
 
     // A second withdraw of exactly the remaining amount also succeeds.
-    client.withdraw(&user, &40);
+    client.withdraw(&user, &40).unwrap();
     assert_eq!(client.get_balance(&user), 0);
 }
 
 #[test]
-#[should_panic(expected = "Insufficient balance")]
-fn test_failed_withdraw_does_not_change_available_balance_panics() {
+fn test_failed_withdraw_does_not_change_available_balance_fails() {
     // Confirms that attempting to withdraw 1 unit more than deposited
-    // is rejected (panics) — i.e. the balance is never decremented.
+    // is rejected — i.e. the balance is never decremented.
     let (env, _id, client) = setup();
     let user = Address::generate(&env);
 
-    client.deposit(&user, &100);
-    client.withdraw(&user, &101); // must panic — balance stays at 100
+    client.deposit(&user, &100).unwrap();
+    let result = client.withdraw(&user, &101); // must fail — balance stays at 100
+    assert_eq!(result, Err(Error::InsufficientBalance));
 }
 
 #[test]
-#[should_panic(expected = "Insufficient balance")]
 fn test_failed_withdraw_does_not_change_locked_balance() {
     // AC: Failed withdrawal does not change locked balance if applicable.
     // Depositing 500 and locking 300 leaves 200 available.
-    // Attempting to withdraw 201 must panic, leaving both balances intact.
+    // Attempting to withdraw 201 must fail, leaving both balances intact.
     let (env, _id, client) = setup();
     let user = Address::generate(&env);
 
@@ -245,17 +244,18 @@ fn test_failed_withdraw_does_not_change_locked_balance() {
         li.timestamp = 1_000;
     });
 
-    client.deposit(&user, &500);
+    client.deposit(&user, &500).unwrap();
     // Lock 300, leaving 200 available
-    client.lock_funds(&user, &300, &10_000);
+    client.lock_funds(&user, &300, &10_000).unwrap();
 
     assert_eq!(client.get_balance(&user), 200);
     assert_eq!(client.get_locked_balance(&user), 300);
 
-    // Attempt to withdraw more than the available 200 — must panic.
-    // Because the panic is raised before any storage write, both the
+    // Attempt to withdraw more than the available 200 — must fail.
+    // Because the error is returned before any storage write, both the
     // available and locked balances remain unchanged.
-    client.withdraw(&user, &201);
+    let result = client.withdraw(&user, &201);
+    assert_eq!(result, Err(Error::InsufficientBalance));
 }
 
 // =========================================================================
@@ -281,7 +281,7 @@ fn test_lock_funds() {
     let user = new_user(&env);
     set_ledger_timestamp(&env, 1_000);
     deposit_balance(&client, &user, 500);
-    client.lock_funds(&user, &200, &2_000);
+    client.lock_funds(&user, &200, &2_000).unwrap();
     assert_eq!(client.get_balance(&user), 300);
     assert_eq!(client.get_locked_balance(&user), 200);
 }
@@ -293,43 +293,43 @@ fn test_lock_funds_multiple_times() {
     let user = new_user(&env);
     set_ledger_timestamp(&env, 1_000);
     deposit_balance(&client, &user, 1_000);
-    client.lock_funds(&user, &300, &5_000);
-    client.lock_funds(&user, &200, &6_000);
+    client.lock_funds(&user, &300, &5_000).unwrap();
+    client.lock_funds(&user, &200, &6_000).unwrap();
     assert_eq!(client.get_balance(&user), 500);
     assert_eq!(client.get_locked_balance(&user), 500);
 }
 
 #[test]
-#[should_panic(expected = "Lock amount must be greater than zero")]
-fn test_lock_zero_panics() {
+fn test_lock_zero_fails() {
     let env = test_env();
     let (_id, client) = init_contract(&env);
     let user = new_user(&env);
     set_ledger_timestamp(&env, 1_000);
     deposit_balance(&client, &user, 100);
-    client.lock_funds(&user, &0, &2_000);
+    let result = client.lock_funds(&user, &0, &2_000);
+    assert_eq!(result, Err(Error::InvalidAmount));
 }
 
 #[test]
-#[should_panic(expected = "Insufficient balance to lock")]
-fn test_lock_more_than_balance_panics() {
+fn test_lock_more_than_balance_fails() {
     let env = test_env();
     let (_id, client) = init_contract(&env);
     let user = new_user(&env);
     set_ledger_timestamp(&env, 1_000);
     deposit_balance(&client, &user, 100);
-    client.lock_funds(&user, &500, &2_000);
+    let result = client.lock_funds(&user, &500, &2_000);
+    assert_eq!(result, Err(Error::InsufficientBalance));
 }
 
 #[test]
-#[should_panic(expected = "Unlock time must be in the future")]
-fn test_lock_past_time_panics() {
+fn test_lock_past_time_fails() {
     let env = test_env();
     let (_id, client) = init_contract(&env);
     let user = new_user(&env);
     set_ledger_timestamp(&env, 5_000);
     deposit_balance(&client, &user, 100);
-    client.lock_funds(&user, &50, &3_000);
+    let result = client.lock_funds(&user, &50, &3_000);
+    assert_eq!(result, Err(Error::InvalidUnlockTime));
 }
 
 // =========================================================================
@@ -343,7 +343,7 @@ fn test_can_withdraw_before_unlock() {
     let user = new_user(&env);
     set_ledger_timestamp(&env, 1_000);
     deposit_balance(&client, &user, 500);
-    client.lock_funds(&user, &200, &10_000);
+    client.lock_funds(&user, &200, &10_000).unwrap();
     assert_eq!(client.can_withdraw(&user), false);
 }
 
@@ -354,7 +354,7 @@ fn test_can_withdraw_after_unlock() {
     let user = new_user(&env);
     set_ledger_timestamp(&env, 1_000);
     deposit_balance(&client, &user, 500);
-    client.lock_funds(&user, &200, &5_000);
+    client.lock_funds(&user, &200, &5_000).unwrap();
     set_ledger_timestamp(&env, 6_000);
     assert_eq!(client.can_withdraw(&user), true);
 }
@@ -366,7 +366,7 @@ fn test_can_withdraw_exactly_at_unlock() {
     let user = new_user(&env);
     set_ledger_timestamp(&env, 1_000);
     deposit_balance(&client, &user, 500);
-    client.lock_funds(&user, &200, &5_000);
+    client.lock_funds(&user, &200, &5_000).unwrap();
     set_ledger_timestamp(&env, 5_000);
     assert_eq!(client.can_withdraw(&user), true);
 }
@@ -405,7 +405,7 @@ fn test_separate_user_balances() {
     assert_eq!(client.get_balance(&alice), 1_000);
     assert_eq!(client.get_balance(&bob), 500);
 
-    client.withdraw(&alice, &200);
+    client.withdraw(&alice, &200).unwrap();
     assert_eq!(client.get_balance(&alice), 800);
     assert_eq!(client.get_balance(&bob), 500);
 }
