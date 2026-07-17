@@ -409,3 +409,82 @@ fn test_separate_user_balances() {
     assert_eq!(client.get_balance(&alice), 800);
     assert_eq!(client.get_balance(&bob), 500);
 }
+
+#[test]
+fn balance_isolation_between_users_deposit() {
+    let env = test_env();
+    let (current_contract_address, client) = init_contract(&env);
+    let (env, _admin, client, token_client, token_admin) = test_token(env, client);
+
+    let alice = new_user(&env);
+    let bob = new_user(&env);
+
+    token_admin.mint(&alice, &10000);
+    token_admin.mint(&bob, &10000);
+
+    // SAC Transfer not yet implemented for deposit so i'll mimick it by trnasfering asset(deposit_amount) from user to the contract
+    deposit_balance(&client, &alice, 1_000);
+    assert_eq!(client.get_balance(&alice), 1000_i128);
+    assert_eq!(client.get_balance(&bob), 0_i128);
+}
+
+#[test]
+fn balance_isolation_between_users_withdraw() {
+    let env = test_env();
+    let (current_contract_address, client) = init_contract(&env);
+    let (env, _admin, client, token_client, token_admin) = test_token(env, client);
+
+    let alice = new_user(&env);
+    let bob = new_user(&env);
+
+    token_admin.mint(&alice, &10000);
+    token_admin.mint(&bob, &10000);
+
+    // SAC Transfer not yet implemented for deposit so i'll mimick it by trnasfering asset(deposit_amount) from user to the contract
+    deposit_balance(&client, &alice, 1_000);
+    deposit_balance(&client, &bob, 4_000);
+    token_client.transfer(&alice, &current_contract_address, &1000); // This should be removed when deposit function implements SAC
+    token_client.transfer(&bob, &current_contract_address, &4000); // This should be removed when deposit function implements SAC
+
+    assert_eq!(client.get_balance(&alice), 1000_i128);
+    assert_eq!(client.get_balance(&bob), 4000_i128);
+
+    client.withdraw(&alice, &500);
+    assert_eq!(client.get_balance(&alice), 500);
+    assert_eq!(client.get_balance(&bob), 4000);
+
+    client.withdraw(&bob, &2000);
+    assert_eq!(client.get_balance(&alice), 500);
+    assert_eq!(client.get_balance(&bob), 2000);
+}
+
+#[test]
+fn balance_isolation_between_users_lock() {
+    let env = test_env();
+    let (current_contract_address, client) = init_contract(&env);
+    let (env, _admin, client, token_client, token_admin) = test_token(env, client);
+
+    let alice = new_user(&env);
+    let bob = new_user(&env);
+
+    token_admin.mint(&alice, &10000);
+    token_admin.mint(&bob, &10000);
+
+    // SAC Transfer not yet implemented for deposit so i'll mimick it by trnasfering asset(deposit_amount) from user to the contract
+    deposit_balance(&client, &alice, 2_000);
+    deposit_balance(&client, &bob, 4_000);
+    token_client.transfer(&alice, &current_contract_address, &2_000); // This should be removed when deposit function implements SAC
+    token_client.transfer(&bob, &current_contract_address, &4_000); // This should be removed when deposit function implements SAC
+
+    client.lock_funds(&alice, &1_000, &3600);
+    assert_eq!(client.get_balance(&alice), 1_000);
+    assert_eq!(client.get_locked_balance(&alice), 1_000);
+    assert_eq!(client.get_balance(&bob), 4_000);
+    assert_eq!(client.get_locked_balance(&bob), 0);
+
+    client.lock_funds(&bob, &2_500, &3600);
+    assert_eq!(client.get_balance(&alice), 1_000);
+    assert_eq!(client.get_locked_balance(&alice), 1_000);
+    assert_eq!(client.get_balance(&bob), 1_500);
+    assert_eq!(client.get_locked_balance(&bob), 2_500);
+}
