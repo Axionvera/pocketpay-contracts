@@ -188,6 +188,11 @@ stellar-pocketpay-contracts/
 ```
 
 ---
+## Documentation
+
+- [Architecture Documentation](docs/architecture.md) – Overview of project structure, state management, storage, SDK integration, and future extension points.
+
+---
 
 ## Security Considerations
 
