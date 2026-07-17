@@ -12,9 +12,10 @@ opening a pull request against this Soroban smart-contract repository.
 3. [Code Style & Formatting](#code-style--formatting)
 4. [Linting](#linting)
 5. [Testing](#testing)
-6. [Running All Checks Locally](#running-all-checks-locally)
-7. [Pull Request Checklist](#pull-request-checklist)
-8. [Commit Messages](#commit-messages)
+6. [Dependency Management](#dependency-management)
+7. [Running All Checks Locally](#running-all-checks-locally)
+8. [Pull Request Checklist](#pull-request-checklist)
+9. [Commit Messages](#commit-messages)
 
 ---
 
@@ -147,6 +148,17 @@ cargo test -- --nocapture
 
 ---
 
+## Dependency Management
+
+To maintain build reproducibility and deterministic target WASM size, we commit the `Cargo.lock` file to the repository.
+
+Any modifications to workspace dependencies or the lockfile must adhere to the [Dependency Review Policy](docs/dependency-review.md). This includes:
+- Ensuring `Cargo.lock` changes directly correspond to `Cargo.toml` updates.
+- Verifying that target WASM size impact is kept minimal.
+- Ensuring new dependencies comply with the MIT license.
+
+---
+
 ## Running All Checks Locally
 
 Run this sequence before pushing — it mirrors what a CI pipeline would check:
@@ -188,6 +200,7 @@ Before requesting a review, confirm that every item below is true:
 - [ ] New or changed behaviour is covered by tests
 - [ ] Test names clearly describe the scenario being tested
 - [ ] No new `unwrap()` calls without a comment explaining why panicking is safe
+- [ ] Any `Cargo.lock` or dependency changes follow the [Dependency Review Policy](docs/dependency-review.md)
 - [ ] Commit messages follow the [Conventional Commits](#commit-messages) format
 - [ ] PR title is concise (≤ 70 characters)
 - [ ] PR description explains **what** changed and **why**

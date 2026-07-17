@@ -344,7 +344,7 @@ fn test_can_withdraw_before_unlock() {
     set_ledger_timestamp(&env, 1_000);
     deposit_balance(&client, &user, 500);
     client.lock_funds(&user, &200, &10_000);
-    assert_eq!(client.can_withdraw(&user), false);
+    assert!(!client.can_withdraw(&user));
 }
 
 #[test]
@@ -356,7 +356,7 @@ fn test_can_withdraw_after_unlock() {
     deposit_balance(&client, &user, 500);
     client.lock_funds(&user, &200, &5_000);
     set_ledger_timestamp(&env, 6_000);
-    assert_eq!(client.can_withdraw(&user), true);
+    assert!(client.can_withdraw(&user));
 }
 
 #[test]
@@ -368,7 +368,7 @@ fn test_can_withdraw_exactly_at_unlock() {
     deposit_balance(&client, &user, 500);
     client.lock_funds(&user, &200, &5_000);
     set_ledger_timestamp(&env, 5_000);
-    assert_eq!(client.can_withdraw(&user), true);
+    assert!(client.can_withdraw(&user));
 }
 
 #[test]
@@ -376,7 +376,7 @@ fn test_can_withdraw_no_locked_funds() {
     let env = test_env();
     let (_id, client) = init_contract(&env);
     let user = new_user(&env);
-    assert_eq!(client.can_withdraw(&user), false);
+    assert!(!client.can_withdraw(&user));
 }
 
 // =========================================================================
