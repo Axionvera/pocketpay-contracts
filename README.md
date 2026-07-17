@@ -191,6 +191,7 @@ stellar-pocketpay-contracts/
 ## Documentation
 
 - [Architecture Documentation](docs/architecture.md) – Overview of project structure, state management, storage, SDK integration, and future extension points.
+- [Contract API Reference](docs/api-reference.md) – Detailed reference for all public functions, including parameters, auth requirements, state changes, and errors.
 - [Event Schema Documentation](docs/events.md) – Overview of event names, topics, payload schemas, and JSON examples for vault actions.
 
 ---
