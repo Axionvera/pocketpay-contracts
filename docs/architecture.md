@@ -39,8 +39,8 @@ The state model is deliberately simple:
 | Key                | Type   | Description |
 |--------------------|--------|-------------|
 | `balance:{user}`   | `i128` | Unlocked funds available to a user.
-| `locked:{user}`    | `i128` | Funds currently locked.
-| `unlock_time:{user}` | `u64`| UNIX timestamp when locked funds become withdrawable.
+| `locks:{user}`     | `Vec<LockEntry>` | List of active and matured lock entries for a user.
+| `next_lock_id:{user}` | `u64`| Monotonically increasing next lock ID for a user.
 | `admin`            | `Address` | Contract admin (set during `initialize`).
 | `initialized`      | `bool`   | Guard to ensure `initialize` runs only once.
 
@@ -72,9 +72,8 @@ Future enhancements may integrate the **Stellar Asset Contract (SAC)** to enable
 The current contract is a **stand‑alone savings vault**. To evolve into a full‑featured wallet SDK, consider the following extension points:
 
 1. **Token Transfer Layer** – Call the SAC `transfer` function to move XLM or custom assets on‑chain.
-2. **Multi‑Lock Support** – Replace the single `unlock_time` per user with a list of lock entries, enabling overlapping locks.
-3. **Admin Recovery & Upgrade** – Implement admin‑controlled migration or upgrade mechanisms using Soroban `upgrade` primitives.
-4. **Off‑chain SDKs** – Provide JavaScript/TypeScript client libraries that abstract contract calls, handling address resolution, transaction building, and signing.
+2. **Admin Recovery & Upgrade** – Implement admin‑controlled migration or upgrade mechanisms using Soroban `upgrade` primitives.
+3. **Off‑chain SDKs** – Provide JavaScript/TypeScript client libraries that abstract contract calls, handling address resolution, transaction building, and signing.
 
 These boundaries maintain a clean separation between **on‑chain logic** (this repository) and **off‑chain SDKs** that developers will consume.
 

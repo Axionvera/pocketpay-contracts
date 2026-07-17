@@ -409,3 +409,53 @@ fn test_separate_user_balances() {
     assert_eq!(client.get_balance(&alice), 800);
     assert_eq!(client.get_balance(&bob), 500);
 }
+
+#[test]
+fn test_multiple_locks_independent_maturity() {
+    let (env, current_contract_address, client) = setup();
+    let (env, _admin, client, token_client, token_admin) = test_token(env, client);
+    let user = new_user(&env);
+
+    token_admin.mint(&user, &10000);
+
+    // Initial deposit of 1000
+    client.deposit(&user, &1000);
+    token_client.transfer(&user, &current_contract_address, &1000);
+
+    set_ledger_timestamp(&env, 1000);
+
+    // Create 3 locks
+    let _lock1 = client.lock_funds(&user, &200, &3000); // lock 200 until 3000
+    let _lock2 = client.lock_funds(&user, &300, &5000); // lock 300 until 5000
+    let _lock3 = client.lock_funds(&user, &100, &7000); // lock 100 until 7000
+
+    assert_eq!(client.get_balance(&user), 400); // 1000 - 200 - 300 - 100
+    assert_eq!(client.get_locked_balance(&user), 600); // 200 + 300 + 100
+    assert_eq!(client.can_withdraw(&user), false);
+
+    // Advance time to 4000 (lock1 matured)
+    set_ledger_timestamp(&env, 4000);
+    assert_eq!(client.get_balance(&user), 600); // 400 + 200 matured
+    assert_eq!(client.get_locked_balance(&user), 400); // 300 + 100
+    assert_eq!(client.can_withdraw(&user), true);
+
+    // Advance time to 6000 (lock1 and lock2 matured)
+    set_ledger_timestamp(&env, 6000);
+    assert_eq!(client.get_balance(&user), 900); // 400 + 200 + 300 matured
+    assert_eq!(client.get_locked_balance(&user), 100); // 100
+    assert_eq!(client.can_withdraw(&user), true);
+
+    // Withdraw 500 (400 from base balance, 100 from matured locks)
+    client.withdraw(&user, &500);
+    assert_eq!(client.get_balance(&user), 400); // 900 - 500
+    assert_eq!(client.get_locked_balance(&user), 100); // 100 still locked
+
+    // Advance time to 8000 (all matured)
+    set_ledger_timestamp(&env, 8000);
+    assert_eq!(client.get_balance(&user), 500); // 400 + 100 matured
+    assert_eq!(client.get_locked_balance(&user), 0);
+
+    // Withdraw remaining 500
+    client.withdraw(&user, &500);
+    assert_eq!(client.get_balance(&user), 0);
+}
