@@ -19,6 +19,14 @@ See the [Admin Role](docs/admin-role.md) document for details on what the `initi
 | `get_locked_balance(user)` | Query locked balance |
 | `can_withdraw(user)` | Check if locked funds are withdrawable |
 
+### Deposit and custody limitation
+
+> **Deposits currently update internal contract storage only.** Calling `deposit` increases the user's recorded balance for the vault's accounting, but it does not move real XLM, a Stellar Asset Contract (SAC) asset, or any other token into contract custody.
+
+An **internal balance** is a number maintained by this contract and used by its deposit, withdrawal, and locking logic. **Real token custody** requires an on-chain asset transfer that moves tokens between addresses and ensures the recorded balance is backed by assets held for the user. That transfer and custody layer is not implemented yet, so the current internal balances must not be treated as proof of deposited or custodied assets.
+
+Future SAC integration is planned to support real asset transfers and custody-backed balances.
+
 ---
 
 ## Prerequisites
@@ -219,7 +227,7 @@ stellar-pocketpay-contracts/
 - Admin and initialization flags use **instance** storage (tied to contract lifetime).
 
 ### Known Limitations
-- **No real token transfers**: This contract tracks balances internally but does not yet integrate with the Stellar Asset Contract (SAC) for actual XLM/token transfers. A production version should call the token contract's `transfer()` function.
+- **Internal accounting only; no real token custody**: Deposits update contract storage but do not transfer real XLM, SAC assets, or other tokens into custody. Internal balances are accounting entries and are not proof that the contract holds corresponding assets. Future SAC integration is planned to support real asset transfers and custody-backed balances.
 - **Single unlock time**: Locking funds multiple times overwrites the previous unlock timestamp. A production version might use per-lock entries.
 - **No admin recovery**: There is no mechanism for the admin to recover or migrate funds.
 - **No upgrade mechanism**: The contract does not implement `upgrade()`. See
