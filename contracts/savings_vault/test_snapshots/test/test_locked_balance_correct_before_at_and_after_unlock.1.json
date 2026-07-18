@@ -64,6 +64,8 @@
     [],
     [],
     [],
+    [],
+    [],
     []
   ],
   "ledger": {
@@ -131,7 +133,7 @@
             "key": {
               "vec": [
                 {
-                  "symbol": "LockedBalance"
+                  "symbol": "Locks"
                 },
                 {
                   "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
@@ -151,7 +153,7 @@
                 "key": {
                   "vec": [
                     {
-                      "symbol": "LockedBalance"
+                      "symbol": "Locks"
                     },
                     {
                       "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
@@ -160,10 +162,39 @@
                 },
                 "durability": "persistent",
                 "val": {
-                  "i128": {
-                    "hi": 0,
-                    "lo": 300
-                  }
+                  "vec": [
+                    {
+                      "map": [
+                        {
+                          "key": {
+                            "symbol": "amount"
+                          },
+                          "val": {
+                            "i128": {
+                              "hi": 0,
+                              "lo": 300
+                            }
+                          }
+                        },
+                        {
+                          "key": {
+                            "symbol": "id"
+                          },
+                          "val": {
+                            "u64": 1
+                          }
+                        },
+                        {
+                          "key": {
+                            "symbol": "unlock_time"
+                          },
+                          "val": {
+                            "u64": 5000
+                          }
+                        }
+                      ]
+                    }
+                  ]
                 }
               }
             },
@@ -179,7 +210,7 @@
             "key": {
               "vec": [
                 {
-                  "symbol": "UnlockTime"
+                  "symbol": "NextLockId"
                 },
                 {
                   "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
@@ -199,7 +230,7 @@
                 "key": {
                   "vec": [
                     {
-                      "symbol": "UnlockTime"
+                      "symbol": "NextLockId"
                     },
                     {
                       "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFCT4"
@@ -208,7 +239,7 @@
                 },
                 "durability": "persistent",
                 "val": {
-                  "u64": 5000
+                  "u64": 2
                 }
               }
             },
