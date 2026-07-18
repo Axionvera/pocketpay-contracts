@@ -31,6 +31,8 @@ pub enum Error {
     InsufficientBalance = 3,
     /// The unlock time must be in the future.
     InvalidUnlockTime = 4,
+    /// The contract has not been initialized yet.
+    NotInitialized = 5,
 }
 
 // ---------------------------------------------------------------------------
@@ -156,6 +158,7 @@ impl SavingsVault {
     /// # Errors
     /// - Returns `Error::InvalidAmount` if `amount` is zero or negative.
     /// - Returns `Error::InsufficientBalance` if `amount` exceeds the user's available balance.
+    /// - Returns `Error::NotInitialized` if the contract has not been initialized yet.
     pub fn withdraw(env: Env, user: Address, amount: i128) -> Result<(), Error> {
         // Authorization
         user.require_auth();
@@ -176,7 +179,14 @@ impl SavingsVault {
         if amount > current_balance {
             return Err(Error::InsufficientBalance);
         }
-        let token = env.storage().instance().get(&DataKey::Token).unwrap();
+
+        // Retrieve the token address; fail gracefully if not initialized
+        let token = env
+            .storage()
+            .instance()
+            .get(&DataKey::Token)
+            .ok_or(Error::NotInitialized)?;
+
         let token_client = token::Client::new(&env, &token);
         let contract_address = env.current_contract_address();
 
