@@ -87,6 +87,13 @@ The artifact is written under `target/wasm32-unknown-unknown/release/`. Run all 
 - Avoid changing contract logic in documentation-only pull requests.
 - Add or update tests for every logic change.
 
+## Documentation style
+
+When writing or editing the README, this file, or anything under `docs/`,
+follow the [Documentation Style Guide](docs/docs-style-guide.md) for Testnet
+wording, avoiding production claims, placeholder values, command formatting,
+and linking between docs.
+
 ## Security-sensitive contributions
 
 Changes involving balances, access control, signatures, storage, upgrades, or external calls are security-sensitive. Describe their risks and assumptions clearly in the pull request.
