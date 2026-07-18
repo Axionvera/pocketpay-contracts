@@ -5,7 +5,7 @@
 mod test_helpers;
 
 use super::*;
-use soroban_sdk::{testutils::Address as _, testutils::Ledger, Address};
+use soroban_sdk::{testutils::Address as _, Address};
 
 use test_helpers::*;
 
@@ -241,9 +241,7 @@ fn test_failed_withdraw_does_not_change_locked_balance() {
     let (env, _id, client) = setup();
     let user = Address::generate(&env);
 
-    env.ledger().with_mut(|li| {
-        li.timestamp = 1_000;
-    });
+    set_ledger_timestamp(&env, 1_000);
 
     client.deposit(&user, &500);
     // Lock 300, leaving 200 available
