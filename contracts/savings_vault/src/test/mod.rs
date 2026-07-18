@@ -311,37 +311,29 @@ fn test_lock_funds_multiple_times() {
 }
 
 // -------------------------------------------------------------------------
-// Repeated lock operations — accumulation vs. overwrite behaviour
+// Repeated lock operations — independent multi-lock maturity
 // -------------------------------------------------------------------------
 //
-// This section documents and locks in the *current* implementation's
-// behaviour for a user who calls `lock_funds` more than once, per
-// issue #79. It intentionally exposes existing behaviour without
-// changing it.
+// After multi-lock support, each `lock_funds` call creates an independent
+// `LockEntry` with its own `unlock_time`. Behaviour when locking repeatedly:
 //
 // - Locked balance: **accumulates**. Each call adds `amount` on top of
-//   whatever is already locked (`new_locked = current_locked + amount`).
-// - Available balance: decreases by each `amount` locked, in line with
-//   the accumulating locked balance.
-// - Unlock time: **overwritten**, not accumulated or maxed. The single
-//   `UnlockTime` storage slot is replaced by the most recent
-//   `lock_funds` call's `unlock_time`, regardless of what was stored
-//   before and regardless of whether the new value is later or earlier
-//   than the previous one. There is only one unlock time per user that
-//   gates the *entire* locked balance (both the old and new locked
-//   amounts unlock together, based on the last call's timestamp).
+//   whatever is already locked.
+// - Available (deposited) balance: decreases by each `amount` locked.
+// - Unlock times: **independent**, not overwritten. Each entry matures on
+//   its own schedule.
+// - `get_locked_balance`: sums only *unmatured* locks
+//   (`current_time < unlock_time`).
+// - `get_balance`: deposited balance + *matured* lock amounts.
+// - `can_withdraw`: `true` if *any* lock has matured
+//   (`current_time >= unlock_time`).
 
-/// Two repeated locks: verifies available balance, locked balance, AND
-/// unlock-time behaviour together via `can_withdraw` at the boundaries.
+/// Two independent locks with a later second unlock time.
 ///
-/// Lock 1: 300 locked, unlock_time = 5_000
-/// Lock 2: 200 locked, unlock_time = 6_000 (later than lock 1)
+/// Lock 1: 300 until T=5_000
+/// Lock 2: 200 until T=6_000
 ///
-/// Expected (current implementation): locked balance accumulates to 500,
-/// available balance drops to 500, and the effective unlock time for the
-/// combined 500 is 6_000 (the second call's value), NOT 5_000. So at
-/// T=5_000 the user still cannot withdraw anything, even though the
-/// first lock's original unlock time has passed.
+/// At T=5_000 only lock 1 matures; lock 2 remains locked until T=6_000.
 #[test]
 fn test_repeated_lock_accumulates_balance_and_overwrites_unlock_time_later() {
     let env = test_env();
@@ -353,36 +345,30 @@ fn test_repeated_lock_accumulates_balance_and_overwrites_unlock_time_later() {
     client.lock_funds(&user, &300, &5_000);
     client.lock_funds(&user, &200, &6_000);
 
-    // Balances: locked amounts accumulate, available balance reflects both locks.
+    // Before either matures: both amounts locked, remaining deposit available.
     assert_eq!(client.get_balance(&user), 500);
     assert_eq!(client.get_locked_balance(&user), 500);
 
-    // Unlock time was overwritten to 6_000 by the second call.
-    // At the first lock's original unlock time (5_000), funds are
-    // still locked because the stored unlock time is now 6_000.
+    // At lock 1's unlock time: lock 1 matures (available), lock 2 still locked.
     set_ledger_timestamp(&env, 5_000);
-    assert_eq!(client.can_withdraw(&user), false);
-    assert_eq!(client.get_locked_balance(&user), 500);
+    assert_eq!(client.can_withdraw(&user), true);
+    assert_eq!(client.get_locked_balance(&user), 200);
+    assert_eq!(client.get_balance(&user), 800); // 500 deposited + 300 matured
 
-    // At the second (most recent) unlock time, the entire accumulated
-    // locked balance becomes withdrawable at once.
+    // At lock 2's unlock time: both locks matured.
     set_ledger_timestamp(&env, 6_000);
     assert_eq!(client.can_withdraw(&user), true);
-    assert_eq!(client.get_locked_balance(&user), 500);
+    assert_eq!(client.get_locked_balance(&user), 0);
+    assert_eq!(client.get_balance(&user), 1_000);
 }
 
-/// Same as above, but the second lock's unlock_time is EARLIER than the
-/// first lock's. This demonstrates the overwrite is unconditional — the
-/// contract does not take the max of old and new unlock times, so a
-/// second lock can effectively pull the unlock time backwards for funds
-/// that were already locked under a later time.
+/// Two independent locks where the second unlock time is earlier.
 ///
-/// Lock 1: 300 locked, unlock_time = 6_000
-/// Lock 2: 200 locked, unlock_time = 5_000 (earlier than lock 1)
+/// Lock 1: 300 until T=6_000
+/// Lock 2: 200 until T=5_000
 ///
-/// Expected (current implementation): the combined 500 locked balance
-/// becomes withdrawable at T=5_000 already, even though 300 of it was
-/// originally locked until T=6_000.
+/// At T=5_000 only lock 2 matures; lock 1 stays locked until T=6_000.
+/// Earlier locks do not pull later locks forward (and vice versa).
 #[test]
 fn test_repeated_lock_overwrites_unlock_time_with_earlier_value() {
     let env = test_env();
@@ -397,17 +383,20 @@ fn test_repeated_lock_overwrites_unlock_time_with_earlier_value() {
     assert_eq!(client.get_balance(&user), 500);
     assert_eq!(client.get_locked_balance(&user), 500);
 
-    // Unlock time was overwritten to the EARLIER value (5_000), not
-    // the max of the two (6_000). Note this is a lock-in of current
-    // behaviour, not necessarily the ideal/expected product behaviour.
+    // Only the earlier lock (200) matures at T=5_000; 300 remains locked.
     set_ledger_timestamp(&env, 5_000);
     assert_eq!(client.can_withdraw(&user), true);
-    assert_eq!(client.get_locked_balance(&user), 500);
+    assert_eq!(client.get_locked_balance(&user), 300);
+    assert_eq!(client.get_balance(&user), 700); // 500 deposited + 200 matured
+
+    // Remaining lock matures at T=6_000.
+    set_ledger_timestamp(&env, 6_000);
+    assert_eq!(client.can_withdraw(&user), true);
+    assert_eq!(client.get_locked_balance(&user), 0);
+    assert_eq!(client.get_balance(&user), 1_000);
 }
 
-/// Three repeated locks: confirms accumulation continues correctly
-/// across more than two calls, and that only the final call's
-/// unlock_time is retained.
+/// Three independent locks: each matures on its own schedule.
 #[test]
 fn test_repeated_lock_three_times_accumulates_and_keeps_last_unlock_time() {
     let env = test_env();
@@ -423,14 +412,17 @@ fn test_repeated_lock_three_times_accumulates_and_keeps_last_unlock_time() {
     assert_eq!(client.get_balance(&user), 700);
     assert_eq!(client.get_locked_balance(&user), 300);
 
-    // Not yet withdrawable at the first two (now-superseded) unlock times.
+    // At T=4_000 the first two locks have matured; the third is still locked.
     set_ledger_timestamp(&env, 4_000);
-    assert_eq!(client.can_withdraw(&user), false);
+    assert_eq!(client.can_withdraw(&user), true);
+    assert_eq!(client.get_locked_balance(&user), 100);
+    assert_eq!(client.get_balance(&user), 900); // 700 deposited + 200 matured
 
-    // Withdrawable only once the last call's unlock time is reached.
+    // All three mature once the latest unlock time is reached.
     set_ledger_timestamp(&env, 7_000);
     assert_eq!(client.can_withdraw(&user), true);
-    assert_eq!(client.get_locked_balance(&user), 300);
+    assert_eq!(client.get_locked_balance(&user), 0);
+    assert_eq!(client.get_balance(&user), 1_000);
 }
 
 #[test]
@@ -684,8 +676,8 @@ fn test_separate_user_balances() {
 #[test]
 fn balance_isolation_between_users_deposit() {
     let env = test_env();
-    let (current_contract_address, client) = init_contract(&env);
-    let (env, _admin, client, token_client, token_admin) = test_token(env, client);
+    let (_current_contract_address, client) = init_contract(&env);
+    let (env, _admin, client, _token_client, token_admin) = test_token(env, client);
 
     let alice = new_user(&env);
     let bob = new_user(&env);
