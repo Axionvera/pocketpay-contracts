@@ -73,6 +73,18 @@ fn test_deposit_negative_panics() {
     client.deposit(&user, &-50);
 }
 
+#[test]
+fn test_get_balance_default_zero_for_new_user_after_initialization() {
+    let env = test_env();
+    let (_id, client) = init_contract(&env);
+    let admin = new_user(&env);
+    let token = new_user(&env);
+    client.initialize(&admin, &token);
+
+    let user = new_user(&env);
+    assert_eq!(client.get_balance(&user), 0);
+}
+
 // =========================================================================
 // Withdrawal Tests
 // =========================================================================
