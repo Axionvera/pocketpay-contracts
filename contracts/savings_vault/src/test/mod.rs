@@ -299,6 +299,129 @@ fn test_lock_funds_multiple_times() {
     assert_eq!(client.get_locked_balance(&user), 500);
 }
 
+// -------------------------------------------------------------------------
+// Repeated lock operations — accumulation vs. overwrite behaviour
+// -------------------------------------------------------------------------
+//
+// This section documents and locks in the *current* implementation's
+// behaviour for a user who calls `lock_funds` more than once, per
+// issue #79. It intentionally exposes existing behaviour without
+// changing it.
+//
+// - Locked balance: **accumulates**. Each call adds `amount` on top of
+//   whatever is already locked (`new_locked = current_locked + amount`).
+// - Available balance: decreases by each `amount` locked, in line with
+//   the accumulating locked balance.
+// - Unlock time: **overwritten**, not accumulated or maxed. The single
+//   `UnlockTime` storage slot is replaced by the most recent
+//   `lock_funds` call's `unlock_time`, regardless of what was stored
+//   before and regardless of whether the new value is later or earlier
+//   than the previous one. There is only one unlock time per user that
+//   gates the *entire* locked balance (both the old and new locked
+//   amounts unlock together, based on the last call's timestamp).
+
+/// Two repeated locks: verifies available balance, locked balance, AND
+/// unlock-time behaviour together via `can_withdraw` at the boundaries.
+///
+/// Lock 1: 300 locked, unlock_time = 5_000
+/// Lock 2: 200 locked, unlock_time = 6_000 (later than lock 1)
+///
+/// Expected (current implementation): locked balance accumulates to 500,
+/// available balance drops to 500, and the effective unlock time for the
+/// combined 500 is 6_000 (the second call's value), NOT 5_000. So at
+/// T=5_000 the user still cannot withdraw anything, even though the
+/// first lock's original unlock time has passed.
+#[test]
+fn test_repeated_lock_accumulates_balance_and_overwrites_unlock_time_later() {
+    let env = test_env();
+    let (_id, client) = init_contract(&env);
+    let user = new_user(&env);
+    set_ledger_timestamp(&env, 1_000);
+    deposit_balance(&client, &user, 1_000);
+
+    client.lock_funds(&user, &300, &5_000);
+    client.lock_funds(&user, &200, &6_000);
+
+    // Balances: locked amounts accumulate, available balance reflects both locks.
+    assert_eq!(client.get_balance(&user), 500);
+    assert_eq!(client.get_locked_balance(&user), 500);
+
+    // Unlock time was overwritten to 6_000 by the second call.
+    // At the first lock's original unlock time (5_000), funds are
+    // still locked because the stored unlock time is now 6_000.
+    set_ledger_timestamp(&env, 5_000);
+    assert_eq!(client.can_withdraw(&user), false);
+    assert_eq!(client.get_locked_balance(&user), 500);
+
+    // At the second (most recent) unlock time, the entire accumulated
+    // locked balance becomes withdrawable at once.
+    set_ledger_timestamp(&env, 6_000);
+    assert_eq!(client.can_withdraw(&user), true);
+    assert_eq!(client.get_locked_balance(&user), 500);
+}
+
+/// Same as above, but the second lock's unlock_time is EARLIER than the
+/// first lock's. This demonstrates the overwrite is unconditional — the
+/// contract does not take the max of old and new unlock times, so a
+/// second lock can effectively pull the unlock time backwards for funds
+/// that were already locked under a later time.
+///
+/// Lock 1: 300 locked, unlock_time = 6_000
+/// Lock 2: 200 locked, unlock_time = 5_000 (earlier than lock 1)
+///
+/// Expected (current implementation): the combined 500 locked balance
+/// becomes withdrawable at T=5_000 already, even though 300 of it was
+/// originally locked until T=6_000.
+#[test]
+fn test_repeated_lock_overwrites_unlock_time_with_earlier_value() {
+    let env = test_env();
+    let (_id, client) = init_contract(&env);
+    let user = new_user(&env);
+    set_ledger_timestamp(&env, 1_000);
+    deposit_balance(&client, &user, 1_000);
+
+    client.lock_funds(&user, &300, &6_000);
+    client.lock_funds(&user, &200, &5_000);
+
+    assert_eq!(client.get_balance(&user), 500);
+    assert_eq!(client.get_locked_balance(&user), 500);
+
+    // Unlock time was overwritten to the EARLIER value (5_000), not
+    // the max of the two (6_000). Note this is a lock-in of current
+    // behaviour, not necessarily the ideal/expected product behaviour.
+    set_ledger_timestamp(&env, 5_000);
+    assert_eq!(client.can_withdraw(&user), true);
+    assert_eq!(client.get_locked_balance(&user), 500);
+}
+
+/// Three repeated locks: confirms accumulation continues correctly
+/// across more than two calls, and that only the final call's
+/// unlock_time is retained.
+#[test]
+fn test_repeated_lock_three_times_accumulates_and_keeps_last_unlock_time() {
+    let env = test_env();
+    let (_id, client) = init_contract(&env);
+    let user = new_user(&env);
+    set_ledger_timestamp(&env, 1_000);
+    deposit_balance(&client, &user, 1_000);
+
+    client.lock_funds(&user, &100, &3_000);
+    client.lock_funds(&user, &100, &4_000);
+    client.lock_funds(&user, &100, &7_000);
+
+    assert_eq!(client.get_balance(&user), 700);
+    assert_eq!(client.get_locked_balance(&user), 300);
+
+    // Not yet withdrawable at the first two (now-superseded) unlock times.
+    set_ledger_timestamp(&env, 4_000);
+    assert_eq!(client.can_withdraw(&user), false);
+
+    // Withdrawable only once the last call's unlock time is reached.
+    set_ledger_timestamp(&env, 7_000);
+    assert_eq!(client.can_withdraw(&user), true);
+    assert_eq!(client.get_locked_balance(&user), 300);
+}
+
 #[test]
 #[should_panic(expected = "Lock amount must be greater than zero")]
 fn test_lock_zero_panics() {
