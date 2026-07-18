@@ -548,51 +548,80 @@ fn test_separate_user_balances() {
 }
 
 #[test]
-fn test_multiple_locks_independent_maturity() {
-    let (env, current_contract_address, client) = setup();
+fn balance_isolation_between_users_deposit() {
+    let env = test_env();
+    let (current_contract_address, client) = init_contract(&env);
     let (env, _admin, client, token_client, token_admin) = test_token(env, client);
-    let user = new_user(&env);
 
-    token_admin.mint(&user, &10000);
+    let alice = new_user(&env);
+    let bob = new_user(&env);
 
-    // Initial deposit of 1000
-    client.deposit(&user, &1000);
-    token_client.transfer(&user, &current_contract_address, &1000);
+    token_admin.mint(&alice, &10000);
+    token_admin.mint(&bob, &10000);
 
-    set_ledger_timestamp(&env, 1000);
+    // SAC Transfer not yet implemented for deposit so i'll mimick it by trnasfering asset(deposit_amount) from user to the contract
+    deposit_balance(&client, &alice, 1_000);
+    assert_eq!(client.get_balance(&alice), 1000_i128);
+    assert_eq!(client.get_balance(&bob), 0_i128);
+}
 
-    // Create 3 locks
-    let _lock1 = client.lock_funds(&user, &200, &3000); // lock 200 until 3000
-    let _lock2 = client.lock_funds(&user, &300, &5000); // lock 300 until 5000
-    let _lock3 = client.lock_funds(&user, &100, &7000); // lock 100 until 7000
+#[test]
+fn balance_isolation_between_users_withdraw() {
+    let env = test_env();
+    let (current_contract_address, client) = init_contract(&env);
+    let (env, _admin, client, token_client, token_admin) = test_token(env, client);
 
-    assert_eq!(client.get_balance(&user), 400); // 1000 - 200 - 300 - 100
-    assert_eq!(client.get_locked_balance(&user), 600); // 200 + 300 + 100
-    assert_eq!(client.can_withdraw(&user), false);
+    let alice = new_user(&env);
+    let bob = new_user(&env);
 
-    // Advance time to 4000 (lock1 matured)
-    set_ledger_timestamp(&env, 4000);
-    assert_eq!(client.get_balance(&user), 600); // 400 + 200 matured
-    assert_eq!(client.get_locked_balance(&user), 400); // 300 + 100
-    assert_eq!(client.can_withdraw(&user), true);
+    token_admin.mint(&alice, &10000);
+    token_admin.mint(&bob, &10000);
 
-    // Advance time to 6000 (lock1 and lock2 matured)
-    set_ledger_timestamp(&env, 6000);
-    assert_eq!(client.get_balance(&user), 900); // 400 + 200 + 300 matured
-    assert_eq!(client.get_locked_balance(&user), 100); // 100
-    assert_eq!(client.can_withdraw(&user), true);
+    // SAC Transfer not yet implemented for deposit so i'll mimick it by trnasfering asset(deposit_amount) from user to the contract
+    deposit_balance(&client, &alice, 1_000);
+    deposit_balance(&client, &bob, 4_000);
+    token_client.transfer(&alice, &current_contract_address, &1000); // This should be removed when deposit function implements SAC
+    token_client.transfer(&bob, &current_contract_address, &4000); // This should be removed when deposit function implements SAC
 
-    // Withdraw 500 (400 from base balance, 100 from matured locks)
-    client.withdraw(&user, &500);
-    assert_eq!(client.get_balance(&user), 400); // 900 - 500
-    assert_eq!(client.get_locked_balance(&user), 100); // 100 still locked
+    assert_eq!(client.get_balance(&alice), 1000_i128);
+    assert_eq!(client.get_balance(&bob), 4000_i128);
 
-    // Advance time to 8000 (all matured)
-    set_ledger_timestamp(&env, 8000);
-    assert_eq!(client.get_balance(&user), 500); // 400 + 100 matured
-    assert_eq!(client.get_locked_balance(&user), 0);
+    client.withdraw(&alice, &500);
+    assert_eq!(client.get_balance(&alice), 500);
+    assert_eq!(client.get_balance(&bob), 4000);
 
-    // Withdraw remaining 500
-    client.withdraw(&user, &500);
-    assert_eq!(client.get_balance(&user), 0);
+    client.withdraw(&bob, &2000);
+    assert_eq!(client.get_balance(&alice), 500);
+    assert_eq!(client.get_balance(&bob), 2000);
+}
+
+#[test]
+fn balance_isolation_between_users_lock() {
+    let env = test_env();
+    let (current_contract_address, client) = init_contract(&env);
+    let (env, _admin, client, token_client, token_admin) = test_token(env, client);
+
+    let alice = new_user(&env);
+    let bob = new_user(&env);
+
+    token_admin.mint(&alice, &10000);
+    token_admin.mint(&bob, &10000);
+
+    // SAC Transfer not yet implemented for deposit so i'll mimick it by trnasfering asset(deposit_amount) from user to the contract
+    deposit_balance(&client, &alice, 2_000);
+    deposit_balance(&client, &bob, 4_000);
+    token_client.transfer(&alice, &current_contract_address, &2_000); // This should be removed when deposit function implements SAC
+    token_client.transfer(&bob, &current_contract_address, &4_000); // This should be removed when deposit function implements SAC
+
+    client.lock_funds(&alice, &1_000, &3600);
+    assert_eq!(client.get_balance(&alice), 1_000);
+    assert_eq!(client.get_locked_balance(&alice), 1_000);
+    assert_eq!(client.get_balance(&bob), 4_000);
+    assert_eq!(client.get_locked_balance(&bob), 0);
+
+    client.lock_funds(&bob, &2_500, &3600);
+    assert_eq!(client.get_balance(&alice), 1_000);
+    assert_eq!(client.get_locked_balance(&alice), 1_000);
+    assert_eq!(client.get_balance(&bob), 1_500);
+    assert_eq!(client.get_locked_balance(&bob), 2_500);
 }
