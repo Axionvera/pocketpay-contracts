@@ -48,6 +48,16 @@ All operations validate inputs (non‑negative amounts, sufficient balances, fut
 
 ---
 
+## Internal Balance Tracking and Asset Custody
+
+The current deposit flow performs **internal accounting only**. Calling `deposit` updates the user's balance in contract storage; it does not transfer real XLM, a Stellar Asset Contract (SAC) asset, or any other token into contract custody.
+
+Internal balance tracking records values that the contract uses for its deposit, withdrawal, and locking rules. Real token custody is different: it requires an on-chain asset transfer between addresses so that recorded balances are backed by assets actually held for users. Because that transfer layer is not implemented, the current stored balances must not be interpreted as proof of deposited or custodied assets.
+
+Future SAC integration is planned to provide real asset transfer support and enable custody-backed balances.
+
+---
+
 ## Secure Storage
 
 On‑chain storage is inherently **secure**: data is stored in the ledger and can only be modified by authorized contract calls. The contract enforces authentication using `require_auth(env, caller)` for any state‑changing function, ensuring that only the address owning the funds can deposit, withdraw, or lock them.

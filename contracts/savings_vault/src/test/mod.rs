@@ -2,7 +2,7 @@
 //!
 //! These tests use the Soroban SDK test utilities to simulate
 //! on-chain interactions in an isolated environment.
-// mod test_helpers;
+mod test_helpers;
 
 use super::*;
 use soroban_sdk::{testutils::Address as _, testutils::Ledger, Address};
@@ -333,9 +333,20 @@ fn test_lock_past_time_panics() {
 }
 
 // =========================================================================
-// can_withdraw Tests
+// can_withdraw Tests — Time-Lock Boundary Behaviour
 // =========================================================================
+//
+// Boundary rule: `can_withdraw` returns `true` when
+//   ledger.timestamp() >= unlock_time (inclusive).
+// This section tests before, exactly at, and after the unlock time,
+// with explicit boundary positions so the rule is unambiguous.
 
+// -------------------------------------------------------------------------
+// Before unlock — returns false
+// -------------------------------------------------------------------------
+
+/// Funds locked at T=1000 with unlock at T=10_000.
+/// Checking at T=1000 (right after locking) — still far before unlock.
 #[test]
 fn test_can_withdraw_before_unlock() {
     let env = test_env();
@@ -347,18 +358,28 @@ fn test_can_withdraw_before_unlock() {
     assert_eq!(client.can_withdraw(&user), false);
 }
 
+/// Boundary: 1 second before unlock.
+/// Unlock is at T=5000, check at T=4999 — still locked.
 #[test]
-fn test_can_withdraw_after_unlock() {
+fn test_can_withdraw_one_second_before_unlock_returns_false() {
     let env = test_env();
     let (_id, client) = init_contract(&env);
     let user = new_user(&env);
     set_ledger_timestamp(&env, 1_000);
     deposit_balance(&client, &user, 500);
     client.lock_funds(&user, &200, &5_000);
-    set_ledger_timestamp(&env, 6_000);
-    assert_eq!(client.can_withdraw(&user), true);
+    // Set ledger to exactly 1 second before unlock
+    set_ledger_timestamp(&env, 4_999);
+    assert_eq!(client.can_withdraw(&user), false);
 }
 
+// -------------------------------------------------------------------------
+// At unlock — returns true (inclusive boundary)
+// -------------------------------------------------------------------------
+
+/// Boundary: exactly at unlock time.
+/// Unlock at T=5000, check at T=5000 — funds are now withdrawable.
+/// This confirms the boundary is **inclusive** (>=).
 #[test]
 fn test_can_withdraw_exactly_at_unlock() {
     let env = test_env();
@@ -371,12 +392,126 @@ fn test_can_withdraw_exactly_at_unlock() {
     assert_eq!(client.can_withdraw(&user), true);
 }
 
+// -------------------------------------------------------------------------
+// After unlock — returns true
+// -------------------------------------------------------------------------
+
+/// Unlock at T=5000, check at T=6000 — well after unlock.
+#[test]
+fn test_can_withdraw_after_unlock() {
+    let env = test_env();
+    let (_id, client) = init_contract(&env);
+    let user = new_user(&env);
+    set_ledger_timestamp(&env, 1_000);
+    deposit_balance(&client, &user, 500);
+    client.lock_funds(&user, &200, &5_000);
+    set_ledger_timestamp(&env, 6_000);
+    assert_eq!(client.can_withdraw(&user), true);
+}
+
+/// Boundary: 1 second after unlock.
+/// Unlock at T=5000, check at T=5001 — confirm it's still true.
+#[test]
+fn test_can_withdraw_one_second_after_unlock_returns_true() {
+    let env = test_env();
+    let (_id, client) = init_contract(&env);
+    let user = new_user(&env);
+    set_ledger_timestamp(&env, 1_000);
+    deposit_balance(&client, &user, 500);
+    client.lock_funds(&user, &200, &5_000);
+    // Set ledger to exactly 1 second after unlock
+    set_ledger_timestamp(&env, 5_001);
+    assert_eq!(client.can_withdraw(&user), true);
+}
+
+// -------------------------------------------------------------------------
+// No locked funds — returns false
+// -------------------------------------------------------------------------
+
+/// User with no locked funds always returns false, regardless of
+/// any stored unlock time or timestamp.
 #[test]
 fn test_can_withdraw_no_locked_funds() {
     let env = test_env();
     let (_id, client) = init_contract(&env);
     let user = new_user(&env);
     assert_eq!(client.can_withdraw(&user), false);
+}
+
+// -------------------------------------------------------------------------
+// Locked balance correctness across boundary checks
+// -------------------------------------------------------------------------
+
+/// The locked balance is unaffected by repeated `can_withdraw` queries.
+/// Lock 300 at T=1000, unlock at T=5000. Check locked balance before,
+/// at, and after unlock — it should remain 300 throughout.
+#[test]
+fn test_locked_balance_correct_before_at_and_after_unlock() {
+    let env = test_env();
+    let (_id, client) = init_contract(&env);
+    let user = new_user(&env);
+    set_ledger_timestamp(&env, 1_000);
+    deposit_balance(&client, &user, 500);
+    client.lock_funds(&user, &300, &5_000);
+
+    // Before unlock (T=4999): cannot withdraw, locked balance = 300
+    set_ledger_timestamp(&env, 4_999);
+    assert_eq!(client.can_withdraw(&user), false);
+    assert_eq!(client.get_locked_balance(&user), 300);
+    // Available balance still reflects deduction
+    assert_eq!(client.get_balance(&user), 200);
+
+    // At unlock (T=5000): can withdraw, locked balance still = 300
+    set_ledger_timestamp(&env, 5_000);
+    assert_eq!(client.can_withdraw(&user), true);
+    assert_eq!(client.get_locked_balance(&user), 300);
+
+    // After unlock (T=5001): can withdraw, locked balance still = 300
+    set_ledger_timestamp(&env, 5_001);
+    assert_eq!(client.can_withdraw(&user), true);
+    assert_eq!(client.get_locked_balance(&user), 300);
+}
+
+// -------------------------------------------------------------------------
+// Boundary rule documentation test
+// -------------------------------------------------------------------------
+
+/// This test explicitly documents the boundary rule:
+/// `can_withdraw` uses **inclusive** comparison (>=).
+///
+/// - ledger.timestamp() <  unlock_time  →  false  (locked)
+/// - ledger.timestamp() >= unlock_time  →  true   (unlocked, if locked_balance > 0)
+#[test]
+fn test_can_withdraw_boundary_rule_is_inclusive_gte() {
+    let env = test_env();
+    let (_id, client) = init_contract(&env);
+    let user = new_user(&env);
+    let unlock_time: u64 = 5_000;
+
+    set_ledger_timestamp(&env, 1_000);
+    deposit_balance(&client, &user, 500);
+    client.lock_funds(&user, &200, &unlock_time);
+
+    // t < unlock_time → false
+    set_ledger_timestamp(&env, unlock_time - 1);
+    assert!(
+        !client.can_withdraw(&user),
+        "Expected false when ledger.timestamp() < unlock_time"
+    );
+
+    // t == unlock_time → true (inclusive boundary)
+    set_ledger_timestamp(&env, unlock_time);
+    assert!(
+        client.can_withdraw(&user),
+        "Expected true when ledger.timestamp() == unlock_time (inclusive >=)"
+    );
+
+    // t > unlock_time → true
+    set_ledger_timestamp(&env, unlock_time + 1);
+    assert!(
+        client.can_withdraw(&user),
+        "Expected true when ledger.timestamp() > unlock_time"
+    );
 }
 
 // =========================================================================
