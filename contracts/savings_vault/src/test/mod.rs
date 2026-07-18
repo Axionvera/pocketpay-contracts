@@ -461,15 +461,17 @@ fn test_locked_balance_correct_before_at_and_after_unlock() {
     // Available balance still reflects deduction
     assert_eq!(client.get_balance(&user), 200);
 
-    // At unlock (T=5000): can withdraw, locked balance still = 300
+    // At unlock (T=5000): can withdraw, locked balance = 0
     set_ledger_timestamp(&env, 5_000);
     assert_eq!(client.can_withdraw(&user), true);
-    assert_eq!(client.get_locked_balance(&user), 300);
+    assert_eq!(client.get_locked_balance(&user), 0);
+    assert_eq!(client.get_balance(&user), 500);
 
-    // After unlock (T=5001): can withdraw, locked balance still = 300
+    // After unlock (T=5001): can withdraw, locked balance = 0
     set_ledger_timestamp(&env, 5_001);
     assert_eq!(client.can_withdraw(&user), true);
-    assert_eq!(client.get_locked_balance(&user), 300);
+    assert_eq!(client.get_locked_balance(&user), 0);
+    assert_eq!(client.get_balance(&user), 500);
 }
 
 // -------------------------------------------------------------------------
