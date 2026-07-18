@@ -150,6 +150,8 @@ Use the automated deployment script to build the release WASM and deploy it to t
 
 The script will verify prerequisites, compile the contract, deploy it, and print your new Contract ID. Save the returned Contract ID — you'll need it to invoke functions.
 
+See the [deployment output example](docs/deployment-output-example.md) to learn what successful output looks like and which Contract ID value to copy.
+
 ### 4. Initialize the Contract
 
 ```bash
