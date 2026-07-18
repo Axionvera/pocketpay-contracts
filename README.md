@@ -261,6 +261,9 @@ stellar-pocketpay-contracts/
 - Always test thoroughly on testnet before considering mainnet deployment.
 - Monitor contract storage TTL and extend as needed using `soroban contract extend`. See the [Storage TTL Guide](docs/storage-ttl.md) for persistent vs. instance storage details and example commands.
 
+## Documentation
+
+For a full list of CLI command examples and arguments for each contract method, check out the [Contract Invocation Examples](docs/invocation-examples.md).
 ---
 
 ## Contributing
