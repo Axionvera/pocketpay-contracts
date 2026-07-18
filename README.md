@@ -211,6 +211,7 @@ stellar-pocketpay-contracts/
 ---
 ## Documentation
 
+- [Local Development Guide](docs/local-development.md) – How to build, test, and interact with the contract using a local Soroban sandbox.
 - [Architecture Documentation](docs/architecture.md) – Overview of project structure, state management, storage, SDK integration, and future extension points.
 - [Event Schema Documentation](docs/events.md) – Overview of event names, topics, payload schemas, and JSON examples for vault actions.
 
