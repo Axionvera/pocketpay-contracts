@@ -87,6 +87,19 @@ The artifact is written under `target/wasm32-unknown-unknown/release/`. Run all 
 - Avoid changing contract logic in documentation-only pull requests.
 - Add or update tests for every logic change.
 
+## License
+
+This project is licensed under the MIT License; see the [LICENSE](LICENSE) file at
+the repository root for the full text. That repository-level file is the single
+source of truth for licensing — **individual source files should not include
+their own license headers**. Do not add license headers to new or existing
+`.rs` files or other source files; keep new contributions consistent with the
+current codebase, which has no per-file headers.
+
+If you believe a specific file needs its own header (for example, code
+adapted from another project under a different license), raise it with the
+maintainers in your pull request description before adding one.
+
 ## Security-sensitive contributions
 
 Changes involving balances, access control, signatures, storage, upgrades, or external calls are security-sensitive. Describe their risks and assumptions clearly in the pull request.
