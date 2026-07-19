@@ -34,9 +34,13 @@ pub fn seed_balances(client: &SavingsVaultClient, user: &Address, amounts: &[i12
     }
 }
 
-/// Sets the ledger timestamp.
+/// Sets the ledger's current timestamp (in unix seconds) for tests that
+/// simulate time-based behaviour, such as lock/unlock schedules.
+///
+/// Use this instead of mutating `env.ledger()` directly so that every
+/// time-based test makes its ledger time assumption explicit and easy
+/// to spot at a glance.
 pub fn set_ledger_timestamp(env: &Env, timestamp: u64) {
-    // env.ledger().with_mut(|li| li.timestamp = timestamp);
     env.ledger().set_timestamp(timestamp);
 }
 

@@ -150,6 +150,8 @@ Use the automated deployment script to build the release WASM and deploy it to t
 
 The script will verify prerequisites, compile the contract, deploy it, and print your new Contract ID. Save the returned Contract ID — you'll need it to invoke functions.
 
+See the [deployment output example](docs/deployment-output-example.md) to learn what successful output looks like and which Contract ID value to copy.
+
 ### 4. Initialize the Contract
 
 ```bash
@@ -209,9 +211,11 @@ stellar-pocketpay-contracts/
 ---
 ## Documentation
 
-- [Savings Vault Contract Workspace](contracts/savings_vault/README.md) - Contract-specific overview, public functions, test command, and WASM build command.
+- [Deployment Environments](docs/deployment-environments.md) — Network configuration for local, testnet, and future mainnet, including RPC URLs, identities, environment variables, and deployment commands.
+- [Contract Error Reference](docs/error-codes.md) - Current savings vault failure conditions and guidance for SDK and mobile callers.
 - [Architecture Documentation](docs/architecture.md) – Overview of project structure, state management, storage, SDK integration, and future extension points.
 - [Event Schema Documentation](docs/events.md) – Overview of event names, topics, payload schemas, and JSON examples for vault actions.
+- [Vault Contract ID Handoff](docs/contract-id-handoff.md) - How to pass a deployed vault contract ID safely to SDK configuration and the mobile app.
 
 ---
 
@@ -255,8 +259,10 @@ stellar-pocketpay-contracts/
 - **Soroban Explorer**: [stellar.expert](https://stellar.expert/explorer/testnet)
 - Deployment help: see the [troubleshooting guide](docs/troubleshooting.md)
   for common Soroban CLI, Friendbot, WASM, network, and invocation issues.
+  For a full breakdown of environment-specific configuration, see the
+  [deployment environments guide](docs/deployment-environments.md).
 - Always test thoroughly on testnet before considering mainnet deployment.
-- Monitor contract storage TTL and extend as needed using `soroban contract extend`.
+- Monitor contract storage TTL and extend as needed using `soroban contract extend`. See the [Storage TTL Guide](docs/storage-ttl.md) for persistent vs. instance storage details and example commands.
 
 ---
 
