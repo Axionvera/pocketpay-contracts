@@ -3,6 +3,7 @@
 //! These tests use the Soroban SDK test utilities to simulate
 //! on-chain interactions in an isolated environment.
 mod balance_conservation;
+mod maximum_amount_boundary;
 mod test_helpers;
 mod initialization;
 
