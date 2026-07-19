@@ -86,6 +86,7 @@ The artifact is written under `target/wasm32-unknown-unknown/release/`. Run all 
 - Call out contract behavior, storage, authorization, or interface changes.
 - Avoid changing contract logic in documentation-only pull requests.
 - Add or update tests for every logic change.
+- When changing storage layout, follow the storage change checklist in `docs/storage-change-checklist.md`.
 
 ## Security-sensitive contributions
 
