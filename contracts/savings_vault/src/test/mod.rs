@@ -2,10 +2,11 @@
 //!
 //! These tests use the Soroban SDK test utilities to simulate
 //! on-chain interactions in an isolated environment.
+mod balance_conservation;
 mod test_helpers;
 
 use super::*;
-use soroban_sdk::{testutils::Address as _, testutils::Ledger, Address};
+use soroban_sdk::{testutils::Address as _, Address};
 
 use test_helpers::*;
 
@@ -71,6 +72,18 @@ fn test_deposit_negative_panics() {
     let (_id, client) = init_contract(&env);
     let user = new_user(&env);
     client.deposit(&user, &-50);
+}
+
+#[test]
+fn test_get_balance_default_zero_for_new_user_after_initialization() {
+    let env = test_env();
+    let (_id, client) = init_contract(&env);
+    let admin = new_user(&env);
+    let token = new_user(&env);
+    client.initialize(&admin, &token);
+
+    let user = new_user(&env);
+    assert_eq!(client.get_balance(&user), 0);
 }
 
 // =========================================================================
@@ -241,9 +254,7 @@ fn test_failed_withdraw_does_not_change_locked_balance() {
     let (env, _id, client) = setup();
     let user = Address::generate(&env);
 
-    env.ledger().with_mut(|li| {
-        li.timestamp = 1_000;
-    });
+    set_ledger_timestamp(&env, 1_000);
 
     client.deposit(&user, &500);
     // Lock 300, leaving 200 available
@@ -297,6 +308,121 @@ fn test_lock_funds_multiple_times() {
     client.lock_funds(&user, &200, &6_000);
     assert_eq!(client.get_balance(&user), 500);
     assert_eq!(client.get_locked_balance(&user), 500);
+}
+
+// -------------------------------------------------------------------------
+// Repeated lock operations — independent multi-lock maturity
+// -------------------------------------------------------------------------
+//
+// After multi-lock support, each `lock_funds` call creates an independent
+// `LockEntry` with its own `unlock_time`. Behaviour when locking repeatedly:
+//
+// - Locked balance: **accumulates**. Each call adds `amount` on top of
+//   whatever is already locked.
+// - Available (deposited) balance: decreases by each `amount` locked.
+// - Unlock times: **independent**, not overwritten. Each entry matures on
+//   its own schedule.
+// - `get_locked_balance`: sums only *unmatured* locks
+//   (`current_time < unlock_time`).
+// - `get_balance`: deposited balance + *matured* lock amounts.
+// - `can_withdraw`: `true` if *any* lock has matured
+//   (`current_time >= unlock_time`).
+
+/// Two independent locks with a later second unlock time.
+///
+/// Lock 1: 300 until T=5_000
+/// Lock 2: 200 until T=6_000
+///
+/// At T=5_000 only lock 1 matures; lock 2 remains locked until T=6_000.
+#[test]
+fn test_repeated_lock_accumulates_balance_and_overwrites_unlock_time_later() {
+    let env = test_env();
+    let (_id, client) = init_contract(&env);
+    let user = new_user(&env);
+    set_ledger_timestamp(&env, 1_000);
+    deposit_balance(&client, &user, 1_000);
+
+    client.lock_funds(&user, &300, &5_000);
+    client.lock_funds(&user, &200, &6_000);
+
+    // Before either matures: both amounts locked, remaining deposit available.
+    assert_eq!(client.get_balance(&user), 500);
+    assert_eq!(client.get_locked_balance(&user), 500);
+
+    // At lock 1's unlock time: lock 1 matures (available), lock 2 still locked.
+    set_ledger_timestamp(&env, 5_000);
+    assert_eq!(client.can_withdraw(&user), true);
+    assert_eq!(client.get_locked_balance(&user), 200);
+    assert_eq!(client.get_balance(&user), 800); // 500 deposited + 300 matured
+
+    // At lock 2's unlock time: both locks matured.
+    set_ledger_timestamp(&env, 6_000);
+    assert_eq!(client.can_withdraw(&user), true);
+    assert_eq!(client.get_locked_balance(&user), 0);
+    assert_eq!(client.get_balance(&user), 1_000);
+}
+
+/// Two independent locks where the second unlock time is earlier.
+///
+/// Lock 1: 300 until T=6_000
+/// Lock 2: 200 until T=5_000
+///
+/// At T=5_000 only lock 2 matures; lock 1 stays locked until T=6_000.
+/// Earlier locks do not pull later locks forward (and vice versa).
+#[test]
+fn test_repeated_lock_overwrites_unlock_time_with_earlier_value() {
+    let env = test_env();
+    let (_id, client) = init_contract(&env);
+    let user = new_user(&env);
+    set_ledger_timestamp(&env, 1_000);
+    deposit_balance(&client, &user, 1_000);
+
+    client.lock_funds(&user, &300, &6_000);
+    client.lock_funds(&user, &200, &5_000);
+
+    assert_eq!(client.get_balance(&user), 500);
+    assert_eq!(client.get_locked_balance(&user), 500);
+
+    // Only the earlier lock (200) matures at T=5_000; 300 remains locked.
+    set_ledger_timestamp(&env, 5_000);
+    assert_eq!(client.can_withdraw(&user), true);
+    assert_eq!(client.get_locked_balance(&user), 300);
+    assert_eq!(client.get_balance(&user), 700); // 500 deposited + 200 matured
+
+    // Remaining lock matures at T=6_000.
+    set_ledger_timestamp(&env, 6_000);
+    assert_eq!(client.can_withdraw(&user), true);
+    assert_eq!(client.get_locked_balance(&user), 0);
+    assert_eq!(client.get_balance(&user), 1_000);
+}
+
+/// Three independent locks: each matures on its own schedule.
+#[test]
+fn test_repeated_lock_three_times_accumulates_and_keeps_last_unlock_time() {
+    let env = test_env();
+    let (_id, client) = init_contract(&env);
+    let user = new_user(&env);
+    set_ledger_timestamp(&env, 1_000);
+    deposit_balance(&client, &user, 1_000);
+
+    client.lock_funds(&user, &100, &3_000);
+    client.lock_funds(&user, &100, &4_000);
+    client.lock_funds(&user, &100, &7_000);
+
+    assert_eq!(client.get_balance(&user), 700);
+    assert_eq!(client.get_locked_balance(&user), 300);
+
+    // At T=4_000 the first two locks have matured; the third is still locked.
+    set_ledger_timestamp(&env, 4_000);
+    assert_eq!(client.can_withdraw(&user), true);
+    assert_eq!(client.get_locked_balance(&user), 100);
+    assert_eq!(client.get_balance(&user), 900); // 700 deposited + 200 matured
+
+    // All three mature once the latest unlock time is reached.
+    set_ledger_timestamp(&env, 7_000);
+    assert_eq!(client.can_withdraw(&user), true);
+    assert_eq!(client.get_locked_balance(&user), 0);
+    assert_eq!(client.get_balance(&user), 1_000);
 }
 
 #[test]
@@ -461,15 +587,17 @@ fn test_locked_balance_correct_before_at_and_after_unlock() {
     // Available balance still reflects deduction
     assert_eq!(client.get_balance(&user), 200);
 
-    // At unlock (T=5000): can withdraw, locked balance still = 300
+    // At unlock (T=5000): can withdraw, locked balance = 0
     set_ledger_timestamp(&env, 5_000);
     assert_eq!(client.can_withdraw(&user), true);
-    assert_eq!(client.get_locked_balance(&user), 300);
+    assert_eq!(client.get_locked_balance(&user), 0);
+    assert_eq!(client.get_balance(&user), 500);
 
-    // After unlock (T=5001): can withdraw, locked balance still = 300
+    // After unlock (T=5001): can withdraw, locked balance = 0
     set_ledger_timestamp(&env, 5_001);
     assert_eq!(client.can_withdraw(&user), true);
-    assert_eq!(client.get_locked_balance(&user), 300);
+    assert_eq!(client.get_locked_balance(&user), 0);
+    assert_eq!(client.get_balance(&user), 500);
 }
 
 // -------------------------------------------------------------------------
@@ -543,4 +671,83 @@ fn test_separate_user_balances() {
     client.withdraw(&alice, &200);
     assert_eq!(client.get_balance(&alice), 800);
     assert_eq!(client.get_balance(&bob), 500);
+}
+
+#[test]
+fn balance_isolation_between_users_deposit() {
+    let env = test_env();
+    let (_current_contract_address, client) = init_contract(&env);
+    let (env, _admin, client, _token_client, token_admin) = test_token(env, client);
+
+    let alice = new_user(&env);
+    let bob = new_user(&env);
+
+    token_admin.mint(&alice, &10000);
+    token_admin.mint(&bob, &10000);
+
+    // SAC Transfer not yet implemented for deposit so i'll mimick it by trnasfering asset(deposit_amount) from user to the contract
+    deposit_balance(&client, &alice, 1_000);
+    assert_eq!(client.get_balance(&alice), 1000_i128);
+    assert_eq!(client.get_balance(&bob), 0_i128);
+}
+
+#[test]
+fn balance_isolation_between_users_withdraw() {
+    let env = test_env();
+    let (current_contract_address, client) = init_contract(&env);
+    let (env, _admin, client, token_client, token_admin) = test_token(env, client);
+
+    let alice = new_user(&env);
+    let bob = new_user(&env);
+
+    token_admin.mint(&alice, &10000);
+    token_admin.mint(&bob, &10000);
+
+    // SAC Transfer not yet implemented for deposit so i'll mimick it by trnasfering asset(deposit_amount) from user to the contract
+    deposit_balance(&client, &alice, 1_000);
+    deposit_balance(&client, &bob, 4_000);
+    token_client.transfer(&alice, &current_contract_address, &1000); // This should be removed when deposit function implements SAC
+    token_client.transfer(&bob, &current_contract_address, &4000); // This should be removed when deposit function implements SAC
+
+    assert_eq!(client.get_balance(&alice), 1000_i128);
+    assert_eq!(client.get_balance(&bob), 4000_i128);
+
+    client.withdraw(&alice, &500);
+    assert_eq!(client.get_balance(&alice), 500);
+    assert_eq!(client.get_balance(&bob), 4000);
+
+    client.withdraw(&bob, &2000);
+    assert_eq!(client.get_balance(&alice), 500);
+    assert_eq!(client.get_balance(&bob), 2000);
+}
+
+#[test]
+fn balance_isolation_between_users_lock() {
+    let env = test_env();
+    let (current_contract_address, client) = init_contract(&env);
+    let (env, _admin, client, token_client, token_admin) = test_token(env, client);
+
+    let alice = new_user(&env);
+    let bob = new_user(&env);
+
+    token_admin.mint(&alice, &10000);
+    token_admin.mint(&bob, &10000);
+
+    // SAC Transfer not yet implemented for deposit so i'll mimick it by trnasfering asset(deposit_amount) from user to the contract
+    deposit_balance(&client, &alice, 2_000);
+    deposit_balance(&client, &bob, 4_000);
+    token_client.transfer(&alice, &current_contract_address, &2_000); // This should be removed when deposit function implements SAC
+    token_client.transfer(&bob, &current_contract_address, &4_000); // This should be removed when deposit function implements SAC
+
+    client.lock_funds(&alice, &1_000, &3600);
+    assert_eq!(client.get_balance(&alice), 1_000);
+    assert_eq!(client.get_locked_balance(&alice), 1_000);
+    assert_eq!(client.get_balance(&bob), 4_000);
+    assert_eq!(client.get_locked_balance(&bob), 0);
+
+    client.lock_funds(&bob, &2_500, &3600);
+    assert_eq!(client.get_balance(&alice), 1_000);
+    assert_eq!(client.get_locked_balance(&alice), 1_000);
+    assert_eq!(client.get_balance(&bob), 1_500);
+    assert_eq!(client.get_locked_balance(&bob), 2_500);
 }
