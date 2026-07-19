@@ -120,3 +120,4 @@ Changes involving balances, access control, signatures, storage, upgrades, or ex
 - Report vulnerabilities privately to the maintainers rather than publishing exploitable details in a public issue.
 
 Before pushing, review the staged diff for credentials and unrelated files.
+- Review the [security checklist](docs/security-checklist.md) for auth, storage, token transfer, locks, and admin behavior.
