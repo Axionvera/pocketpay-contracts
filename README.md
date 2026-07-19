@@ -204,7 +204,6 @@ stellar-pocketpay-contracts/
             └── test.rs                 # Unit tests
 └── docs/
     ├── admin-role.md                   # Admin role documentation
-    ├── audit-preparation.md            # Audit preparation checklist
     ├── pause-design.md                 # Pause / emergency stop research
     └── upgrade-strategy.md             # Upgrade strategy research
 ```
@@ -212,7 +211,7 @@ stellar-pocketpay-contracts/
 ---
 ## Documentation
 
-- [Audit Preparation Checklist](docs/audit-preparation.md) — Items required before any external security review: code freeze, API docs, storage model, threat model, test coverage, known limitations, and deployment details.
+- [Audit Preparation Checklist](docs/audit-preparation.md) — Checklist of documentation, tests, threat model, and deployment details required before any external security review or audit.
 - [Deployment Environments](docs/deployment-environments.md) — Network configuration for local, testnet, and future mainnet, including RPC URLs, identities, environment variables, and deployment commands.
 - [Contract Error Reference](docs/error-codes.md) - Current savings vault failure conditions and guidance for SDK and mobile callers.
 - [Architecture Documentation](docs/architecture.md) – Overview of project structure, state management, storage, SDK integration, and future extension points.

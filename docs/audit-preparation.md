@@ -1,208 +1,266 @@
 # Audit Preparation Checklist — Savings Vault
 
-> **Status:** In Progress (not audit-ready)
->
-> **Scope:** Savings Vault contract (`contracts/savings_vault`)
->
-> This checklist identifies what documentation, test coverage, threat model items, deployment details, and known limitations must be in place before the project is submitted for an external security review or formal audit. Completing this checklist does **not** mean the contract is audit-ready; it means the groundwork required to enter an audit productively has been laid.
+This document is a checklist of items that should be completed before requesting
+or undergoing an external security review or formal audit of the Savings Vault
+contract.
+
+> **Note:** This checklist documents what is needed for audit readiness. It does
+> **not** mean the contract is currently audit-ready. Many items below are
+> incomplete or not yet implemented. Each section notes the current status.
 
 ---
 
-## Table of Contents
+## 1. Code Freeze and Scope Definition
 
-1. [Code Freeze & Scope](#1-code-freeze--scope)
-2. [Contract API Documentation](#2-contract-api-documentation)
-3. [Storage Model Documentation](#3-storage-model-documentation)
-4. [Threat Model](#4-threat-model)
-5. [Test Coverage](#5-test-coverage)
-6. [Known Limitations](#6-known-limitations)
-7. [Deployment & Network Assumptions](#7-deployment--network-assumptions)
-8. [Unresolved Design Questions](#8-unresolved-design-questions)
-9. [Supporting Documentation](#9-supporting-documentation)
+Before engaging an auditor, the codebase and scope must be stable.
 
----
-
-## 1. Code Freeze & Scope
-
-Before engaging an auditor, the codebase must be stable and the audit boundary clearly defined.
-
-- [ ] A specific git commit or tag has been chosen as the audit target.
-- [ ] No new features or refactors are merged while the audit is in progress.
-- [ ] The audit scope is documented: which contracts and files are in-scope vs. out-of-scope.
-- [ ] All dependencies (Soroban SDK version, Rust toolchain version) are pinned in `Cargo.toml` / `Cargo.lock`.
-- [ ] The compiled WASM artifact at the audit commit is reproducible (same hash across clean builds).
-- [ ] A CHANGELOG or commit log is available so the auditor can understand recent changes.
+- [ ] All planned features for the audit scope are fully implemented and merged.
+- [ ] A git tag or commit SHA is designated as the audit target (e.g., `v1.0.0-audit`).
+- [ ] No unreviewed or untested changes exist in the audit branch.
+- [ ] The audit scope is clearly defined: which contracts, which functions, which
+      storage keys, and which external integrations (e.g., SAC token contract) are in scope.
+- [ ] All TODO/FIXME comments in in-scope code are either resolved or explicitly
+      documented as out-of-scope deferred items.
 
 ---
 
-## 2. Contract API Documentation
+## 2. Public API Reference
 
-Auditors need a complete, accurate description of every public function.
+The contract's external interface must be fully documented before review.
 
-- [ ] Every public function is listed with its name, parameters, parameter types, return type, and a brief description of its effect.
-- [ ] Authorization requirements are documented for each function (who must sign, which `require_auth()` calls are made).
-- [ ] Side effects — storage writes, event emissions — are listed per function.
-- [ ] Error conditions and panic messages for each function are documented (see [error-codes.md](error-codes.md)).
-- [ ] Read-only vs. state-changing functions are clearly distinguished.
-- [ ] The current public API surface is:
+- [ ] Every public function is documented with:
+  - [ ] Purpose and behavior description.
+  - [ ] All arguments and their types.
+  - [ ] Return type and meaning.
+  - [ ] All panic / error conditions (including host-level errors from `require_auth`).
+  - [ ] Authorization requirements (who must sign).
+- [ ] The current functions in scope:
+  - [ ] `initialize(admin: Address, token: Address)`
+  - [ ] `deposit(user: Address, amount: i128)`
+  - [ ] `withdraw(user: Address, amount: i128)`
+  - [ ] `get_balance(user: Address) -> i128`
+  - [ ] `lock_funds(user: Address, amount: i128, unlock_time: u64) -> u64`
+  - [ ] `get_locked_balance(user: Address) -> i128`
+  - [ ] `can_withdraw(user: Address) -> bool`
+- [ ] A stable, machine-readable error enum (`#[contracterror]`) replaces panic
+      strings, or the use of panic strings is explicitly accepted and documented
+      as a known limitation. See [error-codes.md](error-codes.md).
 
-| Function | Auth Required | State-Changing | Description |
-|---|---|---|---|
-| `initialize(admin)` | `admin` | Yes | One-time setup; records the admin address and initialization flag. |
-| `deposit(user, amount)` | `user` | Yes | Adds `amount` to the user's internal available balance. |
-| `withdraw(user, amount)` | `user` | Yes | Subtracts `amount` from the user's internal available balance. |
-| `get_balance(user)` | None | No | Returns the user's available (unlocked) internal balance. |
-| `lock_funds(user, amount, unlock_time)` | `user` | Yes | Moves `amount` from available balance to the locked bucket until `unlock_time`. |
-| `get_locked_balance(user)` | None | No | Returns the user's total locked internal balance. |
-| `can_withdraw(user)` | None | No | Returns `true` if any locked funds have passed their unlock timestamp. |
+**Current status:** Inline Rust doc comments exist. A `#[contracterror]` enum is
+not yet implemented; failures currently use panic strings.
 
 ---
 
 ## 3. Storage Model Documentation
 
-Auditors must understand every storage key, its type, its lifetime, and who can write it.
+Auditors must understand what is stored on-chain, how long it persists, and what
+its access controls are.
 
-- [ ] Every storage key is listed with its type, storage tier (persistent vs. instance), and read/write access rules.
-- [ ] The difference between persistent and instance storage, and the TTL implications of each, are explained (see [storage-ttl.md](storage-ttl.md)).
-- [ ] Initialization guard logic is documented (the `Initialized` flag preventing re-initialization).
-- [ ] The current storage model is:
+- [ ] All storage keys (`DataKey` variants) are documented with:
+  - [ ] Key name and type.
+  - [ ] Storage tier (persistent vs. instance) and rationale.
+  - [ ] Ledger entry TTL behavior and extension strategy.
+  - [ ] Who reads and who writes each key.
+- [ ] The storage model table is up to date:
 
-| Key | Type | Storage Tier | Writer | Description |
-|---|---|---|---|---|
-| `balance:{user}` | `i128` | Persistent | `deposit`, `withdraw`, `lock_funds` | User's available unlocked balance. |
-| `locks:{user}` | `Vec<LockEntry>` | Persistent | `lock_funds` | List of active and matured lock entries for the user. |
-| `next_lock_id:{user}` | `u64` | Persistent | `lock_funds` | Monotonically increasing ID assigned to each lock. |
-| `Admin` | `Address` | Instance | `initialize` | Contract admin address recorded at initialization. |
-| `Initialized` | `bool` | Instance | `initialize` | Guard flag preventing re-initialization. |
+  | Key | Type | Storage Tier | Writers | Notes |
+  |---|---|---|---|---|
+  | `Balance(user)` | `i128` | Persistent | `deposit`, `withdraw` | Available (unlocked) balance |
+  | `Locks(user)` | `Vec<LockEntry>` | Persistent | `lock_funds`, `withdraw` | Per-user lock entries |
+  | `NextLockId(user)` | `u64` | Persistent | `lock_funds` | Monotonic lock ID counter |
+  | `Admin` | `Address` | Instance | `initialize` | Set once; no admin functions today |
+  | `Token` | `Address` | Instance | `initialize` | Token contract address for transfers |
+  | `Initialized` | `bool` | Instance | `initialize` | One-time init guard |
 
-- [ ] Storage TTL behavior under ledger archival is documented and tested.
-- [ ] Consequences of instance storage expiry (contract removal) on user balances are explained.
+- [ ] The TTL extension strategy for persistent entries is documented and
+      operationally tested. See [storage-ttl.md](storage-ttl.md).
+- [ ] Risks of storage expiry (lost balances, inaccessible locks) are documented
+      and a mitigation or monitoring plan exists.
+
+**Current status:** Storage keys are documented in [architecture.md](architecture.md)
+and [storage-ttl.md](storage-ttl.md). TTL extension commands are provided but no
+automated monitoring exists.
 
 ---
 
 ## 4. Threat Model
 
-A threat model documents what the contract is designed to protect, who the trusted parties are, and what attack surfaces exist.
+A written threat model helps auditors focus their effort on the highest-risk areas.
 
-- [ ] Assets at risk are identified (user internal balances; future: real token custody).
-- [ ] Trusted parties and their current capabilities are listed:
-  - **Admin**: Recorded in storage; currently has no privileged on-chain capabilities beyond initialization.
-  - **Users**: Can only affect their own balances via `require_auth()`-gated functions.
-  - **Contract deployer**: Identical to admin at initialization time; no post-deploy powers.
-- [ ] Untrusted inputs and their validation are documented:
-  - `amount` parameters: validated to be strictly positive.
-  - `unlock_time`: validated to be strictly in the future.
-  - Balances: validated against available balance before deduction.
-- [ ] Re-entrancy risk is assessed (Soroban's execution model mitigates classic EVM re-entrancy; confirm applicability for future cross-contract calls).
-- [ ] Integer overflow / underflow risk is assessed (`i128` arithmetic; document safe-math guarantees from the SDK).
-- [ ] Front-running and transaction ordering risks are assessed (especially for lock/unlock timing).
-- [ ] Risks specific to Soroban / Stellar are identified:
-  - Ledger timestamp manipulation window.
-  - Storage TTL and archival behavior.
-  - Footprint and resource limits.
-- [ ] Denial-of-service vectors (e.g., exhausting storage, unbounded loops) are documented.
-- [ ] Future cross-contract call risks (SAC integration) are flagged as out of scope until implemented.
+- [ ] A threat model document exists covering:
+  - [ ] Trust boundaries (user, admin, token contract, Soroban host).
+  - [ ] Assets at risk (user balances, lock state, admin authority).
+  - [ ] Identified attack surfaces (re-initialization, authorization bypass,
+        integer overflow/underflow, reentrancy, storage expiry, token contract interaction).
+  - [ ] Known mitigations for each threat.
+  - [ ] Residual risks that are accepted or deferred.
+- [ ] The token integration threat surface is covered:
+  - [ ] Behavior when an incompatible or malicious token contract is configured.
+  - [ ] Behavior when the token contract's `transfer` call fails.
+  - [ ] Accounting consistency if a transfer fails after state is written.
+- [ ] Integer arithmetic is reviewed for overflow/underflow (`i128` range for
+      balances and `u64` range for timestamps and lock IDs).
+
+**Current status:** No dedicated threat model document exists. Security
+considerations are scattered across [README.md](../README.md),
+[admin-role.md](admin-role.md), and the Known Limitations section. A consolidated
+threat model must be written before audit.
 
 ---
 
 ## 5. Test Coverage
 
-Auditors expect a test suite that exercises both the happy path and all documented failure conditions.
+Tests serve as executable specifications and reduce auditor time spent on basic
+correctness checks.
 
-- [ ] All public functions have at least one passing happy-path test.
-- [ ] All documented error / panic conditions have corresponding negative tests.
-- [ ] Authorization failures are tested: attempts to call state-changing functions without the required signer are rejected.
-- [ ] Boundary conditions are tested:
-  - [ ] Deposit of exactly `1` unit (minimum valid amount).
-  - [ ] Withdrawal of the full available balance.
-  - [ ] Locking the full available balance.
-  - [ ] `unlock_time` set to exactly `ledger_time + 1` second.
-  - [ ] Attempting to lock with `unlock_time == ledger_time` (must be rejected).
-- [ ] Re-initialization is tested and confirmed to panic.
-- [ ] The test suite passes cleanly with no warnings via `cargo test`.
-- [ ] Tests cover the `can_withdraw` return value before and after the unlock timestamp is reached.
-- [ ] Code coverage tooling (e.g., `cargo-llvm-cov`) has been run and a coverage report is available.
-- [ ] Any coverage gaps are documented and justified.
+- [ ] Unit tests exist for all public functions covering:
+  - [ ] Happy-path (normal successful execution).
+  - [ ] All documented panic/error conditions.
+  - [ ] Authorization checks (unauthorized callers must be rejected).
+  - [ ] Edge cases: zero amounts, amounts equal to balance, balance at maximum
+        `i128`, timestamps at the exact unlock boundary.
+- [ ] Tests cover multi-lock scenarios: creating multiple lock entries, partial
+      maturation, withdrawal consuming matured locks.
+- [ ] Test coverage report exists and a minimum threshold (e.g., 80% line
+      coverage) is defined and met.
+- [ ] Integration or simulation tests exist for the token transfer path in
+      `withdraw`.
+- [ ] All tests pass against the audit-target commit with no warnings suppressed.
+
+Run the full test suite:
+
+```bash
+cargo test
+```
+
+**Current status:** Unit tests exist in `contracts/savings_vault/src/test.rs`.
+Coverage reporting is not yet configured. Integration tests for the token transfer
+path in `withdraw` may be incomplete.
 
 ---
 
 ## 6. Known Limitations
 
-Auditors must know what is intentionally out of scope so they do not file findings against unimplemented features.
+All known limitations must be documented, accepted, and communicated to the auditor
+so they can be assessed rather than re-discovered.
 
-- [ ] All known limitations are documented in a single, easily found location (see README [Known Limitations](../README.md#known-limitations) and below).
-- [ ] Each limitation has a note on whether it is by design (acceptable for current scope) or a planned future improvement.
+- [ ] Each known limitation is documented with: description, risk impact, and
+      whether it is accepted, deferred, or planned for resolution.
+- [ ] Current known limitations to document and resolve or accept:
 
-| Limitation | Status | Reference |
-|---|---|---|
-| **No real token custody** — deposits update internal accounting only; no XLM or SAC token is transferred into contract custody. | By design for current scope; SAC integration planned. | [architecture.md](architecture.md) |
-| **Single unlock time per user** — calling `lock_funds` multiple times overwrites the previous unlock timestamp. | Known design gap; per-lock entries planned. | README |
-| **No upgrade mechanism** — `upgrade()` is not implemented; the contract WASM cannot be changed after deployment. | Research complete; no upgrade chosen yet. | [upgrade-strategy.md](upgrade-strategy.md) |
-| **No pause / emergency stop** — there is no mechanism to halt operations if a critical bug is found. | Research complete; no pause chosen yet. | [pause-design.md](pause-design.md) |
-| **No admin recovery** — the admin cannot recover or migrate user funds. | By design for current scope. | [admin-role.md](admin-role.md) |
-| **No stable error codes** — validation failures use Rust panic messages, not a `#[contracterror]` enum. | Known gap; planned improvement. | [error-codes.md](error-codes.md) |
-| **Events not yet implemented** — the event schema is defined but no events are emitted by the contract. | Known gap; schema proposed. | [events.md](events.md) |
-| **Testnet only** — not intended for mainnet deployment in current form. | By design for current scope. | README |
+  | Limitation | Risk | Status |
+  |---|---|---|
+  | Internal accounting only; no real token custody in `deposit` | Deposits do not transfer tokens; recorded balance is not backed by real assets held in contract | Accepted / planned for SAC integration |
+  | `withdraw` transfers real tokens but `deposit` does not move tokens | Accounting mismatch; contract may try to transfer more than it holds | Must be resolved before mainnet |
+  | Single unlock time per user overwritten by new `lock_funds` call | Old lock context lost; user confusion possible | Known; should be redesigned before audit |
+  | No admin recovery mechanism | No way to recover user funds if state is corrupted or lost | Accepted; documented in [admin-role.md](admin-role.md) |
+  | No upgrade mechanism | Contract cannot be patched after deployment | Accepted; documented in [upgrade-strategy.md](upgrade-strategy.md) |
+  | No pause / emergency stop | Cannot halt operations in an emergency | Accepted; documented in [pause-design.md](pause-design.md) |
+  | Error handling via panic strings (no `#[contracterror]` enum) | No stable machine-readable error codes for callers | Should be resolved before audit |
+  | Events defined in schema but not emitted | Off-chain indexers cannot observe contract state changes | Should be resolved before audit |
+  | No admin functions implemented despite admin address being recorded | Admin role is inert; provides false sense of admin control | Acceptable if documented; confirm with auditor |
+
+- [ ] The distinction between internal accounting and real token custody is
+      clearly communicated in all user-facing documentation.
+
+**Current status:** Known limitations are documented in the README. The deposit/withdraw
+token-custody asymmetry is a significant issue that must be resolved before any
+mainnet or production use.
 
 ---
 
-## 7. Deployment & Network Assumptions
+## 7. Deployment and Network Assumptions
 
-Auditors need to know the exact environment the contract is designed for and how it is deployed.
+Auditors need to understand the deployment context, especially assumptions about
+the network, token contracts, and operational environment.
 
-- [ ] The target network (testnet vs. mainnet) is documented.
-- [ ] The Soroban RPC endpoint and network passphrase are documented.
-- [ ] The deployment process (script or manual steps) is documented and reproducible (see [deployment-environments.md](deployment-environments.md)).
-- [ ] The `initialize(admin)` admin address for any audited deployment is documented, including who controls it.
-- [ ] Contract ID handoff to SDK and mobile clients is documented (see [contract-id-handoff.md](contract-id-handoff.md)).
-- [ ] Storage TTL extension procedures are documented (see [storage-ttl.md](storage-ttl.md)).
-- [ ] Any environment variables, secrets, or off-chain components that interact with the contract are listed.
-- [ ] The WASM artifact size and the build command used to produce it are recorded.
-- [ ] The Rust toolchain version and `soroban-cli` version used for the audited build are pinned and recorded.
+- [ ] The target deployment network is specified (testnet, mainnet, or both).
+- [ ] The token contract address to be used in production is identified, reviewed,
+      and documented. The risks of using an incorrect or malicious token contract
+      address are acknowledged.
+- [ ] The admin key management strategy is documented:
+  - [ ] Who controls the admin key.
+  - [ ] How it is stored and protected.
+  - [ ] What happens if the admin key is lost or compromised (see
+        [admin-role.md](admin-role.md): currently no recovery path).
+- [ ] The initialization process is documented and tested end-to-end on testnet.
+      See [deployment-environments.md](deployment-environments.md).
+- [ ] Contract ID handoff to SDKs and client applications is documented.
+      See [contract-id-handoff.md](contract-id-handoff.md).
+- [ ] Storage TTL monitoring and extension procedures are operational.
+      See [storage-ttl.md](storage-ttl.md).
+- [ ] Network RPC URLs, network passphrases, and environment-specific config
+      are documented. See [deployment-environments.md](deployment-environments.md).
+- [ ] The deployment script and initialization steps are reviewed for security
+      (no secrets in logs, no unvalidated inputs).
+
+**Current status:** Testnet deployment is documented and the deployment script
+exists. No mainnet deployment plan exists. Admin key management beyond recording
+the address is not yet defined.
 
 ---
 
 ## 8. Unresolved Design Questions
 
-Open questions that could affect the audit scope or findings should be surfaced up front.
+Open questions must be answered or explicitly deferred before audit so the auditor
+can assess finalized design intent.
 
-- [ ] **SAC integration**: When real token custody is added, will a single SAC token address be fixed at initialization, or will multiple tokens be supported? How will the custody model change the attack surface?
-- [ ] **Upgrade strategy**: Will the contract remain immutable, use an admin-controlled `upgrade()`, or use a migration contract? The choice affects admin trust assumptions. See [upgrade-strategy.md](upgrade-strategy.md).
-- [ ] **Pause mechanism**: Will an emergency stop be added? If so, who can trigger it, and what is the abuse-prevention model? See [pause-design.md](pause-design.md).
-- [ ] **Per-lock entries**: Will `lock_funds` be changed to support multiple independent locks per user? This would change storage layout and `get_locked_balance` semantics.
-- [ ] **Admin recovery**: Should the admin ever be allowed to recover funds from inactive or lost-key accounts? If so, what governance safeguards are required?
-- [ ] **Error codes**: Will a stable `#[contracterror]` enum be added before audit? Auditors will note the absence of machine-readable error codes as a finding.
-- [ ] **Events**: Will contract events be implemented before audit? Auditors will note their absence.
-- [ ] **Mainnet readiness**: What additional review gates (legal, operational, insurance) are required before a mainnet deployment is permitted?
+- [ ] All open design questions are listed, and a resolution or deferral decision
+      is recorded for each. Current open questions:
 
----
-
-## 9. Supporting Documentation
-
-Confirm that the following reference documents are complete, accurate, and up to date at the audit commit.
-
-- [ ] [README.md](../README.md) — project overview, build, test, and deploy instructions.
-- [ ] [architecture.md](architecture.md) — project structure, state management, storage model, SDK integration.
-- [ ] [admin-role.md](admin-role.md) — admin address, current capabilities, and future design considerations.
-- [ ] [error-codes.md](error-codes.md) — all current panic messages and their meanings.
-- [ ] [events.md](events.md) — proposed event schema (note: events not yet implemented).
-- [ ] [pause-design.md](pause-design.md) — research on pause / emergency stop (not implemented).
-- [ ] [upgrade-strategy.md](upgrade-strategy.md) — research on upgrade paths (not implemented).
-- [ ] [storage-ttl.md](storage-ttl.md) — persistent vs. instance storage TTL behavior and extension commands.
-- [ ] [deployment-environments.md](deployment-environments.md) — RPC endpoints, network passphrases, and deployment commands.
-- [ ] [contract-id-handoff.md](contract-id-handoff.md) — how to pass a deployed contract ID to SDK and mobile clients.
+  - **Token custody model:** Will `deposit` be updated to call the SAC `transfer`
+    and move real tokens into contract custody before audit? If not, the
+    internal-accounting-only model must be fully accepted and documented.
+  - **Lock model:** Will multiple concurrent locks per user be supported, or will
+    the single-overwrite behavior be kept? The current multi-lock implementation
+    should be validated as the intended design.
+  - **Admin capabilities:** Will any admin-only functions (pause, recovery,
+    upgrade) be added before audit? If yes, they must be in scope.
+  - **Error handling:** Will a `#[contracterror]` enum be added before audit?
+    Panic strings are not a stable API surface.
+  - **Event emission:** Will events be implemented before audit? The schema
+    exists in [events.md](events.md) but no events are emitted.
+  - **Upgrade path:** Will the contract include an `upgrade()` function before
+    audit? If so, the access control and migration strategy must be documented.
 
 ---
 
-## Acceptance Checklist
+## 9. Supporting Documentation Summary
 
-- [ ] Audit preparation checklist exists (`docs/audit-preparation.md`).
-- [ ] Checklist covers contract API documentation.
-- [ ] Checklist covers storage model documentation.
-- [ ] Checklist covers test coverage expectations.
-- [ ] Checklist covers known limitations.
-- [ ] Checklist covers deployment and network assumptions.
-- [ ] README links to this checklist.
+Confirm all supporting documents are complete and up to date before requesting an audit.
+
+- [ ] [README.md](../README.md) — Project overview, build, test, deploy instructions.
+- [ ] [architecture.md](architecture.md) — Project structure, state model, storage design.
+- [ ] [admin-role.md](admin-role.md) — Admin address meaning, current capabilities, future design.
+- [ ] [error-codes.md](error-codes.md) — All failure conditions and caller guidance.
+- [ ] [events.md](events.md) — Event schema (note: not yet implemented in contract).
+- [ ] [upgrade-strategy.md](upgrade-strategy.md) — Upgrade path research and trade-offs.
+- [ ] [pause-design.md](pause-design.md) — Emergency pause research and trade-offs.
+- [ ] [storage-ttl.md](storage-ttl.md) — Storage TTL behavior and extension guide.
+- [ ] [deployment-environments.md](deployment-environments.md) — Environment config for local, testnet, and future mainnet.
+- [ ] [contract-id-handoff.md](contract-id-handoff.md) — How to pass deployed contract ID to client SDK.
+- [ ] Threat model document — **Does not yet exist; must be created.**
+- [ ] `CHANGELOG.md` — All significant changes since initial commit are logged.
+
+---
+
+## Quick Readiness Summary
+
+Use this table for a fast status check. Update it as items are resolved.
+
+| Area | Status |
+|---|---|
+| Code freeze / audit tag | ❌ Not yet |
+| Public API fully documented | ⚠️ Partial (inline docs exist; no stable error enum) |
+| Storage model documented | ✅ Documented |
+| Threat model written | ❌ Not yet |
+| Test coverage meets threshold | ⚠️ Tests exist; no coverage report |
+| Known limitations documented | ✅ Documented |
+| Token custody model resolved | ❌ Deposit/withdraw asymmetry unresolved |
+| Events implemented | ❌ Schema only |
+| Deployment config documented | ✅ Testnet documented |
+| Admin key management defined | ❌ Not yet |
+| All open design questions answered | ❌ Several open |
 
 ---
 
