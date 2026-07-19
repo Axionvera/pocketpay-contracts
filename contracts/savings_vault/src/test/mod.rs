@@ -4,35 +4,13 @@
 //! on-chain interactions in an isolated environment.
 mod balance_conservation;
 mod test_helpers;
+mod initialization;
 
 use super::*;
 use soroban_sdk::{testutils::Address as _, Address};
 
 use test_helpers::*;
 
-// =========================================================================
-// Initialization Tests
-// =========================================================================
-
-#[test]
-fn test_initialize() {
-    let env = test_env();
-    let (_id, client) = init_contract(&env);
-    let admin = new_user(&env);
-    let token = new_user(&env);
-    client.initialize(&admin, &token);
-}
-
-#[test]
-#[should_panic(expected = "Contract is already initialized")]
-fn test_initialize_twice_panics() {
-    let env = test_env();
-    let (_id, client) = init_contract(&env);
-    let admin = new_user(&env);
-    let token = new_user(&env);
-    client.initialize(&admin, &token);
-    client.initialize(&admin, &token);
-}
 
 // =========================================================================
 // Deposit Tests
