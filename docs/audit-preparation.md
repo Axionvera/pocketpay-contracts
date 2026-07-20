@@ -1,267 +1,144 @@
-# Audit Preparation Checklist — Savings Vault
+# Advanced Audit Preparation Checklist — Savings Vault
 
-This document is a checklist of items that should be completed before requesting
-or undergoing an external security review or formal audit of the Savings Vault
-contract.
+This document provides a comprehensive security review and audit preparation checklist tailored specifically to the Savings Vault smart contract architecture. It identifies security goals, invariants, storage layouts, authorization boundaries, events, error handling, known limitations, and test coverage/gaps that must be addressed prior to any production-like use or external third-party audit.
 
-> **Note:** This checklist documents what is needed for audit readiness. It does
-> **not** mean the contract is currently audit-ready. Many items below are
-> incomplete or not yet implemented. Each section notes the current status.
+> [!IMPORTANT]
+> This checklist documents the required state for audit readiness. Many items highlight discrepancies between the current implementation and production-grade security standards.
 
 ---
 
-## 1. Code Freeze and Scope Definition
+## 1. Authentication & Authorization Checklist
 
-Before engaging an auditor, the codebase and scope must be stable.
+The contract relies on the Soroban authorization framework to verify caller identity. The following checks must be verified:
 
-- [ ] All planned features for the audit scope are fully implemented and merged.
-- [ ] A git tag or commit SHA is designated as the audit target (e.g., `v1.0.0-audit`).
-- [ ] No unreviewed or untested changes exist in the audit branch.
-- [ ] The audit scope is clearly defined: which contracts, which functions, which
-      storage keys, and which external integrations (e.g., SAC token contract) are in scope.
-- [ ] All TODO/FIXME comments in in-scope code are either resolved or explicitly
-      documented as out-of-scope deferred items.
-
----
-
-## 2. Public API Reference
-
-The contract's external interface must be fully documented before review.
-
-- [ ] Every public function is documented with:
-  - [ ] Purpose and behavior description.
-  - [ ] All arguments and their types.
-  - [ ] Return type and meaning.
-  - [ ] All panic / error conditions (including host-level errors from `require_auth`).
-  - [ ] Authorization requirements (who must sign).
-- [ ] The current functions in scope:
-  - [ ] `initialize(admin: Address, token: Address)`
-  - [ ] `deposit(user: Address, amount: i128)`
-  - [ ] `withdraw(user: Address, amount: i128)`
-  - [ ] `get_balance(user: Address) -> i128`
-  - [ ] `lock_funds(user: Address, amount: i128, unlock_time: u64) -> u64`
-  - [ ] `get_locked_balance(user: Address) -> i128`
-  - [ ] `can_withdraw(user: Address) -> bool`
-- [ ] A stable, machine-readable error enum (`#[contracterror]`) replaces panic
-      strings, or the use of panic strings is explicitly accepted and documented
-      as a known limitation. See [error-codes.md](error-codes.md).
-
-**Current status:** Inline Rust doc comments exist. A `#[contracterror]` enum is
-not yet implemented; failures currently use panic strings.
+- [ ] **State-Changing Auth Enforcement**: Ensure that every state-modifying function invokes `require_auth()` on the target address.
+  - [x] Verified for `initialize` on `admin`.
+  - [x] Verified for `deposit` on `user`.
+  - [x] Verified for `withdraw` on `user`.
+  - [x] Verified for `lock_funds` on `user`.
+- [ ] **Read-Only Operations**: Read-only queries (`get_balance`, `get_locked_balance`, `can_withdraw`) must not call `require_auth` to avoid unnecessary transaction signing and costs.
+- [ ] **Admin Roles & Privileges**: The contract records an `admin` address in instance storage.
+  - [ ] **inert Admin**: There are currently no admin-only operations (e.g. upgrade, pause, emergency recovery). The admin key is only checked during initialization. This must be highlighted to auditors.
+- [ ] **Authorization Test Coverage**:
+  - [x] Covered: Basic happy-path tests execute with auth mocked (`mock_all_auths` in [test_helpers.rs](file:///Users/boufdaddy/Documents/web3%20projects/pocketpay-contracts/contracts/savings_vault/src/test/test_helpers.rs#L9)).
+  - [ ] **CRITICAL TEST GAP**: No tests currently verify rejection when an unauthorized user attempts to deposit, withdraw, or lock funds on behalf of another user *without* mocking auth. Tests must assert that calling these functions without mock signatures triggers the host's authorization failure.
 
 ---
 
-## 3. Storage Model Documentation
+## 2. Accounting & Invariants Checklist
 
-Auditors must understand what is stored on-chain, how long it persists, and what
-its access controls are.
+The contract maintains internal accounts for user deposits and locks, alongside a Stellar Asset Contract (SAC) token integration.
 
-- [ ] All storage keys (`DataKey` variants) are documented with:
-  - [ ] Key name and type.
-  - [ ] Storage tier (persistent vs. instance) and rationale.
-  - [ ] Ledger entry TTL behavior and extension strategy.
-  - [ ] Who reads and who writes each key.
-- [ ] The storage model table is up to date:
-
-  | Key | Type | Storage Tier | Writers | Notes |
-  |---|---|---|---|---|
-  | `Balance(user)` | `i128` | Persistent | `deposit`, `withdraw` | Available (unlocked) balance |
-  | `Locks(user)` | `Vec<LockEntry>` | Persistent | `lock_funds`, `withdraw` | Per-user lock entries |
-  | `NextLockId(user)` | `u64` | Persistent | `lock_funds` | Monotonic lock ID counter |
-  | `Admin` | `Address` | Instance | `initialize` | Set once; no admin functions today |
-  | `Token` | `Address` | Instance | `initialize` | Token contract address for transfers |
-  | `Initialized` | `bool` | Instance | `initialize` | One-time init guard |
-
-- [ ] The TTL extension strategy for persistent entries is documented and
-      operationally tested. See [storage-ttl.md](storage-ttl.md).
-- [ ] Risks of storage expiry (lost balances, inaccessible locks) are documented
-      and a mitigation or monitoring plan exists.
-
-**Current status:** Storage keys are documented in [architecture.md](architecture.md)
-and [storage-ttl.md](storage-ttl.md). TTL extension commands are provided but no
-automated monitoring exists.
+- [ ] **Deposit/Withdrawal Asymmetry**:
+  - [ ] **CRITICAL FLAW**: `deposit` only updates internal bookkeeping storage:
+    ```rust
+    let new_balance = current_balance + amount;
+    env.storage().persistent().set(&DataKey::Balance(user.clone()), &new_balance);
+    ```
+    It does **not** transfer tokens from the user to the contract. Conversely, `withdraw` attempts to transfer real tokens from the contract to the user:
+    ```rust
+    token_client.transfer(&contract_address, &user, &amount);
+    ```
+    This asymmetry means that a user can credit their balance arbitrarily in `deposit`, then drain the contract's actual token holdings via `withdraw`.
+- [ ] **Total Balance Conservation Invariant**:
+  - [x] The contract must maintain the invariant: `available_balance + locked_balance == net_deposited` for every user.
+  - [x] This invariant is property-tested under [balance_conservation.rs](file:///Users/boufdaddy/Documents/web3%20projects/pocketpay-contracts/contracts/savings_vault/src/test/balance_conservation.rs#L77-L94).
+  - [ ] **Gaps**: The property tests mock the deposit token transfer by manually executing a transfer from the user to the contract in the test runner ([balance_conservation.rs:L117-L118](file:///Users/boufdaddy/Documents/web3%20projects/pocketpay-contracts/contracts/savings_vault/src/test/balance_conservation.rs#L117-L118)). A real contract audit requires the contract itself to handle token transfers during deposit.
+- [ ] **Overflow & Underflow Protection**:
+  - [x] Soroban's `i128` handles large values, but checks are needed to ensure balances cannot overflow if users deposit amounts near `i128::MAX`.
+  - [ ] **Gaps**: No tests assert behavior when a user's balance is extremely large or checks for overflow when accumulating balances.
+- [ ] **Withdrawal Ordering**:
+  - [x] Matured locks must be consumed in chronological order (oldest first). This is implemented in [lib.rs:L397-L415](file:///Users/boufdaddy/Documents/web3%20projects/pocketpay-contracts/contracts/savings_vault/src/lib.rs#L397-L415).
+  - [x] Matured locks and available balances are correctly summed in `get_balance`.
 
 ---
 
-## 4. Threat Model
+## 3. Storage & State Checklist
 
-A written threat model helps auditors focus their effort on the highest-risk areas.
+Soroban contracts use a state storage model consisting of Persistent, Instance, and Temporary storage tiers, each with associated TTLs (Time To Live).
 
-- [ ] A threat model document exists covering:
-  - [ ] Trust boundaries (user, admin, token contract, Soroban host).
-  - [ ] Assets at risk (user balances, lock state, admin authority).
-  - [ ] Identified attack surfaces (re-initialization, authorization bypass,
-        integer overflow/underflow, reentrancy, storage expiry, token contract interaction).
-  - [ ] Known mitigations for each threat.
-  - [ ] Residual risks that are accepted or deferred.
-- [ ] The token integration threat surface is covered:
-  - [ ] Behavior when an incompatible or malicious token contract is configured.
-  - [ ] Behavior when the token contract's `transfer` call fails.
-  - [ ] Accounting consistency if a transfer fails after state is written.
-- [ ] Integer arithmetic is reviewed for overflow/underflow (`i128` range for
-      balances and `u64` range for timestamps and lock IDs).
-
-**Current status:** No dedicated threat model document exists. Security
-considerations are scattered across [README.md](../README.md),
-[admin-role.md](admin-role.md), and the Known Limitations section. A consolidated
-threat model must be written before audit.
+- [ ] **Storage Key Separation**:
+  - [x] Instance storage is used for metadata: `Admin`, `Initialized`, `Token` in [lib.rs:L207-L209](file:///Users/boufdaddy/Documents/web3%20projects/pocketpay-contracts/contracts/savings_vault/src/lib.rs#L207-L209).
+  - [x] Persistent storage is used for user state: `Balance(Address)`, `Locks(Address)`, `NextLockId(Address)`.
+- [ ] **Unbounded Vector Growth (DoS Vector)**:
+  - [ ] **CRITICAL RISK**: User locks are stored in a single vector (`Vec<LockEntry>`) under `DataKey::Locks(Address)`. Every deposit/withdrawal/lock operation reads and writes the entire vector:
+    ```rust
+    let mut locks: Vec<LockEntry> = env.storage().persistent().get(&DataKey::Locks(user.clone())).unwrap_or_else(|| Vec::new(&env));
+    // ... operations ...
+    env.storage().persistent().set(&DataKey::Locks(user.clone()), &locks);
+    ```
+    If a user accumulates a large number of locks (e.g. hundreds of small deposits/locks), the cost to serialize, deserialize, and write this vector will grow linearly. This can exceed the transaction CPU or memory limits, permanently freezing the user's funds.
+  - [ ] **Mitigation Plan**: Implement a maximum limit on the number of active locks per user, or use separate storage keys for individual locks (e.g., `DataKey::Lock(Address, u64)`).
+- [ ] **TTL Extension Procedures**:
+  - [x] Persistent and Instance entries must be extended regularly using the host's TTL controls.
+  - [ ] **Gaps**: The codebase outlines manual commands in [storage-ttl.md](file:///Users/boufdaddy/Documents/web3%20projects/pocketpay-contracts/docs/storage-ttl.md) but lacks an automated or programmatic trigger within the contract logic to extend the TTL during user operations (e.g., calling `extend_ttl` inside `deposit` / `withdraw`).
 
 ---
 
-## 5. Test Coverage
+## 4. Events Checklist
 
-Tests serve as executable specifications and reduce auditor time spent on basic
-correctness checks.
+Events are the primary mechanism for off-chain indexers and user interfaces to monitor smart contract state changes.
 
-- [ ] Unit tests exist for all public functions covering:
-  - [ ] Happy-path (normal successful execution).
-  - [ ] All documented panic/error conditions.
-  - [ ] Authorization checks (unauthorized callers must be rejected).
-  - [ ] Edge cases: zero amounts, amounts equal to balance, balance at maximum
-        `i128`, timestamps at the exact unlock boundary.
-- [ ] Tests cover multi-lock scenarios: creating multiple lock entries, partial
-      maturation, withdrawal consuming matured locks.
-- [ ] Test coverage report exists and a minimum threshold (e.g., 80% line
-      coverage) is defined and met.
-- [ ] Integration or simulation tests exist for the token transfer path in
-      `withdraw`.
-- [ ] All tests pass against the audit-target commit with no warnings suppressed.
-
-Run the full test suite:
-
-```bash
-cargo test
-```
-
-**Current status:** Unit tests exist in `contracts/savings_vault/src/test.rs`.
-Coverage reporting is not yet configured. Integration tests for the token transfer
-path in `withdraw` may be incomplete.
+- [ ] **Event Schema Integrity**:
+  - [x] The event schema is defined in [events.md](file:///Users/boufdaddy/Documents/web3%20projects/pocketpay-contracts/docs/events.md) for `initialize`, `deposit`, `withdraw`, `lock`, and `unlock`.
+- [ ] **Contract Implementation Status**:
+  - [ ] **CRITICAL GAPS**: The contract does **not** emit any events. Only host log statements (`log!`) are used. Off-chain systems cannot reliably monitor deposits, withdrawals, or locks.
+  - [ ] **Action Required**: Replace internal `log!` macros with `env.events().publish(...)` using the defined schemas before submitting to audit.
+- [ ] **Event Test Coverage**:
+  - [ ] No tests verify event emission or event payloads. Once events are implemented, tests must assert event topics and values.
 
 ---
 
-## 6. Known Limitations
+## 5. Error Handling Checklist
 
-All known limitations must be documented, accepted, and communicated to the auditor
-so they can be assessed rather than re-discovered.
+Robust error handling ensures the contract fails gracefully and provides debuggable contexts to callers.
 
-- [ ] Each known limitation is documented with: description, risk impact, and
-      whether it is accepted, deferred, or planned for resolution.
-- [ ] Current known limitations to document and resolve or accept:
-
-  | Limitation | Risk | Status |
-  |---|---|---|
-  | Internal accounting only; no real token custody in `deposit` | Deposits do not transfer tokens; recorded balance is not backed by real assets held in contract | Accepted / planned for SAC integration |
-  | `withdraw` transfers real tokens but `deposit` does not move tokens | Accounting mismatch; contract may try to transfer more than it holds | Must be resolved before mainnet |
-  | Single unlock time per user overwritten by new `lock_funds` call | Old lock context lost; user confusion possible | Known; should be redesigned before audit |
-  | No admin recovery mechanism | No way to recover user funds if state is corrupted or lost | Accepted; documented in [admin-role.md](admin-role.md) |
-  | No upgrade mechanism | Contract cannot be patched after deployment | Accepted; documented in [upgrade-strategy.md](upgrade-strategy.md) |
-  | No pause / emergency stop | Cannot halt operations in an emergency | Accepted; documented in [pause-design.md](pause-design.md) |
-  | Error handling via panic strings (no `#[contracterror]` enum) | No stable machine-readable error codes for callers | Should be resolved before audit |
-  | Events defined in schema but not emitted | Off-chain indexers cannot observe contract state changes | Should be resolved before audit |
-  | No admin functions implemented despite admin address being recorded | Admin role is inert; provides false sense of admin control | Acceptable if documented; confirm with auditor |
-
-- [ ] The distinction between internal accounting and real token custody is
-      clearly communicated in all user-facing documentation.
-
-**Current status:** Known limitations are documented in the README. The deposit/withdraw
-token-custody asymmetry is a significant issue that must be resolved before any
-mainnet or production use.
+- [ ] **Panic Strings vs. Typed Errors**:
+  - [ ] **Issue**: The contract currently handles errors via `panic!` strings (e.g. `panic!("Insufficient balance")` in [lib.rs:L377](file:///Users/boufdaddy/Documents/web3%20projects/pocketpay-contracts/contracts/savings_vault/src/lib.rs#L377)). Panic strings are expensive to transmit, cannot be easily parsed by client SDKs, and are not localized.
+  - [ ] **Action Required**: Implement a Soroban `#[contracterror]` enum (e.g., `Error`) mapping error states to stable `u32` codes, as outlined in [error-codes.md](file:///Users/boufdaddy/Documents/web3%20projects/pocketpay-contracts/docs/error-codes.md).
+- [ ] **Test Assertion on Error Output**:
+  - [x] Tests verify expected panic strings using `#[should_panic(expected = "...")]` in [mod.rs](file:///Users/boufdaddy/Documents/web3%20projects/pocketpay-contracts/contracts/savings_vault/src/test/mod.rs#L38).
+  - [ ] **Gaps**: Switching to `#[contracterror]` will require updating these test assertions to check for typed error results instead of panic string matches.
 
 ---
 
-## 7. Deployment and Network Assumptions
+## 6. Test Suite and Verification Coverage
 
-Auditors need to understand the deployment context, especially assumptions about
-the network, token contracts, and operational environment.
+Review the overall test suite to identify untested execution paths.
 
-- [ ] The target deployment network is specified (testnet, mainnet, or both).
-- [ ] The token contract address to be used in production is identified, reviewed,
-      and documented. The risks of using an incorrect or malicious token contract
-      address are acknowledged.
-- [ ] The admin key management strategy is documented:
-  - [ ] Who controls the admin key.
-  - [ ] How it is stored and protected.
-  - [ ] What happens if the admin key is lost or compromised (see
-        [admin-role.md](admin-role.md): currently no recovery path).
-- [ ] The initialization process is documented and tested end-to-end on testnet.
-      See [deployment-environments.md](deployment-environments.md).
-- [ ] Contract ID handoff to SDKs and client applications is documented.
-      See [contract-id-handoff.md](contract-id-handoff.md).
-- [ ] Storage TTL monitoring and extension procedures are operational.
-      See [storage-ttl.md](storage-ttl.md).
-- [ ] Network RPC URLs, network passphrases, and environment-specific config
-      are documented. See [deployment-environments.md](deployment-environments.md).
-- [ ] The deployment script and initialization steps are reviewed for security
-      (no secrets in logs, no unvalidated inputs).
+### Existing Tests Reference
 
-**Current status:** Testnet deployment is documented and the deployment script
-exists. No mainnet deployment plan exists. Admin key management beyond recording
-the address is not yet defined.
+- **Initialization Tests**:
+  - [test_initialize_success](file:///Users/boufdaddy/Documents/web3%20projects/pocketpay-contracts/contracts/savings_vault/src/test/initialization.rs#L6): Verifies happy path of initialization.
+  - [test_initialize_fails_on_second_call](file:///Users/boufdaddy/Documents/web3%20projects/pocketpay-contracts/contracts/savings_vault/src/test/initialization.rs#L18): Verifies that re-initialization panics.
+- **Deposit & Withdraw Tests**:
+  - [test_deposit](file:///Users/boufdaddy/Documents/web3%20projects/pocketpay-contracts/contracts/savings_vault/src/test/mod.rs#L20): Confirms basic deposit increases available balance.
+  - [test_withdraw](file:///Users/boufdaddy/Documents/web3%20projects/pocketpay-contracts/contracts/savings_vault/src/test/mod.rs#L71): Confirms withdrawal of unlocked funds works with token client mock transfers.
+  - [test_failed_withdraw_does_not_change_available_balance](file:///Users/boufdaddy/Documents/web3%20projects/pocketpay-contracts/contracts/savings_vault/src/test/mod.rs#L188): Proves state is not corrupted on rejected withdrawals.
+- **Locking Tests**:
+  - [test_lock_funds](file:///Users/boufdaddy/Documents/web3%20projects/pocketpay-contracts/contracts/savings_vault/src/test/mod.rs#L267): Verifies basic lock action.
+  - [test_repeated_lock_accumulates_balance_and_overwrites_unlock_time_later](file:///Users/boufdaddy/Documents/web3%20projects/pocketpay-contracts/contracts/savings_vault/src/test/mod.rs#L316): Checks multi-lock chronological maturities.
+
+### Missing Test Areas (Must be Added Before Audit)
+
+1. [ ] **Authorization Signature Tests**: Verify behavior when executing operations without setting up mocks to confirm signature validation works on-chain.
+2. [ ] **Token Transfer Failure**: Mock a failing token transfer (e.g. transfer returns error or has insufficient allowance/balance) during withdrawal and assert that the internal accounting does not decrement.
+3. [ ] **Unbounded Vector Stress Test**: Add a test that generates a large number of locks (e.g., 200) for a single user and verify resource usage/gas exhaustion limits.
+4. [ ] **Zero / Negative Time Locks**: Test locking funds with an `unlock_time` set to 0 or negative relative to the current timestamp (should be caught by the future-timestamp check).
+5. [ ] **Event Verification**: Once event emission is added, write assertions using `env.events().all()` to check correctness of emitted events.
 
 ---
 
-## 8. Unresolved Design Questions
+## 7. Summary of Known Limitations
 
-Open questions must be answered or explicitly deferred before audit so the auditor
-can assess finalized design intent.
-
-- [ ] All open design questions are listed, and a resolution or deferral decision
-      is recorded for each. Current open questions:
-
-  - **Token custody model:** Will `deposit` be updated to call the SAC `transfer`
-    and move real tokens into contract custody before audit? If not, the
-    internal-accounting-only model must be fully accepted and documented.
-  - **Lock model:** Will multiple concurrent locks per user be supported, or will
-    the single-overwrite behavior be kept? The current multi-lock implementation
-    should be validated as the intended design.
-  - **Admin capabilities:** Will any admin-only functions (pause, recovery,
-    upgrade) be added before audit? If yes, they must be in scope.
-  - **Error handling:** Will a `#[contracterror]` enum be added before audit?
-    Panic strings are not a stable API surface.
-  - **Event emission:** Will events be implemented before audit? The schema
-    exists in [events.md](events.md) but no events are emitted.
-  - **Upgrade path:** Will the contract include an `upgrade()` function before
-    audit? If so, the access control and migration strategy must be documented.
+| Component | Limitation / Issue | Risk / Impact | Mitigation / Status |
+|---|---|---|---|
+| **Accounting** | Internal accounting only; no token custody on `deposit`. | Users can mint internal balances without backing funds; token drain threat. | **Critical Block**: Must integrate SAC token transfer in `deposit` before mainnet. |
+| **Storage** | Unbounded lock list (`Vec<LockEntry>`). | Gas exhaustion / contract lockup for users with many active locks. | **High Risk**: Limit max active locks or split locks into separate keys. |
+| **Errors** | String panics. | High fee consumption, difficult SDK parsing. | **Medium Risk**: Implement `#[contracterror]` enum. |
+| **Events** | No event emissions. | Off-chain infrastructure cannot sync or read state changes. | **Medium Risk**: Implement event publishing in all state-changing actions. |
+| **Admin** | Inert Admin Role. | Admin address is recorded but has no administrative capability. | **Low Risk**: Document as intentional or implement upgradeability/pause mechanisms. |
 
 ---
 
-## 9. Supporting Documentation Summary
-
-Confirm all supporting documents are complete and up to date before requesting an audit.
-
-- [ ] [README.md](../README.md) — Project overview, build, test, deploy instructions.
-- [ ] [architecture.md](architecture.md) — Project structure, state model, storage design.
-- [ ] [admin-role.md](admin-role.md) — Admin address meaning, current capabilities, future design.
-- [ ] [error-codes.md](error-codes.md) — All failure conditions and caller guidance.
-- [ ] [events.md](events.md) — Event schema (note: not yet implemented in contract).
-- [ ] [upgrade-strategy.md](upgrade-strategy.md) — Upgrade path research and trade-offs.
-- [ ] [pause-design.md](pause-design.md) — Emergency pause research and trade-offs.
-- [ ] [storage-ttl.md](storage-ttl.md) — Storage TTL behavior and extension guide.
-- [ ] [deployment-environments.md](deployment-environments.md) — Environment config for local, testnet, and future mainnet.
-- [ ] [contract-id-handoff.md](contract-id-handoff.md) — How to pass deployed contract ID to client SDK.
-- [ ] Threat model document — **Does not yet exist; must be created.**
-- [ ] `CHANGELOG.md` — All significant changes since initial commit are logged.
-
----
-
-## Quick Readiness Summary
-
-Use this table for a fast status check. Update it as items are resolved.
-
-| Area | Status |
-|---|---|
-| Code freeze / audit tag | ❌ Not yet |
-| Public API fully documented | ⚠️ Partial (inline docs exist; no stable error enum) |
-| Storage model documented | ✅ Documented |
-| Threat model written | ❌ Not yet |
-| Test coverage meets threshold | ⚠️ Tests exist; no coverage report |
-| Known limitations documented | ✅ Documented |
-| Token custody model resolved | ❌ Deposit/withdraw asymmetry unresolved |
-| Events implemented | ❌ Schema only |
-| Deployment config documented | ✅ Testnet documented |
-| Admin key management defined | ❌ Not yet |
-| All open design questions answered | ❌ Several open |
-
----
-
-*Last updated: 2026-07-19*
+*Last updated: 2026-07-20*
