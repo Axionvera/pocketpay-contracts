@@ -110,6 +110,14 @@ impl SavingsVault {
             panic!("Deposit amount must be greater than zero");
         }
 
+        // Get token address
+        let token = env.storage().instance().get(&DataKey::Token).unwrap();
+        let token_client = token::Client::new(&env, &token);
+        let contract_address = env.current_contract_address();
+
+        // Perform real token transfer from user to contract
+        token_client.transfer(&user, &contract_address, &amount);
+
         // Read current balance (default to 0 if none exists)
         let current_balance: i128 = env
             .storage()
