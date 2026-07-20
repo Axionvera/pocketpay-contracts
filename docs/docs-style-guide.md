@@ -52,7 +52,10 @@ real funds.
 ## Placeholders
 
 Use clearly fake, self-explanatory placeholder values in examples so nobody
-mistakes them for real data:
+mistakes them for real data. See
+[docs/placeholders.md](placeholders.md) for the canonical placeholder names
+(contract ID, user address, admin address, and timestamp) to use in new or
+edited docs.
 
 - Use `UPPER_SNAKE_CASE` placeholders such as `YOUR_CONTRACT_ID`,
   `YOUR_ADDRESS`, or `YOUR-USERNAME`, matching existing usage in the README
