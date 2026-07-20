@@ -4,10 +4,13 @@
 //! `i128` numeric limits to surface overflow and accounting edge cases.
 //!
 //! Boundary values chosen:
-//! - `I128_MAX`      : largest positive `i128` value.
-//! - `I128_MAX - 1`  : one below maximum, still safely representable.
-//! - `I128_MAX / 2`  : half of maximum, used to avoid accidental overflow
-//!                     when two large values interact.
+//! - `I128_MAX`        : largest positive `i128` value.
+//! - `I128_MAX - 1`    : one below maximum, still safely representable.
+//! - `I128_MAX / 2`    : floored half of maximum (integer division truncates
+//!                       by one when `i128::MAX` is odd, so
+//!                       `I128_MAX_HALF * 2 == I128_MAX - 1`). Used to
+//!                       avoid accidental overflow when two large values
+//!                       interact.
 //!
 //! Soroban note: the contract does not use checked arithmetic, so in release
 //! builds with overflow-checks enabled, arithmetic overflow aborts the
@@ -15,8 +18,7 @@
 //! failed operations do not corrupt balances.
 
 use super::test_helpers::*;
-use super::*;
-use soroban_sdk::{testutils::Address as _, Address, Env};
+use soroban_sdk::{testutils::Address as _, Address};
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -28,7 +30,8 @@ const I128_MAX: i128 = i128::MAX;
 /// One less than the largest positive i128 value.
 const I128_MAX_MINUS_1: i128 = i128::MAX - 1;
 
-/// Half of the largest positive i128 value.
+/// Floored half of `i128::MAX`. Because `i128::MAX` is odd,
+/// integer division truncates: `I128_MAX_HALF * 2 == I128_MAX - 1`.
 const I128_MAX_HALF: i128 = i128::MAX / 2;
 
 // ---------------------------------------------------------------------------
@@ -59,9 +62,7 @@ fn test_deposit_after_i128_max_preserves_balance_on_overflow() {
     client.deposit(&user, &I128_MAX);
     let balance_before = client.get_balance(&user);
 
-    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        client.deposit(&user, &1);
-    }));
+    let result = client.try_deposit(&user, &1);
 
     assert!(
         result.is_err(),
@@ -74,8 +75,8 @@ fn test_deposit_after_i128_max_preserves_balance_on_overflow() {
     );
 }
 
-/// Multiple large deposits using a safe half-maximum value should accumulate
-/// correctly without overflow.
+/// Multiple large deposits using the floored-half value accumulate correctly.
+/// Because `i128::MAX` is odd, `I128_MAX_HALF * 2 == I128_MAX - 1`.
 #[test]
 fn test_multiple_large_deposits_without_overflow() {
     let env = test_env();
@@ -85,7 +86,8 @@ fn test_multiple_large_deposits_without_overflow() {
     client.deposit(&user, &I128_MAX_HALF);
     client.deposit(&user, &I128_MAX_HALF);
 
-    assert_eq!(client.get_balance(&user), I128_MAX);
+    // I128_MAX is odd, so integer division floors: HALF * 2 == I128_MAX - 1.
+    assert_eq!(client.get_balance(&user), I128_MAX_HALF * 2);
 }
 
 // ---------------------------------------------------------------------------
@@ -96,11 +98,14 @@ fn test_multiple_large_deposits_without_overflow() {
 /// and leave the available balance at zero.
 #[test]
 fn test_withdraw_i128_max_after_deposit_succeeds() {
-    let env = test_env();
-    let (_id, client) = init_contract(&env);
-    let user = new_user(&env);
+    let (env, contract_id, client) = setup();
+    let (env, _admin, client, token_client, token_admin) = test_token(env, client);
+    let user = Address::generate(&env);
 
+    token_admin.mint(&user, &I128_MAX);
     client.deposit(&user, &I128_MAX);
+    token_client.transfer(&user, &contract_id, &I128_MAX);
+
     client.withdraw(&user, &I128_MAX);
 
     assert_eq!(client.get_balance(&user), 0);
@@ -110,16 +115,17 @@ fn test_withdraw_i128_max_after_deposit_succeeds() {
 /// and leave the balance unchanged.
 #[test]
 fn test_withdraw_over_large_balance_does_not_mutate() {
-    let env = test_env();
-    let (_id, client) = init_contract(&env);
-    let user = new_user(&env);
+    let (env, contract_id, client) = setup();
+    let (env, _admin, client, token_client, token_admin) = test_token(env, client);
+    let user = Address::generate(&env);
 
+    token_admin.mint(&user, &I128_MAX_MINUS_1);
     client.deposit(&user, &I128_MAX_MINUS_1);
+    token_client.transfer(&user, &contract_id, &I128_MAX_MINUS_1);
+
     let balance_before = client.get_balance(&user);
 
-    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        client.withdraw(&user, &I128_MAX);
-    }));
+    let result = client.try_withdraw(&user, &I128_MAX);
 
     assert!(
         result.is_err(),
@@ -136,11 +142,14 @@ fn test_withdraw_over_large_balance_does_not_mutate() {
 /// intact and keep balances non-negative.
 #[test]
 fn test_withdraw_partial_from_large_balance_preserves_remainder() {
-    let env = test_env();
-    let (_id, client) = init_contract(&env);
-    let user = new_user(&env);
+    let (env, contract_id, client) = setup();
+    let (env, _admin, client, token_client, token_admin) = test_token(env, client);
+    let user = Address::generate(&env);
 
+    token_admin.mint(&user, &I128_MAX);
     client.deposit(&user, &I128_MAX);
+    token_client.transfer(&user, &contract_id, &I128_MAX);
+
     client.withdraw(&user, &1);
 
     assert_eq!(client.get_balance(&user), I128_MAX - 1);
@@ -185,9 +194,7 @@ fn test_lock_over_large_balance_does_not_mutate() {
     let locked_before = client.get_locked_balance(&user);
     let unlock_time = env.ledger().timestamp() + 10_000;
 
-    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        client.lock_funds(&user, &I128_MAX, &unlock_time);
-    }));
+    let result = client.try_lock_funds(&user, &I128_MAX, &unlock_time);
 
     assert!(
         result.is_err(),
@@ -226,8 +233,9 @@ fn test_lock_partial_from_large_balance_preserves_state() {
 // Overflow-adjacent arithmetic
 // ---------------------------------------------------------------------------
 
-/// Depositing `i128::MAX / 2` twice should exactly equal `i128::MAX` without
-/// overflow, proving the contract handles the largest safe sum correctly.
+/// Depositing `I128_MAX_HALF` twice accumulates to `I128_MAX_HALF * 2`.
+/// Because `i128::MAX` is odd, integer division floors by one:
+/// `I128_MAX_HALF * 2 == I128_MAX - 1`, not `I128_MAX`.
 #[test]
 fn test_deposit_half_max_twice_equals_max() {
     let env = test_env();
@@ -237,7 +245,8 @@ fn test_deposit_half_max_twice_equals_max() {
     client.deposit(&user, &I128_MAX_HALF);
     client.deposit(&user, &I128_MAX_HALF);
 
-    assert_eq!(client.get_balance(&user), I128_MAX);
+    // I128_MAX is odd so floor-division gives HALF * 2 == I128_MAX - 1.
+    assert_eq!(client.get_balance(&user), I128_MAX_HALF * 2);
 }
 
 /// After locking a very large amount, `get_balance` and
@@ -269,13 +278,15 @@ fn test_large_lock_keeps_available_and_locked_consistent() {
 /// remainder.
 #[test]
 fn test_large_withdraw_spans_available_and_matured_locks() {
-    let env = test_env();
-    let (_id, client) = init_contract(&env);
-    let user = new_user(&env);
+    let (env, contract_id, client) = setup();
+    let (env, _admin, client, token_client, token_admin) = test_token(env, client);
+    let user = Address::generate(&env);
     set_ledger_timestamp(&env, 1_000);
 
     let total_deposited = I128_MAX_HALF;
+    token_admin.mint(&user, &total_deposited);
     client.deposit(&user, &total_deposited);
+    token_client.transfer(&user, &contract_id, &total_deposited);
 
     // Lock half, mature it immediately.
     let lock_amount = total_deposited / 2;
@@ -296,12 +307,15 @@ fn test_large_withdraw_spans_available_and_matured_locks() {
 // Boundary value documentation
 // ---------------------------------------------------------------------------
 
-/// Documents why `i128::MAX / 2` was chosen as a safe large value: adding two
-/// of them equals exactly `i128::MAX`, which is the largest representable
-/// positive sum without overflow.
+/// Documents the floored-half boundary:
+/// `I128_MAX_HALF * 2 == I128_MAX - 1` because `i128::MAX` is odd.
 #[test]
 fn test_documentation_i128_max_half_boundary() {
-    assert_eq!(I128_MAX_HALF + I128_MAX_HALF, I128_MAX);
+    // I128_MAX is odd (2^127 - 1), so floor-division gives:
+    //   I128_MAX_HALF = (I128_MAX - 1) / 2
+    //   I128_MAX_HALF * 2 = I128_MAX - 1
+    assert_eq!(I128_MAX_HALF * 2, I128_MAX - 1);
+    assert_eq!(I128_MAX_HALF + I128_MAX_HALF, I128_MAX - 1);
     assert!(I128_MAX_HALF > 0);
 }
 
