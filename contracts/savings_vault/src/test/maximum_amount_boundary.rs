@@ -9,11 +9,10 @@
 //! - `I128_MAX / 2`  : half of maximum, used to avoid accidental overflow
 //!                     when two large values interact.
 //!
-//! Soroban note: the workspace enables `overflow-checks = true` for the
-//! release profile, and Rust debug builds panic on overflow by default.
-//! Therefore, arithmetic overflow in this contract currently aborts the
-//! transaction rather than silently wrapping, which preserves state
-//! consistency.
+//! Soroban note: the contract does not use checked arithmetic, so in release
+//! builds with overflow-checks enabled, arithmetic overflow aborts the
+//! transaction. These tests document the observed behaviour and verify that
+//! failed operations do not corrupt balances.
 
 use super::test_helpers::*;
 use super::*;
@@ -49,17 +48,30 @@ fn test_deposit_i128_max_succeeds() {
 }
 
 /// Depositing `i128::MAX` followed by any positive amount would overflow the
-/// available balance. With overflow-checks enabled the contract panics, which
-/// aborts the transaction and leaves state intact.
+/// available balance. We verify that the second deposit panics (aborts) and
+/// that the balance remains unchanged after the failed operation.
 #[test]
-#[should_panic(expected = "attempt to add with overflow")]
-fn test_deposit_after_i128_max_panics_on_overflow() {
+fn test_deposit_after_i128_max_preserves_balance_on_overflow() {
     let env = test_env();
     let (_id, client) = init_contract(&env);
     let user = new_user(&env);
 
     client.deposit(&user, &I128_MAX);
-    client.deposit(&user, &1);
+    let balance_before = client.get_balance(&user);
+
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        client.deposit(&user, &1);
+    }));
+
+    assert!(
+        result.is_err(),
+        "expected overflow to abort the transaction"
+    );
+    assert_eq!(
+        client.get_balance(&user),
+        balance_before,
+        "balance must not change after failed deposit"
+    );
 }
 
 /// Multiple large deposits using a safe half-maximum value should accumulate
@@ -97,14 +109,27 @@ fn test_withdraw_i128_max_after_deposit_succeeds() {
 /// Withdrawing a very large amount that exceeds the available balance must fail
 /// and leave the balance unchanged.
 #[test]
-#[should_panic(expected = "Insufficient balance")]
 fn test_withdraw_over_large_balance_does_not_mutate() {
     let env = test_env();
     let (_id, client) = init_contract(&env);
     let user = new_user(&env);
 
     client.deposit(&user, &I128_MAX_MINUS_1);
-    client.withdraw(&user, &I128_MAX);
+    let balance_before = client.get_balance(&user);
+
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        client.withdraw(&user, &I128_MAX);
+    }));
+
+    assert!(
+        result.is_err(),
+        "expected withdrawal exceeding balance to fail"
+    );
+    assert_eq!(
+        client.get_balance(&user),
+        balance_before,
+        "balance must not change after failed withdrawal"
+    );
 }
 
 /// Partial withdrawal of a very large balance should leave the remainder
@@ -149,7 +174,6 @@ fn test_lock_i128_max_succeeds() {
 /// Locking more than the available balance at very large scale must fail and
 /// leave both available and locked balances unchanged.
 #[test]
-#[should_panic(expected = "Insufficient balance to lock")]
 fn test_lock_over_large_balance_does_not_mutate() {
     let env = test_env();
     let (_id, client) = init_contract(&env);
@@ -157,8 +181,28 @@ fn test_lock_over_large_balance_does_not_mutate() {
     set_ledger_timestamp(&env, 1_000);
 
     client.deposit(&user, &I128_MAX_MINUS_1);
+    let available_before = client.get_balance(&user);
+    let locked_before = client.get_locked_balance(&user);
     let unlock_time = env.ledger().timestamp() + 10_000;
-    client.lock_funds(&user, &I128_MAX, &unlock_time);
+
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        client.lock_funds(&user, &I128_MAX, &unlock_time);
+    }));
+
+    assert!(
+        result.is_err(),
+        "expected lock exceeding balance to fail"
+    );
+    assert_eq!(
+        client.get_balance(&user),
+        available_before,
+        "available balance must not change after failed lock"
+    );
+    assert_eq!(
+        client.get_locked_balance(&user),
+        locked_before,
+        "locked balance must not change after failed lock"
+    );
 }
 
 /// Partial lock of a very large balance should leave the correct remainder
