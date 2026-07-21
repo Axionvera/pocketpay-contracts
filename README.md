@@ -214,6 +214,8 @@ stellar-pocketpay-contracts/
 - [Vault Contract ID Handoff](docs/contract-id-handoff.md) - How to pass a deployed vault contract ID safely to SDK configuration and the mobile app.
 - [Audit Readiness Review](docs/audit-readiness.md) - Pre-audit review covering audit blockers, missing tests, risky assumptions, and unresolved design questions.
 - [Accounting Invariants](docs/accounting-invariants.md) - Formal accounting invariants that must always hold, with test coverage references.
+- [Comprehensive Codebase Analysis](docs/comprehensive-analysis.md) - Full end-to-end analysis of architecture, tech stack, workflows, and more.
+- [Authorization Boundaries](docs/authorization-boundaries.md) - Authorization rules for every public function, misuse scenarios, and test coverage.
 
 ---
 
