@@ -1,7 +1,4 @@
-//! Unit tests for contract initialization and idempotency guards (Issue #157).
-
-use super::*;
-use soroban_sdk::{testutils::Address as _, Address, Env};
+use crate::test::test_helpers::*;
 
 /// Test 1: First initialization succeeds correctly.
 #[test]
