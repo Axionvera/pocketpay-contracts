@@ -76,12 +76,13 @@ Emitted when a user withdraws funds from their vault.
 - **Payload**: A tuple containing:
   1. `amount` (`i128`) - The amount withdrawn.
   2. `new_balance` (`i128`) - The user's new available balance.
+  3. `new_locked` (`i128`) - The user's new locked balance.
 
 #### Example Payload (JSON Representation)
 ```json
 {
   "topics": ["withdraw", "GD...USER_ADDRESS"],
-  "value": [500, 4500]
+  "value": [500, 4500, 0]
 }
 ```
 

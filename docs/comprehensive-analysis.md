@@ -52,7 +52,6 @@ pocketpay-contracts/
   3. **Accounting**: Balance/lock management, `get_balance`, `get_locked_balance`
   4. **Time-Based Logic**: Unlock time checks, `can_withdraw`
   5. **Authorization**: `require_auth()` for all state-changing operations
-  6. **Events**: Emits events for all state changes (initialize, deposit, withdraw, lock_funds)
 
 ---
 ## 2. Component Functionality and Tech Stack
@@ -87,7 +86,6 @@ pocketpay-contracts/
 2. `admin.require_auth()` verifies admin signature
 3. Check if `Initialized` is already set → panic if true
 4. Store `Admin`, `Initialized`, `Token` in **instance storage**
-5. Emit `initialize` event with admin address as topic 1 and token as payload
 
 #### Journey 2: Deposit Tokens
 1. User calls `deposit(env, user, amount)`
@@ -97,7 +95,6 @@ pocketpay-contracts/
 5. Retrieve SAC token address and create `token::Client`
 6. `token_client.transfer(user, contract_address, amount)` moves tokens to contract
 7. Update user's `Balance(user)` (persistent storage) by adding `amount`
-8. Emit `deposit` event with user address as topic 1 and `(amount, new_balance)` as payload
 
 #### Journey 3: Withdraw Tokens
 1. User calls `withdraw(env, user, amount)`
@@ -108,7 +105,6 @@ pocketpay-contracts/
 6. `token_client.transfer(contract_address, user, amount)` sends tokens to user
 7. Subtract amount from `Balance(user)` first, then from matured locks if needed
 8. Update `Balance(user)` and `Locks(user)` in persistent storage
-9. Emit `withdraw` event with user address as topic 1 and `(amount, new_balance)` as payload
 
 #### Journey 4: Lock Funds
 1. User calls `lock_funds(env, user, amount, unlock_time)`
@@ -118,8 +114,6 @@ pocketpay-contracts/
 5. Create new `LockEntry { id, amount, unlock_time }` and add to `Locks(user)`
 6. Subtract `amount` from `Balance(user)`
 7. Update `Balance(user)`, `Locks(user)`, and `NextLockId(user)` (increment by 1) in persistent storage
-8. Calculate new_locked as sum of all lock amounts
-9. Emit `lock` event with user address as topic 1 and `(amount, unlock_time, new_balance, new_locked)` as payload
 
 ---
 ## 4. Coding Standards, Auth, and Data Validation
@@ -128,6 +122,7 @@ pocketpay-contracts/
 - Comprehensive inline doc comments for all public functions
 - Clear separation of concerns (initialization, deposits, withdrawals, locking, queries)
 - **No custom error enum**: Uses panic strings for errors (a known gap)
+- **No events emitted**: Another known gap (events.md exists but not implemented)
 
 ### Authorization
 - **`initialize`**: Requires admin address authorization
@@ -163,9 +158,10 @@ pocketpay-contracts/
 
 ### Technical Debt
 1. **No custom error enum**: Uses panic strings, which are harder for off-chain SDKs to handle consistently
-2. **No pause/emergency stop mechanism**: Research exists in [pause-design.md](file:///c:/Users/Muhammad/.trae/Grantfox/pocketpay-contracts/docs/pause-design.md), but not implemented
-3. **No upgrade path**: Research exists in [upgrade-strategy.md](file:///c:/Users/Muhammad/.trae/Grantfox/pocketpay-contracts/docs/upgrade-strategy.md), but not implemented
-4. **No storage TTL automation**: Docs exist in [storage-ttl.md](file:///c:/Users/Muhammad/.trae/Grantfox/pocketpay-contracts/docs/storage-ttl.md), but no automation
+2. **No on-chain events**: No events emitted for deposit/withdraw/lock/unlock actions (hinders off-chain tracking/analytics)
+3. **No pause/emergency stop mechanism**: Research exists in [pause-design.md](file:///c:/Users/Muhammad/.trae/Grantfox/pocketpay-contracts/docs/pause-design.md), but not implemented
+4. **No upgrade path**: Research exists in [upgrade-strategy.md](file:///c:/Users/Muhammad/.trae/Grantfox/pocketpay-contracts/docs/upgrade-strategy.md), but not implemented
+5. **No storage TTL automation**: Docs exist in [storage-ttl.md](file:///c:/Users/Muhammad/.trae/Grantfox/pocketpay-contracts/docs/storage-ttl.md), but no automation
 
 ### Unclear Code Sections
 None; code is well-commented and straightforward!

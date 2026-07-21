@@ -14,7 +14,7 @@
 //! - Check lock maturity status
 //!
 //! ## Key Features
-//! - **Deposits**: Add funds to vault (internal accounting only, no real token custody yet)
+//! - **Deposits**: Transfer tokens into the vault and credit the user's balance
 //! - **Withdrawals**: Remove available (unlocked) funds from vault
 //! - **Locks**: Time-based fund locking with Unix timestamp unlock times
 //! - **Balance Queries**: Check available (unlocked) and locked balances separately
@@ -30,9 +30,9 @@
 //!
 //! ## Important Notes
 //!
-//! - **Internal Accounting**: Currently, deposits and withdrawals update internal contract
-//!   balances but do not transfer actual tokens. Real token custody and transfers are planned
-//!   for future SAC (Stellar Asset Contract) integration.
+//! - **Token-backed balances**: Deposits transfer tokens from the user into the vault via the
+//!   configured Stellar Asset Contract (SAC), and withdrawals transfer tokens back to the user.
+//!   Internal balances are updated only after the token transfer succeeds.
 //! - **Authorization**: The user's address must authorize all deposit, withdrawal, and lock operations.
 //! - **Lock Overwrite**: Locking funds does not create separate lock entries per operation;
 //!   each user has a vector of lock entries that can be managed independently.
@@ -63,7 +63,12 @@
 
 #![no_std]
 
-use soroban_sdk::{contract, contractimpl, contracttype, log, symbol_short, token, Address, Env, Symbol, Vec};
+use soroban_sdk::{
+    contract, contractimpl, contracttype, log, symbol_short, token, Address, Env, Symbol, Vec,
+};
+
+/// Maximum number of lock records returned by [`SavingsVault::list_locks`] per call.
+const MAX_LOCK_PAGE_SIZE: u32 = 50;
 
 // ---------------------------------------------------------------------------
 // Structs
@@ -102,8 +107,7 @@ pub struct LockEntry {
 /// * `Locks(Address)` - Vector of lock entries for a specific user
 /// * `NextLockId(Address)` - Counter for generating unique lock IDs per user
 /// * `Initialized` - Boolean flag indicating contract initialization status
-/// * `Token` - The token contract address for real token transfers
-/// * `StorageVersion` - Version of storage layout, for future compatibility/migrations
+/// * `Token` - The token contract address used for real token transfers
 #[contracttype]
 #[derive(Clone)]
 pub enum DataKey {
@@ -161,19 +165,11 @@ impl SavingsVault {
         }
     }
 
-    fn assert_supported_storage_version(env: &Env) {
-        const CURRENT_STORAGE_VERSION: u64 = 1;
-
-        let version: Option<u64> = env.storage().instance().get(&DataKey::StorageVersion);
-
-        match version {
-            // No version found: assume legacy (version 1, backward compatible)
-            None => {}
-            // Current version: proceed
-            Some(1) => {}
-            // Unsupported version: panic safely
-            Some(v) => panic!("Unsupported storage version: {}", v),
-        }
+    fn load_locks(env: &Env, user: Address) -> Vec<LockEntry> {
+        env.storage()
+            .persistent()
+            .get(&DataKey::Locks(user))
+            .unwrap_or_else(|| Vec::new(env))
     }
 
     // -----------------------------------------------------------------------
@@ -191,8 +187,8 @@ impl SavingsVault {
     /// * `env` - The Soroban environment
     /// * `admin` - The address to be recorded as the contract admin. This address must
     ///   authorize the transaction via `require_auth()`.
-    /// * `token` - The address of the token contract to be used for real token transfers
-    ///   (future SAC integration). Currently stored but not used in deposit/withdrawal logic.
+    /// * `token` - The address of the token contract used for real token transfers. Deposits
+    ///   and withdrawals move balances through this Stellar Asset Contract (SAC).
     ///
     /// # Authorization
     ///
@@ -218,10 +214,10 @@ impl SavingsVault {
     /// SavingsVault::initialize(&env, admin, token);
     /// ```
     ///
-    /// # Future Notes
+    /// # Notes
     ///
-    /// The token address parameter is reserved for future SAC (Stellar Asset Contract)
-    /// integration to support real token transfers and custody-backed balances.
+    /// The token address is the Stellar Asset Contract (SAC) used for real token transfers,
+    /// so deposits and withdrawals are backed by actual token custody.
     pub fn initialize(env: Env, admin: Address, token: Address) {
         // Ensure we haven't already initialized
         if env.storage().instance().has(&DataKey::Initialized) {
@@ -239,6 +235,10 @@ impl SavingsVault {
 
         // Emit initialize event
         let topics = (symbol_short!("initialize"), admin.clone());
+        env.events().publish(topics, token.clone());
+
+        // Emit initialize event
+        let topics = (Symbol::new(&env, "initialize"), admin.clone());
         env.events().publish(topics, token.clone());
 
         log!(&env, "Savings Vault initialized with admin: {}", admin);
@@ -285,9 +285,9 @@ impl SavingsVault {
 
     /// Deposit funds into the caller's vault.
     ///
-    /// Increases the user's recorded balance in the contract. Currently, this updates
-    /// internal contract accounting only and does not transfer real tokens. Future
-    /// SAC integration will enable actual token transfers and custody.
+    /// Transfers `amount` tokens from the user into the vault via the configured Stellar
+    /// Asset Contract (SAC) and then credits the user's recorded balance. The balance is
+    /// updated only after the token transfer succeeds.
     ///
     /// # Arguments
     ///
@@ -485,6 +485,82 @@ impl SavingsVault {
         );
     }
 
+    /// Withdraw a specific matured lock entry.
+    ///
+    /// This function allows a user to withdraw the funds associated with a specific
+    /// lock entry, provided that the lock has matured (current_time >= unlock_time).
+    ///
+    /// # Arguments
+    ///
+    /// * `env` - The Soroban environment
+    /// * `user` - The owner of the lock (must authorize this transaction via `require_auth()`)
+    /// * `lock_id` - The unique identifier of the lock to withdraw
+    ///
+    /// # Authorization
+    ///
+    /// The `user` address must sign the transaction.
+    ///
+    /// # Panics
+    /// - If the contract has not been initialized.
+    /// - If the lock with the given `lock_id` does not exist for the `user`.
+    /// - If the lock has not yet matured (current_time < unlock_time).
+    pub fn withdraw_lock(env: Env, user: Address, lock_id: u64) {
+        if !env.storage().instance().has(&DataKey::Initialized) {
+            panic!("Contract not initialized");
+        }
+
+        // Authorization
+        user.require_auth();
+
+        // Load locks
+        let mut locks = Self::load_locks(&env, user.clone());
+
+        // Find the lock index
+        let lock_index = locks.iter().position(|lock| lock.id == lock_id);
+
+        let index = match lock_index {
+            Some(i) => i,
+            None => panic!("Lock not found"),
+        };
+
+        let lock = locks.get(index).unwrap();
+
+        // Verify maturity
+        let current_time = env.ledger().timestamp();
+        if current_time < lock.unlock_time {
+            panic!("Lock has not matured yet");
+        }
+
+        // Get token address & client
+        let token = env.storage().instance().get(&DataKey::Token).unwrap();
+        let token_client = token::Client::new(&env, &token);
+        let contract_address = env.current_contract_address();
+
+        // Perform token transfer to the user
+        token_client.transfer(&contract_address, &user, &lock.amount);
+
+        // Remove the lock from the locks vector
+        locks.remove(index);
+
+        // Save updated locks back to persistent storage
+        env.storage()
+            .persistent()
+            .set(&DataKey::Locks(user.clone()), &locks);
+
+        // Emit withdrawal lock event
+        let topics = (Symbol::new(&env, "withdraw_lock"), user.clone());
+        let payload = (lock_id, lock.amount);
+        env.events().publish(topics, payload);
+
+        log!(
+            &env,
+            "WithdrawLock: user={}, lock_id={}, amount={}",
+            user,
+            lock_id,
+            lock.amount
+        );
+    }
+
     // -----------------------------------------------------------------------
     // Balance Queries
     // -----------------------------------------------------------------------
@@ -521,18 +597,13 @@ impl SavingsVault {
     /// ```
     pub fn get_balance(env: Env, user: Address) -> i128 {
         Self::assert_initialized(&env);
-        Self::assert_supported_storage_version(&env);
         let deposited_balance: i128 = env
             .storage()
             .persistent()
             .get(&DataKey::Balance(user.clone()))
             .unwrap_or(0);
 
-        let locks: Vec<LockEntry> = env
-            .storage()
-            .persistent()
-            .get(&DataKey::Locks(user))
-            .unwrap_or_else(|| Vec::new(&env));
+        let locks = Self::load_locks(&env, user);
 
         let current_time = env.ledger().timestamp();
         let mut matured_amount: i128 = 0;
@@ -703,12 +774,7 @@ impl SavingsVault {
     /// ```
     pub fn get_locked_balance(env: Env, user: Address) -> i128 {
         Self::assert_initialized(&env);
-        Self::assert_supported_storage_version(&env);
-        let locks: Vec<LockEntry> = env
-            .storage()
-            .persistent()
-            .get(&DataKey::Locks(user))
-            .unwrap_or_else(|| Vec::new(&env));
+        let locks = Self::load_locks(&env, user);
 
         let current_time = env.ledger().timestamp();
         let mut total_locked: i128 = 0;
@@ -765,12 +831,7 @@ impl SavingsVault {
     /// ```
     pub fn can_withdraw(env: Env, user: Address) -> bool {
         Self::assert_initialized(&env);
-        Self::assert_supported_storage_version(&env);
-        let locks: Vec<LockEntry> = env
-            .storage()
-            .persistent()
-            .get(&DataKey::Locks(user))
-            .unwrap_or_else(|| Vec::new(&env));
+        let locks = Self::load_locks(&env, user);
 
         let current_time = env.ledger().timestamp();
         for lock in locks.iter() {
@@ -780,6 +841,71 @@ impl SavingsVault {
         }
 
         false
+    }
+
+    /// Get a single lock record for a user by lock ID.
+    ///
+    /// Returns the stored [`LockEntry`] when a matching record exists. Lock IDs are
+    /// assigned by [`lock_funds`](Self::lock_funds) and are unique per user.
+    ///
+    /// # Arguments
+    ///
+    /// * `env` - The Soroban environment
+    /// * `user` - The user's address
+    /// * `lock_id` - The lock ID returned from `lock_funds`
+    ///
+    /// # Returns
+    ///
+    /// `Some(LockEntry)` when the lock exists; `None` when the user has no matching lock.
+    ///
+    /// # Authorization
+    ///
+    /// No authorization required (read-only operation).
+    pub fn get_lock(env: Env, user: Address, lock_id: u64) -> Option<LockEntry> {
+        Self::assert_initialized(&env);
+        let locks = Self::load_locks(&env, user);
+        locks.iter().find(|lock| lock.id == lock_id)
+    }
+
+    /// List lock records for a user with offset/limit pagination.
+    ///
+    /// Returns a page of stored lock entries in creation order (oldest first).
+    /// Both active and matured entries still present in storage are included.
+    ///
+    /// # Arguments
+    ///
+    /// * `env` - The Soroban environment
+    /// * `user` - The user's address
+    /// * `offset` - Number of records to skip from the start of the list
+    /// * `limit` - Maximum records to return (capped at [`MAX_LOCK_PAGE_SIZE`])
+    ///
+    /// # Returns
+    ///
+    /// A vector of up to `limit` lock entries (after capping). Returns an empty vector
+    /// when the user has no locks, when `limit` is zero, or when `offset` is past the end.
+    ///
+    /// # Authorization
+    ///
+    /// No authorization required (read-only operation).
+    pub fn list_locks(env: Env, user: Address, offset: u32, limit: u32) -> Vec<LockEntry> {
+        Self::assert_initialized(&env);
+        if limit == 0 {
+            return Vec::new(&env);
+        }
+
+        let page_limit = limit.min(MAX_LOCK_PAGE_SIZE);
+        let locks = Self::load_locks(&env, user);
+        let total = locks.len();
+        if offset >= total {
+            return Vec::new(&env);
+        }
+
+        let end = offset.saturating_add(page_limit).min(total);
+        let mut page = Vec::new(&env);
+        for i in offset..end {
+            page.push_back(locks.get(i).unwrap());
+        }
+        page
     }
 }
 

@@ -80,5 +80,26 @@ soroban contract invoke \
   --rpc-url <RPC_URL> \
   --network-passphrase <NETWORK_PASSPHRASE> \
   -- \
+  get_lock \
+  --user <USER_ADDRESS> \
+  --lock_id 1
+
+  soroban contract invoke \
+  --id <CONTRACT_ID> \
+  --source <USER_ACCOUNT> \
+  --rpc-url <RPC_URL> \
+  --network-passphrase <NETWORK_PASSPHRASE> \
+  -- \
+  list_locks \
+  --user <USER_ADDRESS> \
+  --offset 0 \
+  --limit 10
+
+  soroban contract invoke \
+  --id <CONTRACT_ID> \
+  --source <USER_ACCOUNT> \
+  --rpc-url <RPC_URL> \
+  --network-passphrase <NETWORK_PASSPHRASE> \
+  -- \
   can_withdraw \
   --user <USER_ADDRESS>

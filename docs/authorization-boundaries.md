@@ -15,6 +15,8 @@ This document defines the authorization rules for every public function in the S
 | `get_balance(env, user)` | Anyone (public) | None | ❌ No |
 | `lock_funds(env, user, amount, unlock_time)` | The `user` address | `user.require_auth()` | ✅ Yes |
 | `get_locked_balance(env, user)` | Anyone (public) | None | ❌ No |
+| `get_lock(env, user, lock_id)` | Anyone (public) | None | ❌ No |
+| `list_locks(env, user, offset, limit)` | Anyone (public) | None | ❌ No |
 | `can_withdraw(env, user)` | Anyone (public) | None | ❌ No |
 
 ---
@@ -40,7 +42,7 @@ This document defines the authorization rules for every public function in the S
 ### Scenario 4: Call `lock_funds` for user A as user B
 - **Expected Behavior**: Panics from `user.require_auth()`
 
-### Scenario 5: Query `get_balance`/`get_locked_balance`/`can_withdraw` for any user
+### Scenario 5: Query `get_balance`/`get_locked_balance`/`get_lock`/`list_locks`/`can_withdraw` for any user
 - **Expected Behavior**: Returns correct value (no authorization required for read-only queries)
 - **Tests**: All get_* tests work for any user!
 
