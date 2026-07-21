@@ -1,4 +1,6 @@
 use crate::test::test_helpers::*;
+use crate::{SavingsVault, SavingsVaultClient};
+use soroban_sdk::{testutils::Address as _, Address, Env};
 
 /// Test 1: First initialization succeeds correctly.
 #[test]

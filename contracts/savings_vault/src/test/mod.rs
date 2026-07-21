@@ -13,6 +13,17 @@ use soroban_sdk::{testutils::Address as _, Address};
 
 use test_helpers::*;
 
+// =========================================================================
+// Version Metadata Tests
+// =========================================================================
+
+#[test]
+fn test_get_version() {
+    let env = test_env();
+    let (_id, client) = init_contract(&env);
+    let version = client.get_version();
+    assert_eq!(version, soroban_sdk::String::from_str(&env, "0.1.0"));
+}
 
 // =========================================================================
 // Deposit Tests
