@@ -112,10 +112,6 @@ fn run_sequence(ops: &[(Op, Expect)]) -> i128 {
         match (op, expect) {
             (Op::Deposit(amount), Expect::Ok) => {
                 f.client.deposit(&f.user, amount);
-                // Mirror current contract: deposit only updates ledger balance;
-                // fund the vault so a later withdraw can transfer SAC out.
-                f.token_client
-                    .transfer(&f.user, &f.contract_id, amount);
                 expected_total += amount;
             }
             (Op::Deposit(amount), Expect::Err) => {

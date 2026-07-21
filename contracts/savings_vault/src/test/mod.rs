@@ -79,12 +79,13 @@ fn test_withdraw() {
     let user = Address::generate(&env);
     let deposit_amount = 500;
 
-    // SAC Transfer not yet implemented for deposit so i'll mimick it by trnasfering asset(deposit_amount) from user to the contract
-
+    token_admin.mint(&user, &10000);
 
     let user_balance = token_client.balance(&user);
     assert_eq!(&user_balance, &10000);
 
+    // Deposit now performs real token transfer
+    client.deposit(&user, &deposit_amount);
 
     let user_balance = token_client.balance(&user);
     assert_eq!(&user_balance, &9500);
@@ -104,8 +105,8 @@ fn test_withdraw_entire_balance() {
     let deposit_amount = 100;
 
 
-    // SAC Transfer not yet implemented for deposit so i'll mimick it by trnasfering asset(deposit_amount) from user to the contract
-
+    // Deposit now performs real token transfer
+    client.deposit(&user, &deposit_amount);
 
     client.withdraw(&user, &deposit_amount);
     assert_eq!(client.get_balance(&user), 0);
@@ -114,13 +115,11 @@ fn test_withdraw_entire_balance() {
 #[test]
 #[should_panic(expected = "Insufficient balance")]
 fn test_withdraw_more_than_balance_panics() {
-    let (env, current_contract_address, client) = setup();
-    let (env, _admin, client, token_client, token_admin) = test_token(env, client);
+    let (env, _current_contract_address, client) = setup();
+    let (env, _admin, client, _token_client, token_admin) = test_token(env, client);
     let user = Address::generate(&env);
 
-    // SAC Transfer not yet implemented for deposit so i'll mimick it by trnasfering asset(deposit_amount) from user to the contract
     client.deposit(&user, &100);
-
 
     client.withdraw(&user, &200);
 }
@@ -182,14 +181,14 @@ fn test_failed_withdraw_does_not_change_available_balance() {
     // Strategy (no_std): perform a *valid* withdraw of the exact balance to
     // prove state is only mutated on success, paired with the should_panic
     // test below that confirms rejection happens before any write.
-    let (env, current_contract_address, client) = setup();
-    let (env, _admin, client, token_client, token_admin) = test_token(env, client);
+    let (env, _current_contract_address, client) = setup();
+    let (env, _admin, client, _token_client, token_admin) = test_token(env, client);
     let user = Address::generate(&env);
     let deposit_amount = 100;
 
 
-    // SAC Transfer not yet implemented for deposit so i'll mimick it by trnasfering asset(deposit_amount) from user to the contract
-
+    // Deposit now performs real token transfer
+    client.deposit(&user, &deposit_amount);
 
     // A valid partial withdraw succeeds and leaves the remainder intact.
     client.withdraw(&user, &60);
@@ -695,8 +694,8 @@ fn test_can_withdraw_boundary_rule_is_inclusive_gte() {
 #[test]
 fn test_separate_user_balances() {
     let env = test_env();
-    let (current_contract_address, client) = init_contract(&env);
-    let (env, _admin, client, token_client, token_admin) = test_token(env, client);
+    let (_current_contract_address, client) = init_contract(&env);
+    let (env, _admin, client, _token_client, token_admin) = test_token(env, client);
 
     let alice = new_user(&env);
     let bob = new_user(&env);
@@ -704,10 +703,9 @@ fn test_separate_user_balances() {
     token_admin.mint(&alice, &10000);
     token_admin.mint(&bob, &10000);
 
-    // SAC Transfer not yet implemented for deposit so i'll mimick it by trnasfering asset(deposit_amount) from user to the contract
+    // Deposit now performs real token transfer
     deposit_balance(&client, &alice, 1_000);
     deposit_balance(&client, &bob, 500);
-
 
     assert_eq!(client.get_balance(&alice), 1_000);
     assert_eq!(client.get_balance(&bob), 500);
@@ -738,8 +736,8 @@ fn balance_isolation_between_users_deposit() {
 #[test]
 fn balance_isolation_between_users_withdraw() {
     let env = test_env();
-    let (current_contract_address, client) = init_contract(&env);
-    let (env, _admin, client, token_client, token_admin) = test_token(env, client);
+    let (_current_contract_address, client) = init_contract(&env);
+    let (env, _admin, client, _token_client, token_admin) = test_token(env, client);
 
     let alice = new_user(&env);
     let bob = new_user(&env);
@@ -747,7 +745,7 @@ fn balance_isolation_between_users_withdraw() {
     token_admin.mint(&alice, &10000);
     token_admin.mint(&bob, &10000);
 
-    // SAC Transfer not yet implemented for deposit so i'll mimick it by trnasfering asset(deposit_amount) from user to the contract
+    // Deposit now performs real token transfer
     deposit_balance(&client, &alice, 1_000);
     deposit_balance(&client, &bob, 4_000);
 
@@ -766,8 +764,8 @@ fn balance_isolation_between_users_withdraw() {
 #[test]
 fn balance_isolation_between_users_lock() {
     let env = test_env();
-    let (current_contract_address, client) = init_contract(&env);
-    let (env, _admin, client, token_client, token_admin) = test_token(env, client);
+    let (_current_contract_address, client) = init_contract(&env);
+    let (env, _admin, client, _token_client, token_admin) = test_token(env, client);
 
     let alice = new_user(&env);
     let bob = new_user(&env);
@@ -775,7 +773,7 @@ fn balance_isolation_between_users_lock() {
     token_admin.mint(&alice, &10000);
     token_admin.mint(&bob, &10000);
 
-    // SAC Transfer not yet implemented for deposit so i'll mimick it by trnasfering asset(deposit_amount) from user to the contract
+    // Deposit now performs real token transfer
     deposit_balance(&client, &alice, 2_000);
     deposit_balance(&client, &bob, 4_000);
 
