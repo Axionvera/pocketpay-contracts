@@ -6,7 +6,9 @@
 
 This project is currently intended for development, learning, and Stellar testnet usage. It is **not production-ready or mainnet-ready**.
 
-The savings vault uses Stellar Asset Contract (SAC) integration for real token custody: `deposit` transfers tokens from the user to the contract, and `withdraw` transfers tokens from the contract to the user. Internal balance tracking ensures that user balances are always backed by tokens in the contract's custody.
+The savings vault now uses internal balance tracking and real token transfers: `deposit` transfers tokens from the user to the contract, `withdraw` transfers tokens from the contract to the user, and locking operations manage which tokens are available to withdraw.
+
+See [Known Limitations](#known-limitations) for other current constraints.
 ## Security Considerations
 
 > **This contract is for educational and testnet use.** Review the following before any mainnet deployment.
@@ -24,12 +26,13 @@ See the [Admin Role](docs/admin-role.md) document for details on what the `initi
 | `lock_funds(user, amount, unlock_time)` | Lock funds until a Unix timestamp |
 | `get_locked_balance(user)` | Query locked balance |
 | `can_withdraw(user)` | Check if locked funds are withdrawable |
+| `get_version()` | Query the deployed contract version |
 
-### Deposit and custody details
+### Deposit and custody
 
-> **Deposits and withdrawals use real token custody via SAC.** When a user calls `deposit`, tokens are transferred from the user to the contract and their internal balance is increased. When a user calls `withdraw`, the contract checks their available balance (deposited + matured locked), transfers tokens to the user, and then updates balances/locks accordingly.
+> **Deposits now transfer real tokens into the contract.** Calling `deposit` transfers the specified amount from the user to the contract, and calls `withdraw` transfer the specified amount from the contract to the user. The contract's internal balance tracking ensures withdrawals are limited to unlocked funds.
 
-The contract uses **internal balance tracking** (to keep track of user-specific balances and locks) alongside **SAC token transfers** for real custody.
+The contract uses a Stellar Asset Contract (SAC) to manage token transfers, which is specified during contract initialization via the `token` parameter.
 
 ---
 
@@ -207,15 +210,19 @@ stellar-pocketpay-contracts/
 ---
 ## Documentation
 
+- [Audit Preparation Checklist](docs/audit-preparation.md) — Checklist of documentation, tests, threat model, and deployment details required before any external security review or audit.
 - [Deployment Environments](docs/deployment-environments.md) — Network configuration for local, testnet, and future mainnet, including RPC URLs, identities, environment variables, and deployment commands.
 - [Contract Error Reference](docs/error-codes.md) - Current savings vault failure conditions and guidance for SDK and mobile callers.
+- [SDK Error Mapping Guide](docs/sdk-error-mapping-guide.md) — Maps contract errors to SDK handling expectations with user-facing and developer-facing examples.
 - [Architecture Documentation](docs/architecture.md) – Overview of project structure, state management, storage, SDK integration, and future extension points.
+- [SDK ↔ Contract Sequence Diagrams](docs/sdk-contract-sequence.md) – Mermaid sequence diagrams for balance query, deposit, withdraw, and error paths across mobile, SDK, Soroban RPC, and the vault contract.
 - [Event Schema Documentation](docs/events.md) – Overview of event names, topics, payload schemas, and JSON examples for vault actions.
 - [Vault Contract ID Handoff](docs/contract-id-handoff.md) - How to pass a deployed vault contract ID safely to SDK configuration and the mobile app.
-- [Audit Readiness Review](docs/audit-readiness.md) - Pre-audit review covering audit blockers, missing tests, risky assumptions, and unresolved design questions.
-- [Accounting Invariants](docs/accounting-invariants.md) - Formal accounting invariants that must always hold, with test coverage references.
-- [Comprehensive Codebase Analysis](docs/comprehensive-analysis.md) - Full end-to-end analysis of architecture, tech stack, workflows, and more.
-- [Authorization Boundaries](docs/authorization-boundaries.md) - Authorization rules for every public function, misuse scenarios, and test coverage.
+- [Documentation Style Guide](docs/docs-style-guide.md) — Conventions for Testnet wording, avoiding production claims, placeholders, command formatting, and linking related docs.
+- [Sample Vault Interaction Walkthrough](docs/walkthrough.md) — End-to-end deploy, deposit, lock, query, and withdraw example with expected state changes and current limitations.
+- [CLI Smoke Test Guide](docs/cli-smoke-test.md) — Quick post-deployment verification flow using the Soroban CLI to confirm every contract function responds correctly on testnet or a local sandbox.
+- [Balance Reconciliation Design Note](docs/balance-reconciliation.md) — How internal accounting should reconcile with real token balances once SAC integration is implemented, including failure modes and invariants tests must enforce.
+- [Version Metadata](docs/version-metadata.md) — How the `get_version` read-only function works, how SDKs and deployment scripts should use it, and how to bump the version.
 
 ---
 
@@ -264,6 +271,9 @@ stellar-pocketpay-contracts/
 - Always test thoroughly on testnet before considering mainnet deployment.
 - Monitor contract storage TTL and extend as needed using `soroban contract extend`. See the [Storage TTL Guide](docs/storage-ttl.md) for persistent vs. instance storage details and example commands.
 
+## Documentation
+
+For a full list of CLI command examples and arguments for each contract method, check out the [Contract Invocation Examples](docs/invocation-examples.md).
 ---
 
 ## Contributing
@@ -290,4 +300,4 @@ cargo test
 
 ## License
 
-MIT
+This project is licensed under the [MIT License](LICENSE).

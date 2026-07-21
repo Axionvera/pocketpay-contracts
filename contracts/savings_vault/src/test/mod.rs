@@ -3,7 +3,10 @@
 //! These tests use the Soroban SDK test utilities to simulate
 //! on-chain interactions in an isolated environment.
 mod balance_conservation;
+mod maximum_amount_boundary;
 mod test_helpers;
+mod initialization;
+mod unauthorized_access;
 
 use super::*;
 use soroban_sdk::{testutils::Address as _, Address};
@@ -11,27 +14,15 @@ use soroban_sdk::{testutils::Address as _, Address};
 use test_helpers::*;
 
 // =========================================================================
-// Initialization Tests
+// Version Metadata Tests
 // =========================================================================
 
 #[test]
-fn test_initialize() {
+fn test_get_version() {
     let env = test_env();
     let (_id, client) = init_contract(&env);
-    let admin = new_user(&env);
-    let token = new_user(&env);
-    client.initialize(&admin, &token);
-}
-
-#[test]
-#[should_panic(expected = "Contract is already initialized")]
-fn test_initialize_twice_panics() {
-    let env = test_env();
-    let (_id, client) = init_contract(&env);
-    let admin = new_user(&env);
-    let token = new_user(&env);
-    client.initialize(&admin, &token);
-    client.initialize(&admin, &token);
+    let version = client.get_version();
+    assert_eq!(version, soroban_sdk::String::from_str(&env, "0.1.0"));
 }
 
 #[test]
@@ -141,7 +132,7 @@ fn test_deposit_negative_panics() {
 fn test_get_balance_default_zero_for_new_user_after_initialization() {
     let env = test_env();
     let (_id, client) = init_contract(&env);
-    let (_env, _admin, client, _token_client, _token_admin) = test_token(env, client);
+    // Note: init_contract already handles initialization, removed duplicate call.
 
     let user = new_user(&_env);
     assert_eq!(client.get_balance(&user), 0);
@@ -165,6 +156,7 @@ fn test_withdraw() {
     let user_balance = token_client.balance(&user);
     assert_eq!(&user_balance, &10000);
 
+    // Deposit now performs real token transfer
     client.deposit(&user, &deposit_amount);
 
     let user_balance = token_client.balance(&user);
@@ -181,8 +173,8 @@ fn test_withdraw_entire_balance() {
     let user = Address::generate(&env);
     let deposit_amount = 100;
 
-    token_admin.mint(&user, &10000);
 
+    // Deposit now performs real token transfer
     client.deposit(&user, &deposit_amount);
 
     client.withdraw(&user, &deposit_amount);
@@ -259,9 +251,8 @@ fn test_lock_funds_requires_user_authorization() {
 #[should_panic(expected = "Insufficient balance")]
 fn test_withdraw_more_than_balance_panics() {
     let (env, _current_contract_address, client) = setup();
-    let (env, _admin, client, token_client, token_admin) = test_token(env, client);
+    let (env, _admin, client, _token_client, token_admin) = test_token(env, client);
     let user = Address::generate(&env);
-    token_admin.mint(&user, &10000);
 
     client.deposit(&user, &100);
 
@@ -285,9 +276,9 @@ fn test_withdraw_negative_panics() {
     let (env, _current_contract_address, client) = setup();
     let (env, _admin, client, token_client, token_admin) = test_token(env, client);
     let user = Address::generate(&env);
-    token_admin.mint(&user, &10000);
 
     client.deposit(&user, &100);
+
 
     client.withdraw(&user, &-10);
 }
@@ -330,12 +321,12 @@ fn test_failed_withdraw_does_not_change_available_balance() {
     // prove state is only mutated on success, paired with the should_panic
     // test below that confirms rejection happens before any write.
     let (env, _current_contract_address, client) = setup();
-    let (env, _admin, client, token_client, token_admin) = test_token(env, client);
+    let (env, _admin, client, _token_client, token_admin) = test_token(env, client);
     let user = Address::generate(&env);
     let deposit_amount = 100;
 
-    token_admin.mint(&user, &10000);
 
+    // Deposit now performs real token transfer
     client.deposit(&user, &deposit_amount);
 
     // A valid partial withdraw succeeds and leaves the remainder intact.
@@ -593,6 +584,85 @@ fn test_lock_past_time_panics() {
     client.lock_funds(&user, &50, &3_000);
 }
 
+#[test]
+#[should_panic(expected = "Insufficient balance to lock")]
+fn test_lock_from_empty_balance_panics() {
+    let env = test_env();
+    let (_id, client) = init_contract(&env);
+    let user = new_user(&env);
+    set_ledger_timestamp(&env, 1_000);
+    // User has 0 balance, attempt to lock 100
+    client.lock_funds(&user, &100, &2_000);
+}
+
+#[test]
+#[should_panic(expected = "Insufficient balance to lock")]
+fn test_lock_more_than_available_balance_panics() {
+    let env = test_env();
+    let (_id, client) = init_contract(&env);
+    let user = new_user(&env);
+    set_ledger_timestamp(&env, 1_000);
+    deposit_balance(&client, &user, 100);
+    // Attempt to lock more than available (100)
+    client.lock_funds(&user, &101, &2_000);
+}
+
+#[test]
+fn test_failed_lock_does_not_change_available_balance() {
+    // Strategy: Verify a valid partial lock leaves the remaining available balance correct.
+    // The companion panic test confirms that the lock is rejected before any mutation occurs.
+    let env = test_env();
+    let (_id, client) = init_contract(&env);
+    let user = new_user(&env);
+    set_ledger_timestamp(&env, 1_000);
+    deposit_balance(&client, &user, 100);
+
+    // Initial check
+    assert_eq!(client.get_balance(&user), 100);
+
+    // A valid partial lock succeeds and updates available/locked balances
+    client.lock_funds(&user, &60, &2_000);
+    assert_eq!(client.get_balance(&user), 40);
+
+    // Another valid lock
+    client.lock_funds(&user, &40, &3_000);
+    assert_eq!(client.get_balance(&user), 0);
+}
+
+#[test]
+#[should_panic(expected = "Insufficient balance to lock")]
+fn test_failed_lock_does_not_change_available_balance_panics() {
+    // Confirms that attempting to lock more than available balance is rejected (panics)
+    // and available balance is not mutated.
+    let env = test_env();
+    let (_id, client) = init_contract(&env);
+    let user = new_user(&env);
+    set_ledger_timestamp(&env, 1_000);
+    deposit_balance(&client, &user, 100);
+
+    // Attempting to lock 101 must panic, leaving available balance at 100
+    client.lock_funds(&user, &101, &2_000);
+}
+
+#[test]
+#[should_panic(expected = "Insufficient balance to lock")]
+fn test_failed_lock_does_not_change_locked_balance() {
+    let env = test_env();
+    let (_id, client) = init_contract(&env);
+    let user = new_user(&env);
+    set_ledger_timestamp(&env, 1_000);
+    deposit_balance(&client, &user, 500);
+
+    // Lock 200, leaving 300 available, and locked balance at 200
+    client.lock_funds(&user, &200, &2_000);
+    assert_eq!(client.get_balance(&user), 300);
+    assert_eq!(client.get_locked_balance(&user), 200);
+
+    // Attempt to lock 301, which is more than available 300.
+    // This must panic, leaving locked balance at 200.
+    client.lock_funds(&user, &301, &3_000);
+}
+
 // =========================================================================
 // can_withdraw Tests — Time-Lock Boundary Behaviour
 // =========================================================================
@@ -808,6 +878,7 @@ fn test_separate_user_balances() {
     token_admin.mint(&alice, &10000);
     token_admin.mint(&bob, &10000);
 
+    // Deposit now performs real token transfer
     deposit_balance(&client, &alice, 1_000);
     deposit_balance(&client, &bob, 500);
 
@@ -848,6 +919,7 @@ fn balance_isolation_between_users_withdraw() {
     token_admin.mint(&alice, &10000);
     token_admin.mint(&bob, &10000);
 
+    // Deposit now performs real token transfer
     deposit_balance(&client, &alice, 1_000);
     deposit_balance(&client, &bob, 4_000);
 
@@ -875,6 +947,7 @@ fn balance_isolation_between_users_lock() {
     token_admin.mint(&alice, &10000);
     token_admin.mint(&bob, &10000);
 
+    // Deposit now performs real token transfer
     deposit_balance(&client, &alice, 2_000);
     deposit_balance(&client, &bob, 4_000);
 
