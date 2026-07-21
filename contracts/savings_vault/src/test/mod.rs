@@ -80,14 +80,11 @@ fn test_withdraw() {
     let deposit_amount = 500;
 
     // SAC Transfer not yet implemented for deposit so i'll mimick it by trnasfering asset(deposit_amount) from user to the contract
-    client.deposit(&user, &deposit_amount);
 
-    token_admin.mint(&user, &10000);
 
     let user_balance = token_client.balance(&user);
     assert_eq!(&user_balance, &10000);
 
-    token_client.transfer(&user, &current_contract_address, &deposit_amount); // This should be removed when deposit function implements SAC
 
     let user_balance = token_client.balance(&user);
     assert_eq!(&user_balance, &9500);
@@ -106,12 +103,9 @@ fn test_withdraw_entire_balance() {
     let user = Address::generate(&env);
     let deposit_amount = 100;
 
-    token_admin.mint(&user, &10000);
 
     // SAC Transfer not yet implemented for deposit so i'll mimick it by trnasfering asset(deposit_amount) from user to the contract
-    client.deposit(&user, &deposit_amount);
 
-    token_client.transfer(&user, &current_contract_address, &deposit_amount); // This should be removed when deposit function implements SAC
 
     client.withdraw(&user, &deposit_amount);
     assert_eq!(client.get_balance(&user), 0);
@@ -123,12 +117,10 @@ fn test_withdraw_more_than_balance_panics() {
     let (env, current_contract_address, client) = setup();
     let (env, _admin, client, token_client, token_admin) = test_token(env, client);
     let user = Address::generate(&env);
-    token_admin.mint(&user, &10000);
 
     // SAC Transfer not yet implemented for deposit so i'll mimick it by trnasfering asset(deposit_amount) from user to the contract
     client.deposit(&user, &100);
 
-    token_client.transfer(&user, &current_contract_address, &100); // This should be removed when deposit function implements SAC
 
     client.withdraw(&user, &200);
 }
@@ -149,12 +141,10 @@ fn test_withdraw_negative_panics() {
     let (env, current_contract_address, client) = setup();
     let (env, _admin, client, token_client, token_admin) = test_token(env, client);
     let user = Address::generate(&env);
-    token_admin.mint(&user, &10000);
 
     // SAC Transfer not yet implemented for deposit so i'll mimick it by trnasfering asset(deposit_amount) from user to the contract
     client.deposit(&user, &100);
 
-    token_client.transfer(&user, &current_contract_address, &100); // This should be removed when deposit function implements SAC
 
     client.withdraw(&user, &-10);
 }
@@ -197,12 +187,9 @@ fn test_failed_withdraw_does_not_change_available_balance() {
     let user = Address::generate(&env);
     let deposit_amount = 100;
 
-    token_admin.mint(&user, &10000);
 
     // SAC Transfer not yet implemented for deposit so i'll mimick it by trnasfering asset(deposit_amount) from user to the contract
-    client.deposit(&user, &deposit_amount);
 
-    token_client.transfer(&user, &current_contract_address, &deposit_amount); // This should be removed when deposit function implements SAC
 
     // A valid partial withdraw succeeds and leaves the remainder intact.
     client.withdraw(&user, &60);
@@ -721,8 +708,6 @@ fn test_separate_user_balances() {
     deposit_balance(&client, &alice, 1_000);
     deposit_balance(&client, &bob, 500);
 
-    token_client.transfer(&alice, &current_contract_address, &1000); // This should be removed when deposit function implements SAC
-    token_client.transfer(&bob, &current_contract_address, &500); // This should be removed when deposit function implements SAC
 
     assert_eq!(client.get_balance(&alice), 1_000);
     assert_eq!(client.get_balance(&bob), 500);
@@ -765,8 +750,6 @@ fn balance_isolation_between_users_withdraw() {
     // SAC Transfer not yet implemented for deposit so i'll mimick it by trnasfering asset(deposit_amount) from user to the contract
     deposit_balance(&client, &alice, 1_000);
     deposit_balance(&client, &bob, 4_000);
-    token_client.transfer(&alice, &current_contract_address, &1000); // This should be removed when deposit function implements SAC
-    token_client.transfer(&bob, &current_contract_address, &4000); // This should be removed when deposit function implements SAC
 
     assert_eq!(client.get_balance(&alice), 1000_i128);
     assert_eq!(client.get_balance(&bob), 4000_i128);
@@ -795,8 +778,6 @@ fn balance_isolation_between_users_lock() {
     // SAC Transfer not yet implemented for deposit so i'll mimick it by trnasfering asset(deposit_amount) from user to the contract
     deposit_balance(&client, &alice, 2_000);
     deposit_balance(&client, &bob, 4_000);
-    token_client.transfer(&alice, &current_contract_address, &2_000); // This should be removed when deposit function implements SAC
-    token_client.transfer(&bob, &current_contract_address, &4_000); // This should be removed when deposit function implements SAC
 
     client.lock_funds(&alice, &1_000, &3600);
     assert_eq!(client.get_balance(&alice), 1_000);
