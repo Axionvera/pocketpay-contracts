@@ -25,6 +25,7 @@ pocketpay-contracts/
 │   ├── admin-role.md
 │   ├── architecture.md
 │   ├── audit-readiness.md
+│   ├── authorization-boundaries.md
 │   ├── contract-id-handoff.md
 │   ├── deployment-environments.md
 │   ├── deployment-output-example.md
@@ -32,6 +33,7 @@ pocketpay-contracts/
 │   ├── events.md
 │   ├── pause-design.md
 │   ├── storage-ttl.md
+│   ├── storage-versioning.md
 │   ├── troubleshooting.md
 │   └── upgrade-strategy.md
 ├── scripts/
@@ -53,6 +55,7 @@ pocketpay-contracts/
   4. **Time-Based Logic**: Unlock time checks, `can_withdraw`
   5. **Authorization**: `require_auth()` for all state-changing operations
   6. **Events**: Emits events for all state changes (initialize, deposit, withdraw, lock_funds)
+  7. **Storage Versioning**: `StorageVersion` key, `assert_supported_storage_version` helper for compatibility/migrations
 
 ---
 ## 2. Component Functionality and Tech Stack
@@ -86,40 +89,51 @@ pocketpay-contracts/
 1. Admin calls `initialize(env, admin, token)`
 2. `admin.require_auth()` verifies admin signature
 3. Check if `Initialized` is already set → panic if true
-4. Store `Admin`, `Initialized`, `Token` in **instance storage**
+4. Store `Admin`, `Initialized`, `Token`, and `StorageVersion` (set to `1`) in **instance storage**
 5. Emit `initialize` event with admin address as topic 1 and token as payload
 
 #### Journey 2: Deposit Tokens
 1. User calls `deposit(env, user, amount)`
 2. `assert_initialized()` checks contract is set up
-3. `user.require_auth()` verifies user signature
-4. Validate `amount > 0` → panic if not
-5. Retrieve SAC token address and create `token::Client`
-6. `token_client.transfer(user, contract_address, amount)` moves tokens to contract
-7. Update user's `Balance(user)` (persistent storage) by adding `amount`
-8. Emit `deposit` event with user address as topic 1 and `(amount, new_balance)` as payload
+3. `assert_supported_storage_version()` verifies storage compatibility
+4. `user.require_auth()` verifies user signature
+5. Validate `amount > 0` → panic if not
+6. Retrieve SAC token address and create `token::Client`
+7. `token_client.transfer(user, contract_address, amount)` moves tokens to contract
+8. Update user's `Balance(user)` (persistent storage) by adding `amount`
+9. Emit `deposit` event with user address as topic 1 and `(amount, new_balance)` as payload
 
 #### Journey 3: Withdraw Tokens
 1. User calls `withdraw(env, user, amount)`
-2. `assert_initialized()` and `user.require_auth()` pass
-3. Validate `amount > 0`
-4. Calculate available balance = deposited `Balance(user)` + sum of matured `LockEntry.amount` (where `current_time >= unlock_time`)
-5. Panic if `amount > available`
-6. `token_client.transfer(contract_address, user, amount)` sends tokens to user
-7. Subtract amount from `Balance(user)` first, then from matured locks if needed
-8. Update `Balance(user)` and `Locks(user)` in persistent storage
-9. Emit `withdraw` event with user address as topic 1 and `(amount, new_balance)` as payload
+2. `assert_initialized()` and `assert_supported_storage_version()` pass
+3. `user.require_auth()` verifies user signature
+4. Validate `amount > 0`
+5. Calculate available balance = deposited `Balance(user)` + sum of matured `LockEntry.amount` (where `current_time >= unlock_time`)
+6. Panic if `amount > available`
+7. `token_client.transfer(contract_address, user, amount)` sends tokens to user
+8. Subtract amount from `Balance(user)` first, then from matured locks if needed
+9. Update `Balance(user)` and `Locks(user)` in persistent storage
+10. Emit `withdraw` event with user address as topic 1 and `(amount, new_balance)` as payload
 
 #### Journey 4: Lock Funds
 1. User calls `lock_funds(env, user, amount, unlock_time)`
-2. `assert_initialized()`, `user.require_auth()` pass
-3. Validate `amount > 0`, `unlock_time > env.ledger().timestamp()`, `amount <= Balance(user)`
-4. Retrieve `NextLockId(user)` (default to 1 if not set)
-5. Create new `LockEntry { id, amount, unlock_time }` and add to `Locks(user)`
-6. Subtract `amount` from `Balance(user)`
-7. Update `Balance(user)`, `Locks(user)`, and `NextLockId(user)` (increment by 1) in persistent storage
-8. Calculate new_locked as sum of all lock amounts
-9. Emit `lock` event with user address as topic 1 and `(amount, unlock_time, new_balance, new_locked)` as payload
+2. `assert_initialized()`, `assert_supported_storage_version()` pass
+3. `user.require_auth()` verifies user signature
+4. Validate `amount > 0`, `unlock_time > env.ledger().timestamp()`, `amount <= Balance(user)`
+5. Retrieve `NextLockId(user)` (default to 1 if not set)
+6. Create new `LockEntry { id, amount, unlock_time }` and add to `Locks(user)`
+7. Subtract `amount` from `Balance(user)`
+8. Update `Balance(user)`, `Locks(user)`, and `NextLockId(user)` (increment by 1) in persistent storage
+9. Calculate new_locked as sum of all lock amounts
+10. Emit `lock` event with user address as topic 1 and `(amount, unlock_time, new_balance, new_locked)` as payload
+
+#### Journey 5: Query Balances and Lock State
+1. Any caller (no auth needed) calls `get_balance(env, user)`, `get_locked_balance(env, user)`, or `can_withdraw(env, user)`.
+2. `assert_initialized()` and `assert_supported_storage_version()` pass.
+3. For `get_balance`: returns deposited balance plus matured locks.
+4. For `get_locked_balance`: returns sum of unmatured locks.
+5. For `can_withdraw`: returns true if any matured locks exist.
+6. No storage changes, no events emitted.
 
 ---
 ## 4. Coding Standards, Auth, and Data Validation
@@ -133,6 +147,8 @@ pocketpay-contracts/
 - **`initialize`**: Requires admin address authorization
 - **All state-changing functions** (`deposit`, `withdraw`, `lock_funds`): Require user address authorization via `Address::require_auth()`
 - **Read-only functions** (`get_balance`, `get_locked_balance`, `can_withdraw`): No authorization needed (public queries)
+
+See [Authorization Boundaries](authorization-boundaries.md) for detailed documentation!
 
 ### Data Validation
 - **Amount checks**: All functions accepting an amount panic if `amount <= 0`
@@ -160,6 +176,8 @@ pocketpay-contracts/
 2. **Per-User Lock Entries**: Multiple locks per user, each with independent unlock time
 3. **Atomic Execution**: Soroban transactions are atomic, so failed operations leave no state changes
 4. **Separate Instance/Persistent Storage**: Instance storage for admin/init/token; persistent storage for user data
+5. **Events Emission**: On-chain events for state changes, with strict event schema tests for compatibility
+6. **Storage Versioning**: Version marker and version checks on all calls for safe future migrations
 
 ### Technical Debt
 1. **No custom error enum**: Uses panic strings, which are harder for off-chain SDKs to handle consistently

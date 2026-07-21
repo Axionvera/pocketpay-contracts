@@ -1116,3 +1116,104 @@ fn test_invalid_storage_version_fails_safely() {
     // Try to deposit - should panic
     client.mock_all_auths().deposit(&user, &100);
 }
+
+#[test]
+fn test_withdraw_partial_from_matured_lock_leaves_remaining() {
+    let env = test_env();
+    let (contract_id, client) = init_contract(&env);
+    let (env, _admin, client, _token_client, token_admin) = test_token(env, client);
+
+    let user = new_user(&env);
+    token_admin.mint(&user, &1000);
+
+    set_ledger_timestamp(&env, 1000);
+    deposit_balance(&client, &user, 200);
+    
+    // Lock 150, unlock at 4000
+    client.mock_all_auths().lock_funds(&user, &150, &4000);
+    assert_eq!(client.get_balance(&user), 50);
+    assert_eq!(client.get_locked_balance(&user), 150);
+
+    // Time passes to 4000, lock matures
+    set_ledger_timestamp(&env, 4000);
+    assert_eq!(client.can_withdraw(&user), true);
+    assert_eq!(client.get_locked_balance(&user), 0);
+    assert_eq!(client.get_balance(&user), 200); // 50 + 150
+
+    // Withdraw 175 (uses 50 available, then 125 of matured lock)
+    withdraw_balance(&client, &user, 175);
+    assert_eq!(client.get_balance(&user), 25);
+    
+    // Check remaining lock: the remaining 25 should still be present as a lock (but not counted as locked since it's matured)
+    use crate::DataKey;
+    let locks: soroban_sdk::Vec<crate::LockEntry> = env
+        .storage()
+        .persistent()
+        .get(&DataKey::Locks(user))
+        .unwrap();
+    assert_eq!(locks.len(), 1);
+    assert_eq!(locks.get(0).unwrap().amount, 25);
+}
+
+#[test]
+fn test_multiple_users_multiple_locks_isolation() {
+    let env = test_env();
+    let (_contract_id, client) = init_contract(&env);
+    let (env, _admin, client, _token_client, token_admin) = test_token(env, client);
+
+    let alice = new_user(&env);
+    let bob = new_user(&env);
+    token_admin.mint(&alice, &1000);
+    token_admin.mint(&bob, &1000);
+
+    set_ledger_timestamp(&env, 1000);
+
+    // Alice's operations
+    deposit_balance(&client, &alice, 500);
+    client.mock_all_auths().lock_funds(&alice, &200, &3000);
+    client.mock_all_auths().lock_funds(&alice, &150, &5000);
+    assert_eq!(client.get_balance(&alice), 150); // 500 - 200 -150
+    assert_eq!(client.get_locked_balance(&alice), 350);
+
+    // Bob's operations
+    deposit_balance(&client, &bob, 600);
+    client.mock_all_auths().lock_funds(&bob, &300, &4000);
+    client.mock_all_auths().lock_funds(&bob, &100, &6000);
+    assert_eq!(client.get_balance(&bob), 200);
+    assert_eq!(client.get_locked_balance(&bob), 400);
+
+    // Time passes to 3500: Alice's first lock matures
+    set_ledger_timestamp(&env, 3500);
+    assert_eq!(client.get_balance(&alice), 350); // 150 + 200
+    assert_eq!(client.get_locked_balance(&alice), 150);
+    // Bob's balance should remain unchanged
+    assert_eq!(client.get_balance(&bob), 200);
+    assert_eq!(client.get_locked_balance(&bob), 400);
+}
+
+#[test]
+fn test_multiple_failed_operations_do_not_affect_locks() {
+    let env = test_env();
+    let (_contract_id, client) = init_contract(&env);
+    let (env, _admin, client, _token_client, token_admin) = test_token(env, client);
+
+    let user = new_user(&env);
+    token_admin.mint(&user, &1000);
+    set_ledger_timestamp(&env, 1000);
+
+    deposit_balance(&client, &user, 400);
+    client.mock_all_auths().lock_funds(&user, &150, &5000);
+    client.mock_all_auths().lock_funds(&user, &100, &6000);
+    let pre_balance = client.get_balance(&user);
+    let pre_locked = client.get_locked_balance(&user);
+
+    // Multiple invalid operations:
+    let _ = client.try_deposit(&user, &0);
+    let _ = client.try_withdraw(&user, &1000);
+    let _ = client.try_lock_funds(&user, &200, &200); // Past time
+    let _ = client.try_lock_funds(&user, &300, &7000); // Insufficient balance (150 available only)
+
+    // Verify balances unchanged
+    assert_eq!(client.get_balance(&user), pre_balance);
+    assert_eq!(client.get_locked_balance(&user), pre_locked);
+}

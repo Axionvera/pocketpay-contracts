@@ -44,6 +44,12 @@ pub fn set_ledger_timestamp(env: &Env, timestamp: u64) {
     env.ledger().set_timestamp(timestamp);
 }
 
+/// Withdraws a balance for a user.
+/// Note: Contract must already be initialized and user must have sufficient balance.
+pub fn withdraw_balance(client: &SavingsVaultClient, user: &Address, amount: i128) {
+    client.withdraw(user, &amount);
+}
+
 pub fn setup() -> (Env, Address, SavingsVaultClient<'static>) {
     let env = Env::default();
     env.mock_all_auths();
