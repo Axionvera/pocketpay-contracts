@@ -63,7 +63,12 @@
 
 #![no_std]
 
-use soroban_sdk::{contract, contractimpl, contracttype, log, symbol_short, token, Address, Env, Symbol, Vec};
+use soroban_sdk::{
+    contract, contractimpl, contracttype, log, symbol_short, token, Address, Env, Symbol, Vec,
+};
+
+/// Maximum number of lock records returned by [`SavingsVault::list_locks`] per call.
+const MAX_LOCK_PAGE_SIZE: u32 = 50;
 
 // ---------------------------------------------------------------------------
 // Structs
@@ -158,6 +163,13 @@ impl SavingsVault {
         }
     }
 
+    fn load_locks(env: &Env, user: Address) -> Vec<LockEntry> {
+        env.storage()
+            .persistent()
+            .get(&DataKey::Locks(user))
+            .unwrap_or_else(|| Vec::new(env))
+    }
+
     // -----------------------------------------------------------------------
     // Initialization
     // -----------------------------------------------------------------------
@@ -219,7 +231,7 @@ impl SavingsVault {
         env.storage().instance().set(&DataKey::Token, &token);
 
         // Emit initialize event
-        let topics = (symbol_short!("initialize"), admin.clone());
+        let topics = (Symbol::new(&env, "initialize"), admin.clone());
         env.events().publish(topics, token.clone());
 
         log!(&env, "Savings Vault initialized with admin: {}", admin);
@@ -510,11 +522,7 @@ impl SavingsVault {
             .get(&DataKey::Balance(user.clone()))
             .unwrap_or(0);
 
-        let locks: Vec<LockEntry> = env
-            .storage()
-            .persistent()
-            .get(&DataKey::Locks(user))
-            .unwrap_or_else(|| Vec::new(&env));
+        let locks = Self::load_locks(&env, user);
 
         let current_time = env.ledger().timestamp();
         let mut matured_amount: i128 = 0;
@@ -686,11 +694,7 @@ impl SavingsVault {
     /// ```
     pub fn get_locked_balance(env: Env, user: Address) -> i128 {
         Self::assert_initialized(&env);
-        let locks: Vec<LockEntry> = env
-            .storage()
-            .persistent()
-            .get(&DataKey::Locks(user))
-            .unwrap_or_else(|| Vec::new(&env));
+        let locks = Self::load_locks(&env, user);
 
         let current_time = env.ledger().timestamp();
         let mut total_locked: i128 = 0;
@@ -747,11 +751,7 @@ impl SavingsVault {
     /// ```
     pub fn can_withdraw(env: Env, user: Address) -> bool {
         Self::assert_initialized(&env);
-        let locks: Vec<LockEntry> = env
-            .storage()
-            .persistent()
-            .get(&DataKey::Locks(user))
-            .unwrap_or_else(|| Vec::new(&env));
+        let locks = Self::load_locks(&env, user);
 
         let current_time = env.ledger().timestamp();
         for lock in locks.iter() {
@@ -761,6 +761,73 @@ impl SavingsVault {
         }
 
         false
+    }
+
+    /// Get a single lock record for a user by lock ID.
+    ///
+    /// Returns the stored [`LockEntry`] when a matching record exists. Lock IDs are
+    /// assigned by [`lock_funds`](Self::lock_funds) and are unique per user.
+    ///
+    /// # Arguments
+    ///
+    /// * `env` - The Soroban environment
+    /// * `user` - The user's address
+    /// * `lock_id` - The lock ID returned from `lock_funds`
+    ///
+    /// # Returns
+    ///
+    /// `Some(LockEntry)` when the lock exists; `None` when the user has no matching lock.
+    ///
+    /// # Authorization
+    ///
+    /// No authorization required (read-only operation).
+    pub fn get_lock(env: Env, user: Address, lock_id: u64) -> Option<LockEntry> {
+        Self::assert_initialized(&env);
+        let locks = Self::load_locks(&env, user);
+        locks
+            .iter()
+            .find(|lock| lock.id == lock_id)
+    }
+
+    /// List lock records for a user with offset/limit pagination.
+    ///
+    /// Returns a page of stored lock entries in creation order (oldest first).
+    /// Both active and matured entries still present in storage are included.
+    ///
+    /// # Arguments
+    ///
+    /// * `env` - The Soroban environment
+    /// * `user` - The user's address
+    /// * `offset` - Number of records to skip from the start of the list
+    /// * `limit` - Maximum records to return (capped at [`MAX_LOCK_PAGE_SIZE`])
+    ///
+    /// # Returns
+    ///
+    /// A vector of up to `limit` lock entries (after capping). Returns an empty vector
+    /// when the user has no locks, when `limit` is zero, or when `offset` is past the end.
+    ///
+    /// # Authorization
+    ///
+    /// No authorization required (read-only operation).
+    pub fn list_locks(env: Env, user: Address, offset: u32, limit: u32) -> Vec<LockEntry> {
+        Self::assert_initialized(&env);
+        if limit == 0 {
+            return Vec::new(&env);
+        }
+
+        let page_limit = limit.min(MAX_LOCK_PAGE_SIZE);
+        let locks = Self::load_locks(&env, user);
+        let total = locks.len();
+        if offset >= total {
+            return Vec::new(&env);
+        }
+
+        let end = offset.saturating_add(page_limit).min(total);
+        let mut page = Vec::new(&env);
+        for i in offset..end {
+            page.push_back(locks.get(i).unwrap());
+        }
+        page
     }
 }
 
