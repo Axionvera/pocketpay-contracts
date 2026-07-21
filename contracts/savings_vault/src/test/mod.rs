@@ -168,17 +168,50 @@ fn test_withdraw() {
 }
 
 #[test]
+fn test_withdraw_returns_tokens_to_user() {
+    let (env, contract_id, client) = setup();
+    let (env, _admin, client, token_client, token_admin) = test_token(env, contract_id, client);
+    let user = Address::generate(&env);
+
+    // Full token-custody round-trip: the user funds their wallet, deposits into the
+    // vault (tokens leave the wallet), then withdraws (tokens return). Existing tests
+    // only check the internal balance; this asserts the real SAC token balance moves
+    // back to the user, proving withdrawals return actual token custody, not just
+    // internal accounting.
+    token_admin.mint(&user, &1000);
+    assert_eq!(token_client.balance(&user), 1000);
+
+    client.deposit(&user, &400);
+    assert_eq!(
+        token_client.balance(&user),
+        600,
+        "deposit moves tokens into the vault"
+    );
+
+    client.withdraw(&user, &400);
+    assert_eq!(
+        token_client.balance(&user),
+        1000,
+        "withdrawal returns tokens to the user"
+    );
+    assert_eq!(client.get_balance(&user), 0);
+}
+
+#[test]
 fn test_withdraw_entire_balance() {
     let (env, contract_id, client) = setup();
     let (env, _admin, client, token_client, token_admin) = test_token(env, contract_id, client);
     let user = Address::generate(&env);
     let deposit_amount = 100;
 
-    // Deposit now performs real token transfer
+    // Deposit performs a real token transfer, so the user must hold tokens first.
+    token_admin.mint(&user, &deposit_amount);
     client.deposit(&user, &deposit_amount);
 
     client.withdraw(&user, &deposit_amount);
     assert_eq!(client.get_balance(&user), 0);
+    // The full amount is returned to the user's token balance.
+    assert_eq!(token_client.balance(&user), deposit_amount);
 }
 
 #[test]
