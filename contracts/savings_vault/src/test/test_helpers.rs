@@ -23,11 +23,13 @@ pub fn new_user(env: &Env) -> Address {
 }
 
 /// Deposits a balance for a user.
+/// Note: Contract must already be initialized.
 pub fn deposit_balance(client: &SavingsVaultClient, user: &Address, amount: i128) {
     client.deposit(user, &amount);
 }
 
 /// Seeds multiple balances for a user.
+/// Note: Contract must already be initialized.
 pub fn seed_balances(client: &SavingsVaultClient, user: &Address, amounts: &[i128]) {
     for amt in amounts {
         client.deposit(user, amt);

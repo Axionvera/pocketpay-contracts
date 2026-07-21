@@ -6,9 +6,7 @@
 
 This project is currently intended for development, learning, and Stellar testnet usage. It is **not production-ready or mainnet-ready**.
 
-The savings vault currently uses internal balance tracking: `deposit`, `withdraw`, and locking operations update accounting records stored by the contract, but they do not move or custody XLM or other tokens. The contract should therefore **not be treated as a real token custody contract**.
-
-Supporting real asset deposits and withdrawals in the future may require integration with a Stellar Asset Contract (SAC), including explicit token transfer and custody behavior. See [Known Limitations](#known-limitations) for other current constraints.
+The savings vault uses Stellar Asset Contract (SAC) integration for real token custody: `deposit` transfers tokens from the user to the contract, and `withdraw` transfers tokens from the contract to the user. Internal balance tracking ensures that user balances are always backed by tokens in the contract's custody.
 ## Security Considerations
 
 > **This contract is for educational and testnet use.** Review the following before any mainnet deployment.
@@ -27,13 +25,11 @@ See the [Admin Role](docs/admin-role.md) document for details on what the `initi
 | `get_locked_balance(user)` | Query locked balance |
 | `can_withdraw(user)` | Check if locked funds are withdrawable |
 
-### Deposit and custody limitation
+### Deposit and custody details
 
-> **Deposits currently update internal contract storage only.** Calling `deposit` increases the user's recorded balance for the vault's accounting, but it does not move real XLM, a Stellar Asset Contract (SAC) asset, or any other token into contract custody.
+> **Deposits and withdrawals use real token custody via SAC.** When a user calls `deposit`, tokens are transferred from the user to the contract and their internal balance is increased. When a user calls `withdraw`, the contract checks their available balance (deposited + matured locked), transfers tokens to the user, and then updates balances/locks accordingly.
 
-An **internal balance** is a number maintained by this contract and used by its deposit, withdrawal, and locking logic. **Real token custody** requires an on-chain asset transfer that moves tokens between addresses and ensures the recorded balance is backed by assets held for the user. That transfer and custody layer is not implemented yet, so the current internal balances must not be treated as proof of deposited or custodied assets.
-
-Future SAC integration is planned to support real asset transfers and custody-backed balances.
+The contract uses **internal balance tracking** (to keep track of user-specific balances and locks) alongside **SAC token transfers** for real custody.
 
 ---
 
@@ -216,6 +212,7 @@ stellar-pocketpay-contracts/
 - [Architecture Documentation](docs/architecture.md) – Overview of project structure, state management, storage, SDK integration, and future extension points.
 - [Event Schema Documentation](docs/events.md) – Overview of event names, topics, payload schemas, and JSON examples for vault actions.
 - [Vault Contract ID Handoff](docs/contract-id-handoff.md) - How to pass a deployed vault contract ID safely to SDK configuration and the mobile app.
+- [Audit Readiness Review](docs/audit-readiness.md) - Pre-audit review covering audit blockers, missing tests, risky assumptions, and unresolved design questions.
 
 ---
 
@@ -241,13 +238,13 @@ stellar-pocketpay-contracts/
 - Admin and initialization flags use **instance** storage (tied to contract lifetime).
 
 ### Known Limitations
-- **Internal accounting only; no real token custody**: Deposits update contract storage but do not transfer real XLM, SAC assets, or other tokens into custody. Internal balances are accounting entries and are not proof that the contract holds corresponding assets. Future SAC integration is planned to support real asset transfers and custody-backed balances.
-- **Single unlock time**: Locking funds multiple times overwrites the previous unlock timestamp. A production version might use per-lock entries.
 - **No admin recovery**: There is no mechanism for the admin to recover or migrate funds.
 - **No upgrade mechanism**: The contract does not implement `upgrade()`. See
   [docs/upgrade-strategy.md](docs/upgrade-strategy.md) for research into possible upgrade paths.
 - **No pause / emergency stop**: There is no mechanism to halt operations in an emergency.
   See [docs/pause-design.md](docs/pause-design.md) for research and trade-offs.
+- **No on-chain events**: No events are emitted for state changes (deposit, withdraw, lock, unlock). See [docs/events.md](docs/events.md) for planned event schemas.
+- **No custom error enum**: Contract uses panic strings instead of a structured error enum for off-chain callers.
 
 ---
 

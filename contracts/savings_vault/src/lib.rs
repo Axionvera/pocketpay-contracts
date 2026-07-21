@@ -59,6 +59,16 @@ pub struct SavingsVault;
 #[contractimpl]
 impl SavingsVault {
     // -----------------------------------------------------------------------
+    // Helpers
+    // -----------------------------------------------------------------------
+
+    fn assert_initialized(env: &Env) {
+        if !env.storage().instance().has(&DataKey::Initialized) {
+            panic!("Contract is not initialized");
+        }
+    }
+
+    // -----------------------------------------------------------------------
     // Initialization
     // -----------------------------------------------------------------------
 
@@ -69,6 +79,7 @@ impl SavingsVault {
     ///
     /// # Arguments
     /// * `admin` - The address that will be recorded as the contract admin.
+    /// * `token` - The address of the Stellar Asset Contract (SAC) to use.
     ///
     /// # Panics
     /// Panics if the contract has already been initialized.
@@ -100,8 +111,10 @@ impl SavingsVault {
     /// * `amount` - The amount to deposit (must be > 0).
     ///
     /// # Panics
-    /// Panics if `amount` is zero or negative.
+    /// Panics if the contract is not initialized, `amount` is zero or negative,
+    /// or the token transfer fails.
     pub fn deposit(env: Env, user: Address, amount: i128) {
+        Self::assert_initialized(&env);
         // Authorization: only the user can deposit on their own behalf
         user.require_auth();
 
@@ -109,6 +122,14 @@ impl SavingsVault {
         if amount <= 0 {
             panic!("Deposit amount must be greater than zero");
         }
+
+        // Get token client
+        let token = env.storage().instance().get(&DataKey::Token).unwrap();
+        let token_client = token::Client::new(&env, &token);
+        let contract_address = env.current_contract_address();
+
+        // Transfer tokens from user to contract
+        token_client.transfer(&user, &contract_address, &amount);
 
         // Read current balance (default to 0 if none exists)
         let current_balance: i128 = env
@@ -136,10 +157,6 @@ impl SavingsVault {
     // Withdrawals
     // -----------------------------------------------------------------------
 
-    // -----------------------------------------------------------------------
-    // Withdrawals
-    // -----------------------------------------------------------------------
-
     /// Withdraw funds from the caller's vault.
     ///
     /// # Arguments
@@ -147,9 +164,11 @@ impl SavingsVault {
     /// * `amount` - The amount to withdraw (must be > 0).
     ///
     /// # Panics
+    /// - If the contract is not initialized.
     /// - If `amount` is zero or negative.
     /// - If `amount` exceeds the user's available balance (including matured locks).
     pub fn withdraw(env: Env, user: Address, amount: i128) {
+        Self::assert_initialized(&env);
         // Authorization
         user.require_auth();
 
@@ -247,7 +266,11 @@ impl SavingsVault {
     /// Available balance includes regular deposited balance plus matured locks.
     ///
     /// Returns `0` if the user has never deposited.
+    ///
+    /// # Panics
+    /// If the contract is not initialized.
     pub fn get_balance(env: Env, user: Address) -> i128 {
+        Self::assert_initialized(&env);
         let deposited_balance: i128 = env
             .storage()
             .persistent()
@@ -287,10 +310,12 @@ impl SavingsVault {
     /// * `unlock_time` - Unix timestamp (seconds) when the funds unlock.
     ///
     /// # Panics
+    /// - If the contract is not initialized.
     /// - If `amount` is zero or negative.
     /// - If `amount` exceeds the user's available balance.
     /// - If `unlock_time` is in the past.
     pub fn lock_funds(env: Env, user: Address, amount: i128, unlock_time: u64) -> u64 {
+        Self::assert_initialized(&env);
         // Authorization
         user.require_auth();
 
@@ -369,7 +394,11 @@ impl SavingsVault {
     /// Get the locked balance for a user.
     ///
     /// Returns the sum of all active (unmatured) locks.
+    ///
+    /// # Panics
+    /// If the contract is not initialized.
     pub fn get_locked_balance(env: Env, user: Address) -> i128 {
+        Self::assert_initialized(&env);
         let locks: Vec<LockEntry> = env
             .storage()
             .persistent()
@@ -393,7 +422,11 @@ impl SavingsVault {
     /// - The current ledger timestamp is >= the unlock time.
     ///
     /// Returns `false` otherwise (including when there are no locked funds).
+    ///
+    /// # Panics
+    /// If the contract is not initialized.
     pub fn can_withdraw(env: Env, user: Address) -> bool {
+        Self::assert_initialized(&env);
         let locks: Vec<LockEntry> = env
             .storage()
             .persistent()
