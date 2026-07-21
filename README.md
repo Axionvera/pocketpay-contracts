@@ -219,6 +219,7 @@ stellar-pocketpay-contracts/
 - [Vault Contract ID Handoff](docs/contract-id-handoff.md) - How to pass a deployed vault contract ID safely to SDK configuration and the mobile app.
 - [Documentation Style Guide](docs/docs-style-guide.md) — Conventions for Testnet wording, avoiding production claims, placeholders, command formatting, and linking related docs.
 - [Sample Vault Interaction Walkthrough](docs/walkthrough.md) — End-to-end deploy, deposit, lock, query, and withdraw example with expected state changes and current limitations.
+- [Balance Reconciliation Design Note](docs/balance-reconciliation.md) — How internal accounting should reconcile with real token balances once SAC integration is implemented, including failure modes and invariants tests must enforce.
 
 ---
 
