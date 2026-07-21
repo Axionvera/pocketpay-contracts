@@ -93,6 +93,7 @@ These boundaries maintain a clean separation between **on‑chain logic** (this 
 
 - The **README.md** provides quick‑start guides for building, testing, and deploying the contract.
 - This **architecture.md** offers a deeper dive into internal design.
+- [**sdk-contract-sequence.md**](sdk-contract-sequence.md) shows the end‑to‑end request flow (mobile → SDK → Soroban RPC → vault contract) for balance queries, deposits, withdrawals, and error paths.
 - Additional module‑level docs (e.g., `admin-role.md`) cover specific responsibilities.
 
 Refer to the **Documentation** section of the README for links to all docs.
