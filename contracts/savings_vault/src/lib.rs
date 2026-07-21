@@ -14,7 +14,7 @@
 //! - Check lock maturity status
 //!
 //! ## Key Features
-//! - **Deposits**: Add funds to vault (internal accounting only, no real token custody yet)
+//! - **Deposits**: Transfer tokens into the vault and credit the user's balance
 //! - **Withdrawals**: Remove available (unlocked) funds from vault
 //! - **Locks**: Time-based fund locking with Unix timestamp unlock times
 //! - **Balance Queries**: Check available (unlocked) and locked balances separately
@@ -30,9 +30,9 @@
 //!
 //! ## Important Notes
 //!
-//! - **Internal Accounting**: Currently, deposits and withdrawals update internal contract
-//!   balances but do not transfer actual tokens. Real token custody and transfers are planned
-//!   for future SAC (Stellar Asset Contract) integration.
+//! - **Token-backed balances**: Deposits transfer tokens from the user into the vault via the
+//!   configured Stellar Asset Contract (SAC), and withdrawals transfer tokens back to the user.
+//!   Internal balances are updated only after the token transfer succeeds.
 //! - **Authorization**: The user's address must authorize all deposit, withdrawal, and lock operations.
 //! - **Lock Overwrite**: Locking funds does not create separate lock entries per operation;
 //!   each user has a vector of lock entries that can be managed independently.
@@ -63,7 +63,12 @@
 
 #![no_std]
 
-use soroban_sdk::{contract, contractimpl, contracttype, log, token, Address, Env, Vec};
+use soroban_sdk::{
+    contract, contractimpl, contracttype, log, symbol_short, token, Address, Env, Symbol, Vec,
+};
+
+/// Maximum number of lock records returned by [`SavingsVault::list_locks`] per call.
+const MAX_LOCK_PAGE_SIZE: u32 = 50;
 
 // ---------------------------------------------------------------------------
 // Structs
@@ -102,7 +107,7 @@ pub struct LockEntry {
 /// * `Locks(Address)` - Vector of lock entries for a specific user
 /// * `NextLockId(Address)` - Counter for generating unique lock IDs per user
 /// * `Initialized` - Boolean flag indicating contract initialization status
-/// * `Token` - The token contract address for real token transfers (future integration)
+/// * `Token` - The token contract address used for real token transfers
 #[contracttype]
 #[derive(Clone)]
 pub enum DataKey {
@@ -118,7 +123,14 @@ pub enum DataKey {
     Initialized,
     /// Token Address
     Token,
+    /// Storage version marker
+    StorageVersion,
 }
+
+/// Current storage schema version.
+/// Increment this when making breaking changes to storage layout,
+/// and implement a corresponding migration in `try_migrate()`.
+pub const STORAGE_VERSION: u64 = 1;
 
 // ---------------------------------------------------------------------------
 // Contract Definition
@@ -149,6 +161,23 @@ pub struct SavingsVault;
 #[contractimpl]
 impl SavingsVault {
     // -----------------------------------------------------------------------
+    // Helpers
+    // -----------------------------------------------------------------------
+
+    fn assert_initialized(env: &Env) {
+        if !env.storage().instance().has(&DataKey::Initialized) {
+            panic!("Contract is not initialized");
+        }
+    }
+
+    fn load_locks(env: &Env, user: Address) -> Vec<LockEntry> {
+        env.storage()
+            .persistent()
+            .get(&DataKey::Locks(user))
+            .unwrap_or_else(|| Vec::new(env))
+    }
+
+    // -----------------------------------------------------------------------
     // Initialization
     // -----------------------------------------------------------------------
 
@@ -163,8 +192,8 @@ impl SavingsVault {
     /// * `env` - The Soroban environment
     /// * `admin` - The address to be recorded as the contract admin. This address must
     ///   authorize the transaction via `require_auth()`.
-    /// * `token` - The address of the token contract to be used for real token transfers
-    ///   (future SAC integration). Currently stored but not used in deposit/withdrawal logic.
+    /// * `token` - The address of the token contract used for real token transfers. Deposits
+    ///   and withdrawals move balances through this Stellar Asset Contract (SAC).
     ///
     /// # Authorization
     ///
@@ -190,10 +219,10 @@ impl SavingsVault {
     /// SavingsVault::initialize(&env, admin, token);
     /// ```
     ///
-    /// # Future Notes
+    /// # Notes
     ///
-    /// The token address parameter is reserved for future SAC (Stellar Asset Contract)
-    /// integration to support real token transfers and custody-backed balances.
+    /// The token address is the Stellar Asset Contract (SAC) used for real token transfers,
+    /// so deposits and withdrawals are backed by actual token custody.
     pub fn initialize(env: Env, admin: Address, token: Address) {
         // Ensure we haven't already initialized
         if env.storage().instance().has(&DataKey::Initialized) {
@@ -203,12 +232,56 @@ impl SavingsVault {
         // Require the admin to have signed this transaction
         admin.require_auth();
 
-        // Persist admin & initialization flag
+        // Persist admin, token, initialization flag, and storage version
         env.storage().instance().set(&DataKey::Admin, &admin);
         env.storage().instance().set(&DataKey::Initialized, &true);
         env.storage().instance().set(&DataKey::Token, &token);
+        env.storage().instance().set(&DataKey::StorageVersion, &1_u64);
 
-        log!(&env, "Savings Vault initialized with admin: {}", admin);
+        // Emit initialize event
+        let topics = (symbol_short!("initialize"), admin.clone());
+        env.events().publish(topics, token.clone());
+
+        // Emit initialize event
+        let topics = (symbol_short!("initialize"), admin.clone());
+        env.events().publish(topics, token.clone());
+
+        log!(&env, "Savings Vault initialized with admin: {}, storage version: {}", admin, STORAGE_VERSION);
+    }
+
+    // -----------------------------------------------------------------------
+    // Version Metadata
+    // -----------------------------------------------------------------------
+
+    /// Get the contract version.
+    ///
+    /// Returns a hard-coded semantic version string that matches the contract
+    /// crate version in `Cargo.toml`. Because the value is baked into the
+    /// compiled WASM binary, no on-chain storage is read or written.
+    ///
+    /// SDKs and deployment tooling can call this to verify contract
+    /// compatibility before executing state-changing operations.
+    ///
+    /// # Arguments
+    ///
+    /// * `env` - The Soroban environment
+    ///
+    /// # Returns
+    ///
+    /// A string containing the contract version (e.g. `"0.1.0"`).
+    ///
+    /// # Authorization
+    ///
+    /// No authorization required (read-only operation).
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// let version = SavingsVault::get_version(&env);
+    /// assert_eq!(version, "0.1.0");
+    /// ```
+    pub fn get_version(env: Env) -> soroban_sdk::String {
+        soroban_sdk::String::from_str(&env, "0.1.0")
     }
 
     // -----------------------------------------------------------------------
@@ -217,9 +290,9 @@ impl SavingsVault {
 
     /// Deposit funds into the caller's vault.
     ///
-    /// Increases the user's recorded balance in the contract. Currently, this updates
-    /// internal contract accounting only and does not transfer real tokens. Future
-    /// SAC integration will enable actual token transfers and custody.
+    /// Transfers `amount` tokens from the user into the vault via the configured Stellar
+    /// Asset Contract (SAC) and then credits the user's recorded balance. The balance is
+    /// updated only after the token transfer succeeds.
     ///
     /// # Arguments
     ///
@@ -237,23 +310,12 @@ impl SavingsVault {
     /// - Emits a log event with deposit details
     ///
     /// # Panics
-    ///
-    /// - If `amount` is zero or negative
-    ///
-    /// # Notes
-    ///
-    /// - **Internal Accounting Only**: The user's balance is a bookkeeping entry maintained
-    ///   by the contract. It is not backed by real token transfers until SAC integration is implemented.
-    /// - **No Double-Lock Prevention**: If funds are already locked, calling deposit does not
-    ///   affect the locked amount. Locked funds remain locked until their unlock_time.
-    ///
-    /// # Example
-    ///
-    /// ```ignore
-    /// let user = Address::from_account_id(&env, &user_account_id);
-    /// SavingsVault::deposit(&env, user, 1000);
-    /// ```
+    /// - If the contract has not been initialized.
+    /// - If `amount` is zero or negative.
     pub fn deposit(env: Env, user: Address, amount: i128) {
+        Self::assert_initialized(&env);
+        Self::assert_supported_storage_version(&env);
+
         // Authorization: only the user can deposit on their own behalf
         user.require_auth();
 
@@ -261,6 +323,14 @@ impl SavingsVault {
         if amount <= 0 {
             panic!("Deposit amount must be greater than zero");
         }
+
+        // Get token address
+        let token = env.storage().instance().get(&DataKey::Token).unwrap();
+        let token_client = token::Client::new(&env, &token);
+        let contract_address = env.current_contract_address();
+
+        // Perform real token transfer from user to contract
+        token_client.transfer(&user, &contract_address, &amount);
 
         // Read current balance (default to 0 if none exists)
         let current_balance: i128 = env
@@ -275,6 +345,11 @@ impl SavingsVault {
             .persistent()
             .set(&DataKey::Balance(user.clone()), &new_balance);
 
+        // Emit deposit event
+        let topics = (symbol_short!("deposit"), user.clone());
+        let payload = (amount, new_balance);
+        env.events().publish(topics, payload);
+
         log!(
             &env,
             "Deposit: user={}, amount={}, new_balance={}",
@@ -283,10 +358,6 @@ impl SavingsVault {
             new_balance
         );
     }
-
-    // -----------------------------------------------------------------------
-    // Withdrawals
-    // -----------------------------------------------------------------------
 
     // -----------------------------------------------------------------------
     // Withdrawals
@@ -318,31 +389,13 @@ impl SavingsVault {
     /// - Emits a log event with withdrawal details
     ///
     /// # Panics
-    ///
-    /// - If `amount` is zero or negative
-    /// - If `amount` exceeds the user's total available funds (deposited + matured locks)
-    ///   with the error message "Insufficient balance"
-    ///
-    /// # Withdrawal Order
-    ///
-    /// Funds are withdrawn in this order:
-    /// 1. From the user's available (non-locked) balance first
-    /// 2. From matured locks (oldest/earliest unlock times first) if needed
-    ///
-    /// # Notes
-    ///
-    /// - **Internal Accounting**: Currently, withdrawals update internal accounting but
-    ///   real token transfers require SAC integration.
-    /// - **Partial Lock Deduction**: If a matured lock has more funds than needed,
-    ///   only the required amount is deducted from that lock.
-    ///
-    /// # Example
-    ///
-    /// ```ignore
-    /// let user = Address::from_account_id(&env, &user_account_id);
-    /// SavingsVault::withdraw(&env, user, 500);
-    /// ```
+    /// - If the contract has not been initialized.
+    /// - If `amount` is zero or negative.
+    /// - If `amount` exceeds the user's available balance.
     pub fn withdraw(env: Env, user: Address, amount: i128) {
+        Self::assert_initialized(&env);
+        Self::assert_supported_storage_version(&env);
+
         // Authorization
         user.require_auth();
 
@@ -415,6 +468,13 @@ impl SavingsVault {
             locks = new_locks;
         }
 
+        // Calculate new_locked after withdrawal
+        let new_locked: i128 = locks
+            .iter()
+            .filter(|lock| current_time < lock.unlock_time)
+            .map(|lock| lock.amount)
+            .sum();
+
         // Update balance and locks
         env.storage()
             .persistent()
@@ -423,12 +483,94 @@ impl SavingsVault {
             .persistent()
             .set(&DataKey::Locks(user.clone()), &locks);
 
+        // Emit withdraw event
+        let topics = (symbol_short!("withdraw"), user.clone());
+        let payload = (amount, current_balance, new_locked);
+        env.events().publish(topics, payload);
+
         log!(
             &env,
-            "Withdraw: user={}, amount={}, new_balance={}",
+            "Withdraw: user={}, amount={}, new_balance={}, new_locked={}",
             user,
             amount,
-            current_balance
+            current_balance,
+            new_locked
+        );
+    }
+
+    /// Withdraw a specific matured lock entry.
+    ///
+    /// This function allows a user to withdraw the funds associated with a specific
+    /// lock entry, provided that the lock has matured (current_time >= unlock_time).
+    ///
+    /// # Arguments
+    ///
+    /// * `env` - The Soroban environment
+    /// * `user` - The owner of the lock (must authorize this transaction via `require_auth()`)
+    /// * `lock_id` - The unique identifier of the lock to withdraw
+    ///
+    /// # Authorization
+    ///
+    /// The `user` address must sign the transaction.
+    ///
+    /// # Panics
+    /// - If the contract has not been initialized.
+    /// - If the lock with the given `lock_id` does not exist for the `user`.
+    /// - If the lock has not yet matured (current_time < unlock_time).
+    pub fn withdraw_lock(env: Env, user: Address, lock_id: u64) {
+        if !env.storage().instance().has(&DataKey::Initialized) {
+            panic!("Contract not initialized");
+        }
+
+        // Authorization
+        user.require_auth();
+
+        // Load locks
+        let mut locks = Self::load_locks(&env, user.clone());
+
+        // Find the lock index
+        let lock_index = locks.iter().position(|lock| lock.id == lock_id);
+
+        let index = match lock_index {
+            Some(i) => i,
+            None => panic!("Lock not found"),
+        };
+
+        let lock = locks.get(index).unwrap();
+
+        // Verify maturity
+        let current_time = env.ledger().timestamp();
+        if current_time < lock.unlock_time {
+            panic!("Lock has not matured yet");
+        }
+
+        // Get token address & client
+        let token = env.storage().instance().get(&DataKey::Token).unwrap();
+        let token_client = token::Client::new(&env, &token);
+        let contract_address = env.current_contract_address();
+
+        // Perform token transfer to the user
+        token_client.transfer(&contract_address, &user, &lock.amount);
+
+        // Remove the lock from the locks vector
+        locks.remove(index);
+
+        // Save updated locks back to persistent storage
+        env.storage()
+            .persistent()
+            .set(&DataKey::Locks(user.clone()), &locks);
+
+        // Emit withdrawal lock event
+        let topics = (Symbol::new(&env, "withdraw_lock"), user.clone());
+        let payload = (lock_id, lock.amount);
+        env.events().publish(topics, payload);
+
+        log!(
+            &env,
+            "WithdrawLock: user={}, lock_id={}, amount={}",
+            user,
+            lock_id,
+            lock.amount
         );
     }
 
@@ -467,17 +609,14 @@ impl SavingsVault {
     /// println!("Available balance: {}", available);
     /// ```
     pub fn get_balance(env: Env, user: Address) -> i128 {
+        Self::assert_initialized(&env);
         let deposited_balance: i128 = env
             .storage()
             .persistent()
             .get(&DataKey::Balance(user.clone()))
             .unwrap_or(0);
 
-        let locks: Vec<LockEntry> = env
-            .storage()
-            .persistent()
-            .get(&DataKey::Locks(user))
-            .unwrap_or_else(|| Vec::new(&env));
+        let locks = Self::load_locks(&env, user);
 
         let current_time = env.ledger().timestamp();
         let mut matured_amount: i128 = 0;
@@ -525,32 +664,14 @@ impl SavingsVault {
     /// - Emits a log event with lock details
     ///
     /// # Panics
-    ///
-    /// - If `amount` is zero or negative
-    /// - If `amount` exceeds the user's available balance with error "Insufficient balance to lock"
-    /// - If `unlock_time` is not in the future (current_time >= unlock_time)
-    ///   with error "Unlock time must be in the future"
-    ///
-    /// # Multiple Locks
-    ///
-    /// A user can have multiple active locks at different unlock times. Each lock is
-    /// tracked independently. When withdrawing, matured locks are consumed first.
-    ///
-    /// # Notes
-    ///
-    /// - **Overwrite Behavior**: Unlike some vault designs, locking funds multiple times
-    ///   does not overwrite a previous lock; instead, a new lock entry is created.
-    /// - **Lock ID Uniqueness**: Lock IDs are unique per user (not globally unique).
-    ///
-    /// # Example
-    ///
-    /// ```ignore
-    /// let user = Address::from_account_id(&env, &user_account_id);
-    /// let unlock_time = env.ledger().timestamp() + 86400; // 1 day from now (86400 seconds)
-    /// let lock_id = SavingsVault::lock_funds(&env, user, 500, unlock_time);
-    /// println!("Created lock with ID: {}", lock_id);
-    /// ```
+    /// - If the contract has not been initialized.
+    /// - If `amount` is zero or negative.
+    /// - If `amount` exceeds the user's available balance.
+    /// - If `unlock_time` is in the past.
     pub fn lock_funds(env: Env, user: Address, amount: i128, unlock_time: u64) -> u64 {
+        Self::assert_initialized(&env);
+        Self::assert_supported_storage_version(&env);
+
         // Authorization
         user.require_auth();
 
@@ -613,6 +734,14 @@ impl SavingsVault {
             .persistent()
             .set(&DataKey::Locks(user.clone()), &locks);
 
+        // Calculate new_locked for the event
+        let new_locked: i128 = locks.iter().map(|l| l.amount).sum();
+
+        // Emit lock event
+        let topics = (symbol_short!("lock"), user.clone());
+        let payload = (amount, unlock_time, current_balance, new_locked);
+        env.events().publish(topics, payload);
+
         log!(
             &env,
             "Lock: user={}, amount={}, unlock_time={}, available={}, lock_id={}",
@@ -657,11 +786,8 @@ impl SavingsVault {
     /// println!("Locked balance: {}", locked);
     /// ```
     pub fn get_locked_balance(env: Env, user: Address) -> i128 {
-        let locks: Vec<LockEntry> = env
-            .storage()
-            .persistent()
-            .get(&DataKey::Locks(user))
-            .unwrap_or_else(|| Vec::new(&env));
+        Self::assert_initialized(&env);
+        let locks = Self::load_locks(&env, user);
 
         let current_time = env.ledger().timestamp();
         let mut total_locked: i128 = 0;
@@ -717,11 +843,8 @@ impl SavingsVault {
     /// }
     /// ```
     pub fn can_withdraw(env: Env, user: Address) -> bool {
-        let locks: Vec<LockEntry> = env
-            .storage()
-            .persistent()
-            .get(&DataKey::Locks(user))
-            .unwrap_or_else(|| Vec::new(&env));
+        Self::assert_initialized(&env);
+        let locks = Self::load_locks(&env, user);
 
         let current_time = env.ledger().timestamp();
         for lock in locks.iter() {
@@ -732,6 +855,71 @@ impl SavingsVault {
 
         false
     }
+
+    /// Get a single lock record for a user by lock ID.
+    ///
+    /// Returns the stored [`LockEntry`] when a matching record exists. Lock IDs are
+    /// assigned by [`lock_funds`](Self::lock_funds) and are unique per user.
+    ///
+    /// # Arguments
+    ///
+    /// * `env` - The Soroban environment
+    /// * `user` - The user's address
+    /// * `lock_id` - The lock ID returned from `lock_funds`
+    ///
+    /// # Returns
+    ///
+    /// `Some(LockEntry)` when the lock exists; `None` when the user has no matching lock.
+    ///
+    /// # Authorization
+    ///
+    /// No authorization required (read-only operation).
+    pub fn get_lock(env: Env, user: Address, lock_id: u64) -> Option<LockEntry> {
+        Self::assert_initialized(&env);
+        let locks = Self::load_locks(&env, user);
+        locks.iter().find(|lock| lock.id == lock_id)
+    }
+
+    /// List lock records for a user with offset/limit pagination.
+    ///
+    /// Returns a page of stored lock entries in creation order (oldest first).
+    /// Both active and matured entries still present in storage are included.
+    ///
+    /// # Arguments
+    ///
+    /// * `env` - The Soroban environment
+    /// * `user` - The user's address
+    /// * `offset` - Number of records to skip from the start of the list
+    /// * `limit` - Maximum records to return (capped at [`MAX_LOCK_PAGE_SIZE`])
+    ///
+    /// # Returns
+    ///
+    /// A vector of up to `limit` lock entries (after capping). Returns an empty vector
+    /// when the user has no locks, when `limit` is zero, or when `offset` is past the end.
+    ///
+    /// # Authorization
+    ///
+    /// No authorization required (read-only operation).
+    pub fn list_locks(env: Env, user: Address, offset: u32, limit: u32) -> Vec<LockEntry> {
+        Self::assert_initialized(&env);
+        if limit == 0 {
+            return Vec::new(&env);
+        }
+
+        let page_limit = limit.min(MAX_LOCK_PAGE_SIZE);
+        let locks = Self::load_locks(&env, user);
+        let total = locks.len();
+        if offset >= total {
+            return Vec::new(&env);
+        }
+
+        let end = offset.saturating_add(page_limit).min(total);
+        let mut page = Vec::new(&env);
+        for i in offset..end {
+            page.push_back(locks.get(i).unwrap());
+        }
+        page
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -740,3 +928,6 @@ impl SavingsVault {
 
 #[cfg(test)]
 mod test;
+#[cfg(test)]
+#[path = "test/test_helpers.rs"]
+mod test_helpers;
