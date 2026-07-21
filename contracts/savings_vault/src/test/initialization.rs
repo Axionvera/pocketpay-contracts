@@ -8,13 +8,15 @@ fn test_initialize() {
     let (_id, client) = init_contract(&env);
     let admin = new_user(&env);
     let token = new_user(&env);
-    client.initialize(&admin, &token);
+    // Note: init_contract already initialized it, so calling again will test duplicate guard if desired, 
+    // or test a separate uninitialized instance.
 }
 
 #[test]
 fn test_initialize_success() {
     let env = test_env();
-    let (_id, client) = init_contract(&env);
+    let contract_id = env.register(SavingsVault, ());
+    let client = SavingsVaultClient::new(&env, &contract_id);
     let admin = new_user(&env);
     let token = new_user(&env);
 
@@ -26,10 +28,9 @@ fn test_initialize_success() {
 #[should_panic(expected = "Contract is already initialized")]
 fn test_initialize_twice_panics() {
     let env = test_env();
-    let (_id, client) = init_contract(&env);
+    let (_id, client) = init_contract(&env); // already initialized by helper
     let admin = new_user(&env);
     let token = new_user(&env);
-    client.initialize(&admin, &token);
     client.initialize(&admin, &token);
 }
 
@@ -37,14 +38,15 @@ fn test_initialize_twice_panics() {
 #[should_panic(expected = "Contract is already initialized")]
 fn test_initialize_fails_on_second_call() {
     let env = test_env();
-    let (_id, client) = init_contract(&env);
+    let contract_id = env.register(SavingsVault, ());
+    let client = SavingsVaultClient::new(&env, &contract_id);
     let admin = new_user(&env);
     let token = new_user(&env);
 
     // First init
     client.initialize(&admin, &token);
 
-    // Second init with different admin to ensure overwriting is blocked
+    // Second init with different admin
     let attacker_admin = new_user(&env);
     client.initialize(&attacker_admin, &token);
 }
@@ -53,7 +55,8 @@ fn test_initialize_fails_on_second_call() {
 #[should_panic(expected = "Contract not initialized")]
 fn test_deposit_before_initialization_panics() {
     let env = test_env();
-    let (_id, client) = init_contract(&env);
+    let contract_id = env.register(SavingsVault, ());
+    let client = SavingsVaultClient::new(&env, &contract_id);
     let user = new_user(&env);
     client.deposit(&user, &100);
 }
@@ -62,7 +65,8 @@ fn test_deposit_before_initialization_panics() {
 #[should_panic(expected = "Contract not initialized")]
 fn test_withdraw_before_initialization_panics() {
     let env = test_env();
-    let (_id, client) = init_contract(&env);
+    let contract_id = env.register(SavingsVault, ());
+    let client = SavingsVaultClient::new(&env, &contract_id);
     let user = new_user(&env);
     client.withdraw(&user, &100);
 }
@@ -71,16 +75,17 @@ fn test_withdraw_before_initialization_panics() {
 #[should_panic(expected = "Contract not initialized")]
 fn test_lock_funds_before_initialization_panics() {
     let env = test_env();
-    let (_id, client) = init_contract(&env);
+    let contract_id = env.register(SavingsVault, ());
+    let client = SavingsVaultClient::new(&env, &contract_id);
     let user = new_user(&env);
     client.lock_funds(&user, &100, &1000);
 }
 
 #[test]
 fn test_read_functions_before_initialization() {
-    // Verify that read functions safely return default/0 before initialization
     let env = test_env();
-    let (_id, client) = init_contract(&env);
+    let contract_id = env.register(SavingsVault, ());
+    let client = SavingsVaultClient::new(&env, &contract_id);
     let user = new_user(&env);
     assert_eq!(client.get_balance(&user), 0);
     assert_eq!(client.get_locked_balance(&user), 0);

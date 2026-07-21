@@ -502,7 +502,7 @@ impl SavingsVault {
     /// - If `amount` is zero or negative.
     /// - If `amount` exceeds the user's available balance.
     /// - If `unlock_time` is in the past.
-    pub fn lock_funds(env: Env, user: Address, amount: i128, unlock_time: u64) {
+    pub fn lock_funds(env: Env, user: Address, amount: i128, unlock_time: u64) -> u64 {
         if !env.storage().instance().has(&DataKey::Initialized) {
             panic!("Contract not initialized");
         }
@@ -697,4 +697,5 @@ impl SavingsVault {
 #[cfg(test)]
 mod test;
 #[cfg(test)]
+#[path = "test/test_helpers.rs"]
 mod test_helpers;
