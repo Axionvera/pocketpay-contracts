@@ -6,9 +6,9 @@
 
 This project is currently intended for development, learning, and Stellar testnet usage. It is **not production-ready or mainnet-ready**.
 
-The savings vault currently uses internal balance tracking: `deposit`, `withdraw`, and locking operations update accounting records stored by the contract, but they do not move or custody XLM or other tokens. The contract should therefore **not be treated as a real token custody contract**.
+The savings vault now uses internal balance tracking and real token transfers: `deposit` transfers tokens from the user to the contract, `withdraw` transfers tokens from the contract to the user, and locking operations manage which tokens are available to withdraw.
 
-Supporting real asset deposits and withdrawals in the future may require integration with a Stellar Asset Contract (SAC), including explicit token transfer and custody behavior. See [Known Limitations](#known-limitations) for other current constraints.
+See [Known Limitations](#known-limitations) for other current constraints.
 ## Security Considerations
 
 > **This contract is for educational and testnet use.** Review the following before any mainnet deployment.
@@ -27,13 +27,11 @@ See the [Admin Role](docs/admin-role.md) document for details on what the `initi
 | `get_locked_balance(user)` | Query locked balance |
 | `can_withdraw(user)` | Check if locked funds are withdrawable |
 
-### Deposit and custody limitation
+### Deposit and custody
 
-> **Deposits currently update internal contract storage only.** Calling `deposit` increases the user's recorded balance for the vault's accounting, but it does not move real XLM, a Stellar Asset Contract (SAC) asset, or any other token into contract custody.
+> **Deposits now transfer real tokens into the contract.** Calling `deposit` transfers the specified amount from the user to the contract, and calls `withdraw` transfer the specified amount from the contract to the user. The contract's internal balance tracking ensures withdrawals are limited to unlocked funds.
 
-An **internal balance** is a number maintained by this contract and used by its deposit, withdrawal, and locking logic. **Real token custody** requires an on-chain asset transfer that moves tokens between addresses and ensures the recorded balance is backed by assets held for the user. That transfer and custody layer is not implemented yet, so the current internal balances must not be treated as proof of deposited or custodied assets.
-
-Future SAC integration is planned to support real asset transfers and custody-backed balances.
+The contract uses a Stellar Asset Contract (SAC) to manage token transfers, which is specified during contract initialization via the `token` parameter.
 
 ---
 
@@ -214,12 +212,14 @@ stellar-pocketpay-contracts/
 - [Audit Preparation Checklist](docs/audit-preparation.md) — Checklist of documentation, tests, threat model, and deployment details required before any external security review or audit.
 - [Deployment Environments](docs/deployment-environments.md) — Network configuration for local, testnet, and future mainnet, including RPC URLs, identities, environment variables, and deployment commands.
 - [Contract Error Reference](docs/error-codes.md) - Current savings vault failure conditions and guidance for SDK and mobile callers.
+- [SDK Error Mapping Guide](docs/sdk-error-mapping-guide.md) — Maps contract errors to SDK handling expectations with user-facing and developer-facing examples.
 - [Architecture Documentation](docs/architecture.md) – Overview of project structure, state management, storage, SDK integration, and future extension points.
 - [SDK ↔ Contract Sequence Diagrams](docs/sdk-contract-sequence.md) – Mermaid sequence diagrams for balance query, deposit, withdraw, and error paths across mobile, SDK, Soroban RPC, and the vault contract.
 - [Event Schema Documentation](docs/events.md) – Overview of event names, topics, payload schemas, and JSON examples for vault actions.
 - [Vault Contract ID Handoff](docs/contract-id-handoff.md) - How to pass a deployed vault contract ID safely to SDK configuration and the mobile app.
 - [Documentation Style Guide](docs/docs-style-guide.md) — Conventions for Testnet wording, avoiding production claims, placeholders, command formatting, and linking related docs.
 - [Sample Vault Interaction Walkthrough](docs/walkthrough.md) — End-to-end deploy, deposit, lock, query, and withdraw example with expected state changes and current limitations.
+- [Balance Reconciliation Design Note](docs/balance-reconciliation.md) — How internal accounting should reconcile with real token balances once SAC integration is implemented, including failure modes and invariants tests must enforce.
 
 ---
 

@@ -1,7 +1,6 @@
-use super::*;
-use soroban_sdk::{testutils::Address as _, Address};
 use crate::test::test_helpers::*;
 
+/// Test 1: First initialization succeeds correctly.
 #[test]
 fn test_initialize() {
     let env = test_env();
@@ -20,10 +19,18 @@ fn test_initialize_success() {
     let admin = new_user(&env);
     let token = new_user(&env);
 
-    // Should succeed on first call
+    let contract_id = env.register(SavingsVault, ());
+    let client = SavingsVaultClient::new(&env, &contract_id);
+
+    let admin = Address::generate(&env);
+    let token = Address::generate(&env);
+
+    // First initialization should succeed without error.
     client.initialize(&admin, &token);
 }
 
+/// Test 2: Repeated initialization (idempotency guard) panics.
+/// Ensures the contract rejects subsequent initialization attempts to prevent state overwriting.
 #[test]
 #[should_panic(expected = "Contract is already initialized")]
 fn test_initialize_twice_panics() {
@@ -43,7 +50,10 @@ fn test_initialize_fails_on_second_call() {
     let admin = new_user(&env);
     let token = new_user(&env);
 
-    // First init
+    let admin = Address::generate(&env);
+    let token = Address::generate(&env);
+
+    // First initialization succeeds
     client.initialize(&admin, &token);
 
     // Second init with different admin

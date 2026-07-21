@@ -76,3 +76,22 @@ pub fn test_token(
     let token_admin = token::StellarAssetClient::new(&env, &contract_address);
     (env.clone(), admin, client, token_client, token_admin)
 }
+}
+
+/// A sequence helper to perform a mock deposit combined with a dummy SAC transfer.
+/// This groups repetitive boilerplate that sets up an initial funded state.
+pub fn deposit_with_sac(
+    user: &Address,
+    amount: i128,
+    vault_client: &SavingsVaultClient<'static>,
+    token_admin: &token::StellarAssetClient<'static>,
+    token_client: &token::Client<'static>,
+    contract_address: &Address,
+) {
+    // 1. Mint to user
+    token_admin.mint(user, &10000);
+    // 2. Perform internal accounting deposit
+    vault_client.deposit(user, &amount);
+    // 3. Mimic SAC transfer for custody
+    token_client.transfer(user, contract_address, &amount);
+}
