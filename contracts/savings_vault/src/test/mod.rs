@@ -130,6 +130,31 @@ fn test_deposit_negative_panics() {
 }
 
 #[test]
+fn test_deposit_fails_when_token_transfer_fails() {
+    let env = test_env();
+    let (contract_id, client) = init_contract(&env);
+    let (env, _admin, client, _token_client, token_admin) = test_token(env, contract_id, client);
+    let user = new_user(&env);
+
+    // The user holds fewer tokens than they try to deposit, so the SAC transfer
+    // reverts. The deposit must fail and internal accounting must stay unchanged,
+    // proving balances are only credited after a successful token transfer.
+    token_admin.mint(&user, &50);
+    let before = client.get_balance(&user);
+
+    let result = client.try_deposit(&user, &100);
+    assert!(
+        result.is_err(),
+        "deposit must fail when the token transfer fails"
+    );
+    assert_eq!(
+        client.get_balance(&user),
+        before,
+        "a failed deposit must not mutate the user's balance"
+    );
+}
+
+#[test]
 fn test_get_balance_default_zero_for_new_user_after_initialization() {
     let env = test_env();
     let (contract_id, client) = init_contract(&env);

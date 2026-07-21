@@ -18,8 +18,6 @@
 //! failed operations do not corrupt balances.
 extern crate std;
 
-extern crate std;
-
 use super::test_helpers::*;
 use soroban_sdk::{testutils::Address as _, Address};
 
@@ -102,7 +100,8 @@ fn test_multiple_large_deposits_without_overflow() {
 #[test]
 fn test_withdraw_i128_max_after_deposit_succeeds() {
     let (env, contract_id, client) = setup();
-    let (env, _admin, client, token_client, token_admin) = test_token(env, client);
+    let (env, _admin, client, token_client, token_admin) =
+        test_token(env, contract_id.clone(), client);
     let user = Address::generate(&env);
 
     token_admin.mint(&user, &I128_MAX);
@@ -119,7 +118,8 @@ fn test_withdraw_i128_max_after_deposit_succeeds() {
 #[test]
 fn test_withdraw_over_large_balance_does_not_mutate() {
     let (env, contract_id, client) = setup();
-    let (env, _admin, client, token_client, token_admin) = test_token(env, client);
+    let (env, _admin, client, token_client, token_admin) =
+        test_token(env, contract_id.clone(), client);
     let user = Address::generate(&env);
 
     token_admin.mint(&user, &I128_MAX_MINUS_1);
@@ -146,7 +146,8 @@ fn test_withdraw_over_large_balance_does_not_mutate() {
 #[test]
 fn test_withdraw_partial_from_large_balance_preserves_remainder() {
     let (env, contract_id, client) = setup();
-    let (env, _admin, client, token_client, token_admin) = test_token(env, client);
+    let (env, _admin, client, token_client, token_admin) =
+        test_token(env, contract_id.clone(), client);
     let user = Address::generate(&env);
 
     token_admin.mint(&user, &I128_MAX);
@@ -282,7 +283,8 @@ fn test_large_lock_keeps_available_and_locked_consistent() {
 #[test]
 fn test_large_withdraw_spans_available_and_matured_locks() {
     let (env, contract_id, client) = setup();
-    let (env, _admin, client, token_client, token_admin) = test_token(env, client);
+    let (env, _admin, client, token_client, token_admin) =
+        test_token(env, contract_id.clone(), client);
     let user = Address::generate(&env);
     set_ledger_timestamp(&env, 1_000);
 
