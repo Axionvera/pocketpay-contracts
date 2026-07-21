@@ -4,6 +4,10 @@ This directory is the contract workspace for PocketPay's savings vault logic. It
 
 For project-wide setup, architecture, deployment guidance, and contribution instructions, see the [root README](../../README.md).
 
+## Documentation
+- **Failure Mode Catalogue: [docs/failure-mode-catalogue.md](../../docs/failure-mode-catalogue.md) - Complete list of all known failure modes with test links
+- **All other docs are in the repo root `docs/` directory.
+
 ## Public functions
 
 The contract exposes these public functions in `src/lib.rs`:

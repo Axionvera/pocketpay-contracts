@@ -211,6 +211,7 @@ stellar-pocketpay-contracts/
 ## Documentation
 
 - [Audit Preparation Checklist](docs/audit-preparation.md) — Checklist of documentation, tests, threat model, and deployment details required before any external security review or audit.
+- [Failure Mode Catalogue](docs/failure-mode-catalogue.md) — Complete, organized list of all known failure modes, with expected behavior, affected functions, and links to test coverage.
 - [Deployment Environments](docs/deployment-environments.md) — Network configuration for local, testnet, and future mainnet, including RPC URLs, identities, environment variables, and deployment commands.
 - [Contract Error Reference](docs/error-codes.md) - Current savings vault failure conditions and guidance for SDK and mobile callers.
 - [SDK Error Mapping Guide](docs/sdk-error-mapping-guide.md) — Maps contract errors to SDK handling expectations with user-facing and developer-facing examples.
