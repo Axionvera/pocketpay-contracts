@@ -471,9 +471,17 @@ impl SavingsVault {
             .persistent()
             .set(&DataKey::Locks(user.clone()), &locks);
 
+        // Calculate new_locked for event
+        let current_time = env.ledger().timestamp();
+        let new_locked: i128 = locks
+            .iter()
+            .filter(|l| current_time < l.unlock_time)
+            .map(|l| l.amount)
+            .sum();
+
         // Emit withdraw event
         let topics = (symbol_short!("withdraw"), user.clone());
-        let payload = (amount, current_balance);
+        let payload = (amount, current_balance, new_locked);
         env.events().publish(topics, payload);
 
         log!(

@@ -1024,7 +1024,7 @@ fn test_withdraw_emits_event() {
     let events = env.events().all();
     let event = events.get(events.len() - 1).unwrap();
     let expected_topics = (symbol_short!("withdraw"), user.clone());
-    let expected_payload = (50_i128, 50_i128);
+    let expected_payload = (50_i128, 50_i128, 0_i128);
     assert_eq!(event.topics, expected_topics);
     assert_eq!(event.data, expected_payload);
 }
