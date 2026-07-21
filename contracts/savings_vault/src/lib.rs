@@ -47,7 +47,14 @@ pub enum DataKey {
     Initialized,
     /// Token Address
     Token,
+    /// Storage schema version (monotonically increasing)
+    StorageVersion,
 }
+
+/// Current storage schema version.
+/// Increment this when making breaking changes to storage layout,
+/// and implement a corresponding migration in `try_migrate()`.
+pub const STORAGE_VERSION: u64 = 1;
 
 // ---------------------------------------------------------------------------
 // Contract Definition
@@ -59,6 +66,41 @@ pub struct SavingsVault;
 #[contractimpl]
 impl SavingsVault {
     // -----------------------------------------------------------------------
+    // Migration Helpers
+    // -----------------------------------------------------------------------
+
+    /// Checks and runs any pending storage migrations.
+    /// Should be called at the start of every public contract function
+    /// to ensure storage layout is up-to-date.
+    fn try_migrate(env: &Env) {
+        let current_version: u64 = env.storage().instance().get(&DataKey::StorageVersion).unwrap_or(0);
+        
+        if current_version == STORAGE_VERSION {
+            return; // Already at latest version, no migration needed
+        }
+
+        // Example migration pattern (uncomment and modify for future versions):
+        // match current_version {
+        //     0 => {
+        //         // Migration from version 0 (unversioned) to version 1
+        //         // ... perform migration logic here ...
+        //         env.storage().instance().set(&DataKey::StorageVersion, &1u64);
+        //         log!(env, "Migrated storage from version 0 to version 1");
+        //     }
+        //     // Add more cases for future versions as needed
+        //     _ => panic!("Unsupported storage version: {}", current_version),
+        // }
+
+        // For now, just set version to current if missing (for existing contracts)
+        if current_version == 0 {
+            env.storage().instance().set(&DataKey::StorageVersion, &STORAGE_VERSION);
+            log!(env, "Set initial storage version to {}", STORAGE_VERSION);
+        } else {
+            panic!("Cannot migrate from storage version {} to {}", current_version, STORAGE_VERSION);
+        }
+    }
+
+    // -----------------------------------------------------------------------
     // Initialization
     // -----------------------------------------------------------------------
 
@@ -69,6 +111,7 @@ impl SavingsVault {
     ///
     /// # Arguments
     /// * `admin` - The address that will be recorded as the contract admin.
+    /// * `token` - The address of the Stellar Asset Contract (SAC) token the vault manages.
     ///
     /// # Panics
     /// Panics if the contract has already been initialized.
@@ -81,12 +124,13 @@ impl SavingsVault {
         // Require the admin to have signed this transaction
         admin.require_auth();
 
-        // Persist admin & initialization flag
+        // Persist admin, token, initialization flag, and storage version
         env.storage().instance().set(&DataKey::Admin, &admin);
         env.storage().instance().set(&DataKey::Initialized, &true);
         env.storage().instance().set(&DataKey::Token, &token);
+        env.storage().instance().set(&DataKey::StorageVersion, &STORAGE_VERSION);
 
-        log!(&env, "Savings Vault initialized with admin: {}", admin);
+        log!(&env, "Savings Vault initialized with admin: {}, storage version: {}", admin, STORAGE_VERSION);
     }
 
     // -----------------------------------------------------------------------
@@ -102,6 +146,9 @@ impl SavingsVault {
     /// # Panics
     /// Panics if `amount` is zero or negative.
     pub fn deposit(env: Env, user: Address, amount: i128) {
+        // Run any pending storage migrations first
+        Self::try_migrate(&env);
+
         // Authorization: only the user can deposit on their own behalf
         user.require_auth();
 
@@ -158,6 +205,9 @@ impl SavingsVault {
     /// - If `amount` is zero or negative.
     /// - If `amount` exceeds the user's available balance (including matured locks).
     pub fn withdraw(env: Env, user: Address, amount: i128) {
+        // Run any pending storage migrations first
+        Self::try_migrate(&env);
+
         // Authorization
         user.require_auth();
 
@@ -256,6 +306,9 @@ impl SavingsVault {
     ///
     /// Returns `0` if the user has never deposited.
     pub fn get_balance(env: Env, user: Address) -> i128 {
+        // Run any pending storage migrations first
+        Self::try_migrate(&env);
+
         let deposited_balance: i128 = env
             .storage()
             .persistent()
@@ -299,6 +352,9 @@ impl SavingsVault {
     /// - If `amount` exceeds the user's available balance.
     /// - If `unlock_time` is in the past.
     pub fn lock_funds(env: Env, user: Address, amount: i128, unlock_time: u64) -> u64 {
+        // Run any pending storage migrations first
+        Self::try_migrate(&env);
+
         // Authorization
         user.require_auth();
 
@@ -378,6 +434,9 @@ impl SavingsVault {
     ///
     /// Returns the sum of all active (unmatured) locks.
     pub fn get_locked_balance(env: Env, user: Address) -> i128 {
+        // Run any pending storage migrations first
+        Self::try_migrate(&env);
+
         let locks: Vec<LockEntry> = env
             .storage()
             .persistent()
@@ -402,6 +461,9 @@ impl SavingsVault {
     ///
     /// Returns `false` otherwise (including when there are no locked funds).
     pub fn can_withdraw(env: Env, user: Address) -> bool {
+        // Run any pending storage migrations first
+        Self::try_migrate(&env);
+
         let locks: Vec<LockEntry> = env
             .storage()
             .persistent()

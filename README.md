@@ -202,7 +202,15 @@ stellar-pocketpay-contracts/
             └── test.rs                 # Unit tests
 └── docs/
     ├── admin-role.md                   # Admin role documentation
+    ├── architecture.md                 # Architecture overview
+    ├── contract-id-handoff.md          # Contract ID handoff guide
+    ├── deployment-environments.md      # Deployment environment config
+    ├── error-codes.md                  # Error code reference
+    ├── events.md                       # Event schema documentation
     ├── pause-design.md                 # Pause / emergency stop research
+    ├── storage-migration.md            # Storage versioning and migration guide
+    ├── storage-ttl.md                  # Storage TTL guide
+    ├── troubleshooting.md              # Troubleshooting guide
     └── upgrade-strategy.md             # Upgrade strategy research
 ```
 
@@ -212,6 +220,7 @@ stellar-pocketpay-contracts/
 - [Deployment Environments](docs/deployment-environments.md) — Network configuration for local, testnet, and future mainnet, including RPC URLs, identities, environment variables, and deployment commands.
 - [Contract Error Reference](docs/error-codes.md) - Current savings vault failure conditions and guidance for SDK and mobile callers.
 - [Architecture Documentation](docs/architecture.md) – Overview of project structure, state management, storage, SDK integration, and future extension points.
+- [Storage Migration Guide](docs/storage-migration.md) - How to safely upgrade the contract's storage layout and manage schema versions.
 - [Event Schema Documentation](docs/events.md) – Overview of event names, topics, payload schemas, and JSON examples for vault actions.
 - [Vault Contract ID Handoff](docs/contract-id-handoff.md) - How to pass a deployed vault contract ID safely to SDK configuration and the mobile app.
 
@@ -239,13 +248,9 @@ stellar-pocketpay-contracts/
 - Admin and initialization flags use **instance** storage (tied to contract lifetime).
 
 ### Known Limitations
-- **Internal accounting only; no real token custody**: Deposits update contract storage but do not transfer real XLM, SAC assets, or other tokens into custody. Internal balances are accounting entries and are not proof that the contract holds corresponding assets. Future SAC integration is planned to support real asset transfers and custody-backed balances.
-- **Single unlock time**: Locking funds multiple times overwrites the previous unlock timestamp. A production version might use per-lock entries.
 - **No admin recovery**: There is no mechanism for the admin to recover or migrate funds.
-- **No upgrade mechanism**: The contract does not implement `upgrade()`. See
-  [docs/upgrade-strategy.md](docs/upgrade-strategy.md) for research into possible upgrade paths.
-- **No pause / emergency stop**: There is no mechanism to halt operations in an emergency.
-  See [docs/pause-design.md](docs/pause-design.md) for research and trade-offs.
+- **No upgrade mechanism**: The contract does not implement `upgrade()`, but does have a storage migration system (see [Storage Migration Guide](docs/storage-migration.md)). See [docs/upgrade-strategy.md](docs/upgrade-strategy.md) for research into possible upgrade paths.
+- **No pause / emergency stop**: There is no mechanism to halt operations in an emergency. See [docs/pause-design.md](docs/pause-design.md) for research and trade-offs.
 
 ---
 

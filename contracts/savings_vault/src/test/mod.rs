@@ -17,10 +17,61 @@ use test_helpers::*;
 #[test]
 fn test_initialize() {
     let env = test_env();
-    let (_id, client) = init_contract(&env);
+    let (contract_id, client) = init_contract(&env);
     let admin = new_user(&env);
     let token = new_user(&env);
     client.initialize(&admin, &token);
+
+    // Verify storage version is initialized correctly
+    let stored_version: u64 = env.as_ref().storage().instance().get(&DataKey::StorageVersion).unwrap();
+    assert_eq!(stored_version, STORAGE_VERSION);
+}
+
+// =========================================================================
+// Storage Migration Tests
+// =========================================================================
+
+#[test]
+fn test_storage_version_set_on_init() {
+    let env = test_env();
+    let (contract_id, client) = init_contract(&env);
+    let admin = new_user(&env);
+    let token = new_user(&env);
+    
+    client.initialize(&admin, &token);
+    
+    // Check that the storage version is stored correctly
+    let version: u64 = env.as_ref().storage().instance().get(&DataKey::StorageVersion).unwrap();
+    assert_eq!(version, 1);
+}
+
+#[test]
+fn test_migration_from_unversioned_to_v1() {
+    let env = test_env();
+    let (contract_id, client) = init_contract(&env);
+    let admin = new_user(&env);
+    
+    // Create a test token manually instead of using test_token which re-initializes
+    let token_admin = Address::generate(&env);
+    let token_contract = env.as_ref().register_stellar_asset_contract_v2(token_admin.clone());
+    let token_address = token_contract.address();
+    let token_client = token::Client::new(&env, &token_address);
+    let stellar_asset_client = token::StellarAssetClient::new(&env, &token_address);
+
+    // Simulate an unversioned contract (set up initialization without StorageVersion)
+    admin.require_auth();
+    env.as_ref().storage().instance().set(&DataKey::Admin, &admin);
+    env.as_ref().storage().instance().set(&DataKey::Initialized, &true);
+    env.as_ref().storage().instance().set(&DataKey::Token, &token_address);
+    
+    // Now call a contract function, which should trigger try_migrate and set the version
+    let user = new_user(&env);
+    stellar_asset_client.mint(&user, &1000);
+    client.deposit(&user, &100);
+    
+    // Check that version is now set to 1
+    let version: u64 = env.as_ref().storage().instance().get(&DataKey::StorageVersion).unwrap();
+    assert_eq!(version, 1);
 }
 
 #[test]
