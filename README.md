@@ -227,6 +227,7 @@ stellar-pocketpay-contracts/
 - [Balance Reconciliation Design Note](docs/balance-reconciliation.md) — How internal accounting should reconcile with real token balances once SAC integration is implemented, including failure modes and invariants tests must enforce.
 - [Version Metadata](docs/version-metadata.md) — How the `get_version` read-only function works, how SDKs and deployment scripts should use it, and how to bump the version.
 - [Lock Read Helpers](docs/lock-read-helpers.md) — Response shapes and pagination for `get_lock` and `list_locks`.
+- [Test Coverage Summary](docs/test-coverage.md) — Maps initialization, deposit, withdrawal, and locking behaviours to the tests that cover them, plus known test gaps.
 
 ---
 
