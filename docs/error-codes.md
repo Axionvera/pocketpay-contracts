@@ -96,6 +96,14 @@ balance or locked balance.
 - **Caller/developer action:** Send Unix time in **seconds** and leave a safety
   margin beyond the latest ledger time.
 
+**Zero-duration locks:** Passing `unlock_time == current ledger timestamp`
+(a zero-second duration) is rejected with this same panic, because the check
+is `unlock_time <= current_time`, not `<`. There is no way to create a lock
+that is already matured at creation time; the smallest valid duration is one
+second (`unlock_time == current_time + 1`), and funds locked that way remain
+locked until the ledger timestamp advances to that value — `can_withdraw`
+and `get_balance` still treat it as locked at the moment of creation.
+
 ### Locked funds are not yet withdrawable
 
 - **Current condition:** `can_withdraw(user)` returns `false`; it does not fail.

@@ -7,6 +7,7 @@ mod maximum_amount_boundary;
 mod test_helpers;
 mod initialization;
 mod unauthorized_access;
+mod zero_duration_lock;
 
 use super::*;
 use soroban_sdk::{testutils::Address as _, Address};
