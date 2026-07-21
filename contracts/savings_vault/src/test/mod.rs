@@ -1229,10 +1229,10 @@ fn test_withdraw_emits_event() {
     let (_contract, topics, data) = events.get(events.len() - 1).unwrap();
     let topic0: soroban_sdk::Symbol = topics.get(0).unwrap().try_into_val(&env).unwrap();
     let topic1: Address = topics.get(1).unwrap().try_into_val(&env).unwrap();
-    let (amount, new_balance): (i128, i128) = data.try_into_val(&env).unwrap();
+    let (amount, new_balance, new_locked): (i128, i128, i128) = data.try_into_val(&env).unwrap();
     assert_eq!(topic0, symbol_short!("withdraw"));
     assert_eq!(topic1, user);
-    assert_eq!((amount, new_balance), (50_i128, 50_i128));
+    assert_eq!((amount, new_balance, new_locked), (50_i128, 50_i128, 0_i128));
 }
 
 #[test]

@@ -237,10 +237,6 @@ impl SavingsVault {
         let topics = (symbol_short!("initialize"), admin.clone());
         env.events().publish(topics, token.clone());
 
-        // Emit initialize event
-        let topics = (Symbol::new(&env, "initialize"), admin.clone());
-        env.events().publish(topics, token.clone());
-
         log!(&env, "Savings Vault initialized with admin: {}", admin);
     }
 
@@ -463,6 +459,13 @@ impl SavingsVault {
             locks = new_locks;
         }
 
+        // Calculate new_locked after withdrawal
+        let new_locked: i128 = locks
+            .iter()
+            .filter(|lock| current_time < lock.unlock_time)
+            .map(|lock| lock.amount)
+            .sum();
+
         // Update balance and locks
         env.storage()
             .persistent()
@@ -473,15 +476,16 @@ impl SavingsVault {
 
         // Emit withdraw event
         let topics = (symbol_short!("withdraw"), user.clone());
-        let payload = (amount, current_balance);
+        let payload = (amount, current_balance, new_locked);
         env.events().publish(topics, payload);
 
         log!(
             &env,
-            "Withdraw: user={}, amount={}, new_balance={}",
+            "Withdraw: user={}, amount={}, new_balance={}, new_locked={}",
             user,
             amount,
-            current_balance
+            current_balance,
+            new_locked
         );
     }
 
