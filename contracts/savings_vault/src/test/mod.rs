@@ -450,6 +450,72 @@ fn test_lock_funds_requires_user_authorization() {
 }
 
 #[test]
+#[should_panic]
+fn test_withdraw_requires_user_authorization() {
+    let env = Env::default();
+    let contract_id = env.register(SavingsVault, ());
+    let client = SavingsVaultClient::new(&env, &contract_id);
+
+    let admin = Address::generate(&env);
+    let sac = env.register_stellar_asset_contract_v2(admin.clone());
+    let token_address = sac.address();
+    let token_admin = token::StellarAssetClient::new(&env, &token_address);
+
+    let user = Address::generate(&env);
+
+    client.mock_all_auths().initialize(&admin, &token_address);
+    token_admin.mock_all_auths().mint(&user, &1_000);
+    client.mock_all_auths().deposit(&user, &100);
+
+    // Call without auth mocking: require_auth() must reject this withdrawal.
+    client.withdraw(&user, &1);
+}
+
+#[test]
+#[should_panic]
+fn test_deposit_requires_user_authorization() {
+    let env = Env::default();
+    let contract_id = env.register(SavingsVault, ());
+    let client = SavingsVaultClient::new(&env, &contract_id);
+
+    let admin = Address::generate(&env);
+    let sac = env.register_stellar_asset_contract_v2(admin.clone());
+    let token_address = sac.address();
+    let token_admin = token::StellarAssetClient::new(&env, &token_address);
+
+    let user = Address::generate(&env);
+
+    client.mock_all_auths().initialize(&admin, &token_address);
+    token_admin.mock_all_auths().mint(&user, &1_000);
+
+    // Call without auth mocking: require_auth() must reject this deposit.
+    client.deposit(&user, &100);
+}
+
+#[test]
+#[should_panic]
+fn test_lock_funds_requires_user_authorization() {
+    let env = Env::default();
+    let contract_id = env.register(SavingsVault, ());
+    let client = SavingsVaultClient::new(&env, &contract_id);
+
+    let admin = Address::generate(&env);
+    let sac = env.register_stellar_asset_contract_v2(admin.clone());
+    let token_address = sac.address();
+    let token_admin = token::StellarAssetClient::new(&env, &token_address);
+
+    let user = Address::generate(&env);
+
+    client.mock_all_auths().initialize(&admin, &token_address);
+    token_admin.mock_all_auths().mint(&user, &1_000);
+    client.mock_all_auths().deposit(&user, &100);
+    set_ledger_timestamp(&env, 1_000);
+
+    // Call without auth mocking: require_auth() must reject this lock.
+    client.lock_funds(&user, &50, &2_000);
+}
+
+#[test]
 #[should_panic(expected = "Insufficient balance")]
 fn test_withdraw_more_than_balance_panics() {
     let (env, contract_id, client) = setup();
