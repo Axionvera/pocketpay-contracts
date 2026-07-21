@@ -4,6 +4,10 @@ This directory is the contract workspace for PocketPay's savings vault logic. It
 
 For project-wide setup, architecture, deployment guidance, and contribution instructions, see the [root README](../../README.md).
 
+## Documentation
+- **Failure Mode Catalogue: [docs/failure-mode-catalogue.md](../../docs/failure-mode-catalogue.md) - Complete list of all known failure modes with test links
+- **All other docs are in the repo root `docs/` directory.
+
 ## Public functions
 
 The contract exposes these public functions in `src/lib.rs`:
@@ -14,6 +18,8 @@ The contract exposes these public functions in `src/lib.rs`:
 - `get_balance(env, user)` returns the user's available balance.
 - `lock_funds(env, user, amount, unlock_time)` moves available funds into the locked balance until a Unix timestamp.
 - `get_locked_balance(env, user)` returns the user's locked balance.
+- `get_lock(env, user, lock_id)` returns one lock record when it exists.
+- `list_locks(env, user, offset, limit)` returns a paginated list of lock records.
 - `can_withdraw(env, user)` reports whether the user's locked balance has reached its unlock time.
 
 ## Test
