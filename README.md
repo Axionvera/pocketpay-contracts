@@ -213,6 +213,7 @@ stellar-pocketpay-contracts/
 - [Event Schema Documentation](docs/events.md) – Overview of event names, topics, payload schemas, and JSON examples for vault actions.
 - [Vault Contract ID Handoff](docs/contract-id-handoff.md) - How to pass a deployed vault contract ID safely to SDK configuration and the mobile app.
 - [Audit Readiness Review](docs/audit-readiness.md) - Pre-audit review covering audit blockers, missing tests, risky assumptions, and unresolved design questions.
+- [Accounting Invariants](docs/accounting-invariants.md) - Formal accounting invariants that must always hold, with test coverage references.
 
 ---
 
