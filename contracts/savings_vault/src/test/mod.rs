@@ -8,6 +8,7 @@ mod lock_read_helpers;
 mod maximum_amount_boundary;
 mod test_helpers;
 mod unauthorized_access;
+mod withdraw_lock;
 
 use super::*;
 use soroban_sdk::{testutils::Address as _, testutils::Events, Address};
