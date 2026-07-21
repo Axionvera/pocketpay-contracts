@@ -25,6 +25,8 @@ See the [Admin Role](docs/admin-role.md) document for details on what the `initi
 | `get_balance(user)` | Query available (unlocked) balance |
 | `lock_funds(user, amount, unlock_time)` | Lock funds until a Unix timestamp |
 | `get_locked_balance(user)` | Query locked balance |
+| `get_lock(user, lock_id)` | Read one lock record by ID |
+| `list_locks(user, offset, limit)` | Page through a user's lock records |
 | `can_withdraw(user)` | Check if locked funds are withdrawable |
 | `get_version()` | Query the deployed contract version |
 
@@ -211,7 +213,7 @@ stellar-pocketpay-contracts/
 ## Documentation
 
 - [Audit Preparation Checklist](docs/audit-preparation.md) — Checklist of documentation, tests, threat model, and deployment details required before any external security review or audit.
-- [Failure Mode Catalogue](docs/failure-mode-catalogue.md) — Complete, organized list of all known failure modes, with expected behavior, affected functions, and links to test coverage.
+- [Storage Audit](docs/storage-audit.md) — Comprehensive details on the contract's storage layout, keys, mutating functions, and security invariants.
 - [Deployment Environments](docs/deployment-environments.md) — Network configuration for local, testnet, and future mainnet, including RPC URLs, identities, environment variables, and deployment commands.
 - [Contract Error Reference](docs/error-codes.md) - Current savings vault failure conditions and guidance for SDK and mobile callers.
 - [SDK Error Mapping Guide](docs/sdk-error-mapping-guide.md) — Maps contract errors to SDK handling expectations with user-facing and developer-facing examples.
@@ -224,6 +226,8 @@ stellar-pocketpay-contracts/
 - [CLI Smoke Test Guide](docs/cli-smoke-test.md) — Quick post-deployment verification flow using the Soroban CLI to confirm every contract function responds correctly on testnet or a local sandbox.
 - [Balance Reconciliation Design Note](docs/balance-reconciliation.md) — How internal accounting should reconcile with real token balances once SAC integration is implemented, including failure modes and invariants tests must enforce.
 - [Version Metadata](docs/version-metadata.md) — How the `get_version` read-only function works, how SDKs and deployment scripts should use it, and how to bump the version.
+- [Lock Read Helpers](docs/lock-read-helpers.md) — Response shapes and pagination for `get_lock` and `list_locks`.
+- [Test Coverage Summary](docs/test-coverage.md) — Maps initialization, deposit, withdrawal, and locking behaviours to the tests that cover them, plus known test gaps.
 
 ---
 
@@ -254,6 +258,12 @@ stellar-pocketpay-contracts/
   [docs/upgrade-strategy.md](docs/upgrade-strategy.md) for research into possible upgrade paths.
 - **No pause / emergency stop**: There is no mechanism to halt operations in an emergency.
   See [docs/pause-design.md](docs/pause-design.md) for research and trade-offs.
+- **No on-chain events**: No events are emitted for state changes (deposit, withdraw, lock, unlock). See [docs/events.md](docs/events.md) for planned event schemas.
+- **No custom error enum**: Contract uses panic strings instead of a structured error enum for off-chain callers.
+
+- **No custom error enum**: Contract uses panic strings instead of a structured error enum for off-chain callers.
+
+- **No custom error enum**: Contract uses panic strings instead of a structured error enum for off-chain callers.
 
 - **No custom error enum**: Contract uses panic strings instead of a structured error enum for off-chain callers.
 
