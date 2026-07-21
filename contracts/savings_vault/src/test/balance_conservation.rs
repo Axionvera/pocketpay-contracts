@@ -29,7 +29,8 @@ struct Fixture {
 
 fn new_fixture() -> Fixture {
     let (env, contract_id, client) = setup();
-    let (env, _admin, client, token_client, token_admin) = test_token(env, client);
+    let (env, _admin, client, token_client, token_admin) =
+        test_token(env, contract_id.clone(), client);
     let user = Address::generate(&env);
 
     // Large mint so sequences never run out of external token supply.

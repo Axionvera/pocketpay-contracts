@@ -14,7 +14,7 @@
 //! - Check lock maturity status
 //!
 //! ## Key Features
-//! - **Deposits**: Add funds to vault (internal accounting only, no real token custody yet)
+//! - **Deposits**: Transfer tokens into the vault and credit the user's balance
 //! - **Withdrawals**: Remove available (unlocked) funds from vault
 //! - **Locks**: Time-based fund locking with Unix timestamp unlock times
 //! - **Balance Queries**: Check available (unlocked) and locked balances separately
@@ -30,9 +30,9 @@
 //!
 //! ## Important Notes
 //!
-//! - **Internal Accounting**: Currently, deposits and withdrawals update internal contract
-//!   balances but do not transfer actual tokens. Real token custody and transfers are planned
-//!   for future SAC (Stellar Asset Contract) integration.
+//! - **Token-backed balances**: Deposits transfer tokens from the user into the vault via the
+//!   configured Stellar Asset Contract (SAC), and withdrawals transfer tokens back to the user.
+//!   Internal balances are updated only after the token transfer succeeds.
 //! - **Authorization**: The user's address must authorize all deposit, withdrawal, and lock operations.
 //! - **Lock Overwrite**: Locking funds does not create separate lock entries per operation;
 //!   each user has a vector of lock entries that can be managed independently.
@@ -107,7 +107,7 @@ pub struct LockEntry {
 /// * `Locks(Address)` - Vector of lock entries for a specific user
 /// * `NextLockId(Address)` - Counter for generating unique lock IDs per user
 /// * `Initialized` - Boolean flag indicating contract initialization status
-/// * `Token` - The token contract address for real token transfers (future integration)
+/// * `Token` - The token contract address used for real token transfers
 #[contracttype]
 #[derive(Clone)]
 pub enum DataKey {
@@ -185,8 +185,8 @@ impl SavingsVault {
     /// * `env` - The Soroban environment
     /// * `admin` - The address to be recorded as the contract admin. This address must
     ///   authorize the transaction via `require_auth()`.
-    /// * `token` - The address of the token contract to be used for real token transfers
-    ///   (future SAC integration). Currently stored but not used in deposit/withdrawal logic.
+    /// * `token` - The address of the token contract used for real token transfers. Deposits
+    ///   and withdrawals move balances through this Stellar Asset Contract (SAC).
     ///
     /// # Authorization
     ///
@@ -212,10 +212,10 @@ impl SavingsVault {
     /// SavingsVault::initialize(&env, admin, token);
     /// ```
     ///
-    /// # Future Notes
+    /// # Notes
     ///
-    /// The token address parameter is reserved for future SAC (Stellar Asset Contract)
-    /// integration to support real token transfers and custody-backed balances.
+    /// The token address is the Stellar Asset Contract (SAC) used for real token transfers,
+    /// so deposits and withdrawals are backed by actual token custody.
     pub fn initialize(env: Env, admin: Address, token: Address) {
         // Ensure we haven't already initialized
         if env.storage().instance().has(&DataKey::Initialized) {
@@ -278,9 +278,9 @@ impl SavingsVault {
 
     /// Deposit funds into the caller's vault.
     ///
-    /// Increases the user's recorded balance in the contract. Currently, this updates
-    /// internal contract accounting only and does not transfer real tokens. Future
-    /// SAC integration will enable actual token transfers and custody.
+    /// Transfers `amount` tokens from the user into the vault via the configured Stellar
+    /// Asset Contract (SAC) and then credits the user's recorded balance. The balance is
+    /// updated only after the token transfer succeeds.
     ///
     /// # Arguments
     ///
@@ -784,9 +784,7 @@ impl SavingsVault {
     pub fn get_lock(env: Env, user: Address, lock_id: u64) -> Option<LockEntry> {
         Self::assert_initialized(&env);
         let locks = Self::load_locks(&env, user);
-        locks
-            .iter()
-            .find(|lock| lock.id == lock_id)
+        locks.iter().find(|lock| lock.id == lock_id)
     }
 
     /// List lock records for a user with offset/limit pagination.
