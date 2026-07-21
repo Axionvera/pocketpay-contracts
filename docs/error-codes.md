@@ -119,8 +119,8 @@ balance or locked balance.
 - **Caller/developer action:** Build and sign with the required address. Do not
   retry unchanged; request the correct wallet signature.
 
-Read-only calls (`get_balance`, `get_locked_balance`, and `can_withdraw`) do not
-call `require_auth()`.
+Read-only calls (`get_balance`, `get_locked_balance`, `get_lock`, `list_locks`,
+and `can_withdraw`) do not call `require_auth()`.
 
 ## Other existing failure conditions
 

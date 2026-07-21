@@ -25,6 +25,8 @@ See the [Admin Role](docs/admin-role.md) document for details on what the `initi
 | `get_balance(user)` | Query available (unlocked) balance |
 | `lock_funds(user, amount, unlock_time)` | Lock funds until a Unix timestamp |
 | `get_locked_balance(user)` | Query locked balance |
+| `get_lock(user, lock_id)` | Read one lock record by ID |
+| `list_locks(user, offset, limit)` | Page through a user's lock records |
 | `can_withdraw(user)` | Check if locked funds are withdrawable |
 | `get_version()` | Query the deployed contract version |
 
@@ -223,6 +225,7 @@ stellar-pocketpay-contracts/
 - [CLI Smoke Test Guide](docs/cli-smoke-test.md) — Quick post-deployment verification flow using the Soroban CLI to confirm every contract function responds correctly on testnet or a local sandbox.
 - [Balance Reconciliation Design Note](docs/balance-reconciliation.md) — How internal accounting should reconcile with real token balances once SAC integration is implemented, including failure modes and invariants tests must enforce.
 - [Version Metadata](docs/version-metadata.md) — How the `get_version` read-only function works, how SDKs and deployment scripts should use it, and how to bump the version.
+- [Lock Read Helpers](docs/lock-read-helpers.md) — Response shapes and pagination for `get_lock` and `list_locks`.
 
 ---
 
