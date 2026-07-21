@@ -237,6 +237,10 @@ impl SavingsVault {
         let topics = (symbol_short!("initialize"), admin.clone());
         env.events().publish(topics, token.clone());
 
+        // Emit initialize event
+        let topics = (symbol_short!("initialize"), admin.clone());
+        env.events().publish(topics, token.clone());
+
         log!(&env, "Savings Vault initialized with admin: {}", admin);
     }
 
