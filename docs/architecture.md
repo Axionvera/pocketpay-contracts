@@ -39,12 +39,22 @@ The state model is deliberately simple:
 | Key                | Type   | Description |
 |--------------------|--------|-------------|
 | `balance:{user}`   | `i128` | Unlocked funds available to a user.
-| `locked:{user}`    | `i128` | Funds currently locked.
-| `unlock_time:{user}` | `u64`| UNIX timestamp when locked funds become withdrawable.
+| `locks:{user}`     | `Vec<LockEntry>` | List of active and matured lock entries for a user.
+| `next_lock_id:{user}` | `u64`| Monotonically increasing next lock ID for a user.
 | `admin`            | `Address` | Contract admin (set during `initialize`).
 | `initialized`      | `bool`   | Guard to ensure `initialize` runs only once.
 
 All operations validate inputs (non‑negative amounts, sufficient balances, future unlock times) and emit descriptive `require_auth` checks.
+
+---
+
+## Internal Balance Tracking and Asset Custody
+
+The current deposit flow performs **internal accounting only**. Calling `deposit` updates the user's balance in contract storage; it does not transfer real XLM, a Stellar Asset Contract (SAC) asset, or any other token into contract custody.
+
+Internal balance tracking records values that the contract uses for its deposit, withdrawal, and locking rules. Real token custody is different: it requires an on-chain asset transfer between addresses so that recorded balances are backed by assets actually held for users. Because that transfer layer is not implemented, the current stored balances must not be interpreted as proof of deposited or custodied assets.
+
+Future SAC integration is planned to provide real asset transfer support and enable custody-backed balances.
 
 ---
 
@@ -72,9 +82,8 @@ Future enhancements may integrate the **Stellar Asset Contract (SAC)** to enable
 The current contract is a **stand‑alone savings vault**. To evolve into a full‑featured wallet SDK, consider the following extension points:
 
 1. **Token Transfer Layer** – Call the SAC `transfer` function to move XLM or custom assets on‑chain.
-2. **Multi‑Lock Support** – Replace the single `unlock_time` per user with a list of lock entries, enabling overlapping locks.
-3. **Admin Recovery & Upgrade** – Implement admin‑controlled migration or upgrade mechanisms using Soroban `upgrade` primitives.
-4. **Off‑chain SDKs** – Provide JavaScript/TypeScript client libraries that abstract contract calls, handling address resolution, transaction building, and signing.
+2. **Admin Recovery & Upgrade** – Implement admin‑controlled migration or upgrade mechanisms using Soroban `upgrade` primitives.
+3. **Off‑chain SDKs** – Provide JavaScript/TypeScript client libraries that abstract contract calls, handling address resolution, transaction building, and signing.
 
 These boundaries maintain a clean separation between **on‑chain logic** (this repository) and **off‑chain SDKs** that developers will consume.
 
@@ -84,6 +93,7 @@ These boundaries maintain a clean separation between **on‑chain logic** (this 
 
 - The **README.md** provides quick‑start guides for building, testing, and deploying the contract.
 - This **architecture.md** offers a deeper dive into internal design.
+- [**sdk-contract-sequence.md**](sdk-contract-sequence.md) shows the end‑to‑end request flow (mobile → SDK → Soroban RPC → vault contract) for balance queries, deposits, withdrawals, and error paths.
 - Additional module‑level docs (e.g., `admin-role.md`) cover specific responsibilities.
 
 Refer to the **Documentation** section of the README for links to all docs.

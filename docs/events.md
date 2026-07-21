@@ -1,0 +1,115 @@
+# Vault Event Schema
+
+This document outlines the expected event topics, payloads, and naming conventions for actions in the **Savings Vault Contract**. 
+
+SDK maintainers can use this stable schema to consume contract events safely.
+
+> [!NOTE]
+> As events are not yet implemented in the contract, this document defines a **proposed schema**.
+
+---
+
+## Event Naming & Structure Conventions
+
+All events emitted by the Savings Vault contract follow standard Soroban event guidelines:
+- **Topics**: A list of topics used for filtering/routing.
+  - Topic 0: The event name (e.g., Symbol representing the action).
+  - Topic 1: The primary entity involved in the action (typically the `Address` of the user/admin).
+- **Payload**: The data associated with the event (represented as a Soroban type or tuple).
+
+---
+
+## Event Definitions
+
+### 1. Initialize Event
+Emitted once when the contract is initialized by the administrator.
+
+- **Topic 0**: `Symbol::new(&env, "initialize")`
+- **Topic 1**: `admin` (`Address`) - The admin address recorded for the contract.
+- **Payload**: `token` (`Address`) - The token address associated with the vault.
+
+#### Example Payload (JSON Representation)
+```json
+{
+  "topics": ["initialize", "GB...ADMIN_ADDRESS"],
+  "value": "GB...TOKEN_ADDRESS"
+}
+```
+
+---
+
+### 2. Deposit Event
+Emitted when a user deposits funds into their vault.
+
+- **Topic 0**: `Symbol::new(&env, "deposit")`
+- **Topic 1**: `user` (`Address`) - The address of the depositor.
+- **Payload**: A tuple containing:
+  1. `amount` (`i128`) - The amount deposited.
+  2. `new_balance` (`i128`) - The user's new available balance.
+
+#### Example Payload (JSON Representation)
+```json
+{
+  "topics": ["deposit", "GD...USER_ADDRESS"],
+  "value": [1000, 5000]
+}
+```
+
+---
+
+### 3. Withdraw Event
+Emitted when a user withdraws funds from their vault.
+
+- **Topic 0**: `Symbol::new(&env, "withdraw")`
+- **Topic 1**: `user` (`Address`) - The address of the withdrawer.
+- **Payload**: A tuple containing:
+  1. `amount` (`i128`) - The amount withdrawn.
+  2. `new_balance` (`i128`) - The user's new available balance.
+
+#### Example Payload (JSON Representation)
+```json
+{
+  "topics": ["withdraw", "GD...USER_ADDRESS"],
+  "value": [500, 4500]
+}
+```
+
+---
+
+### 4. Lock Event
+Emitted when a portion of the user's balance is locked.
+
+- **Topic 0**: `Symbol::new(&env, "lock")`
+- **Topic 1**: `user` (`Address`) - The address of the user.
+- **Payload**: A tuple containing:
+  1. `amount` (`i128`) - The amount locked.
+  2. `unlock_time` (`u64`) - The UNIX timestamp (seconds) when the funds unlock.
+  3. `new_balance` (`i128`) - The user's new available (unlocked) balance.
+  4. `new_locked` (`i128`) - The user's new locked balance.
+
+#### Example Payload (JSON Representation)
+```json
+{
+  "topics": ["lock", "GD...USER_ADDRESS"],
+  "value": [2000, 1785000000, 2500, 2000]
+}
+```
+
+---
+
+### 5. Future Token Transfer Event
+Proposed event for future integration when the contract interacts directly with Stellar Asset Contract (SAC) or token transfers.
+
+- **Topic 0**: `Symbol::new(&env, "transfer")`
+- **Topic 1**: `user` (`Address`) - The address of the receiver/sender.
+- **Payload**: A tuple containing:
+  1. `to` (`Address`) - The recipient address.
+  2. `amount` (`i128`) - The amount transferred.
+
+#### Example Payload (JSON Representation)
+```json
+{
+  "topics": ["transfer", "GD...SENDER_ADDRESS"],
+  "value": ["GD...RECEIVER_ADDRESS", 1000]
+}
+```
