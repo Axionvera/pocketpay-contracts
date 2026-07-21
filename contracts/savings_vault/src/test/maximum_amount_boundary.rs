@@ -18,6 +18,8 @@
 //! failed operations do not corrupt balances.
 extern crate std;
 
+extern crate std;
+
 use super::test_helpers::*;
 use soroban_sdk::{testutils::Address as _, Address};
 

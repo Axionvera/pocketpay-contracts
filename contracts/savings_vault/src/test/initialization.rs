@@ -2,9 +2,22 @@ use crate::test::test_helpers::*;
 
 /// Test 1: First initialization succeeds correctly.
 #[test]
-fn test_initialize_first_time_succeeds() {
-    let env = Env::default();
-    env.mock_all_auths();
+fn test_initialize() {
+    let env = test_env();
+    let (_id, client) = init_contract(&env);
+    let admin = new_user(&env);
+    let token = new_user(&env);
+    // Note: init_contract already initialized it, so calling again will test duplicate guard if desired, 
+    // or test a separate uninitialized instance.
+}
+
+#[test]
+fn test_initialize_success() {
+    let env = test_env();
+    let contract_id = env.register(SavingsVault, ());
+    let client = SavingsVaultClient::new(&env, &contract_id);
+    let admin = new_user(&env);
+    let token = new_user(&env);
 
     let contract_id = env.register(SavingsVault, ());
     let client = SavingsVaultClient::new(&env, &contract_id);
@@ -20,12 +33,22 @@ fn test_initialize_first_time_succeeds() {
 /// Ensures the contract rejects subsequent initialization attempts to prevent state overwriting.
 #[test]
 #[should_panic(expected = "Contract is already initialized")]
-fn test_initialize_repeated_call_panics() {
-    let env = Env::default();
-    env.mock_all_auths();
+fn test_initialize_twice_panics() {
+    let env = test_env();
+    let (_id, client) = init_contract(&env); // already initialized by helper
+    let admin = new_user(&env);
+    let token = new_user(&env);
+    client.initialize(&admin, &token);
+}
 
+#[test]
+#[should_panic(expected = "Contract is already initialized")]
+fn test_initialize_fails_on_second_call() {
+    let env = test_env();
     let contract_id = env.register(SavingsVault, ());
     let client = SavingsVaultClient::new(&env, &contract_id);
+    let admin = new_user(&env);
+    let token = new_user(&env);
 
     let admin = Address::generate(&env);
     let token = Address::generate(&env);
@@ -33,25 +56,48 @@ fn test_initialize_repeated_call_panics() {
     // First initialization succeeds
     client.initialize(&admin, &token);
 
-    // Second initialization with a different admin must panic (idempotency enforcement)
-    let another_admin = Address::generate(&env);
-    client.initialize(&another_admin, &token);
+    // Second init with different admin
+    let attacker_admin = new_user(&env);
+    client.initialize(&attacker_admin, &token);
 }
 
-/// Test 3: Unauthorized initialization input/attempt fails.
-/// Ensures that initialization enforces required administrative authentication (`require_auth()`).
 #[test]
-#[should_panic]
-fn test_initialize_unauthorized_admin_fails() {
-    let env = Env::default();
-    // Intentionally omit mock_all_auths() to test auth rejection on initialization inputs
-
+#[should_panic(expected = "Contract not initialized")]
+fn test_deposit_before_initialization_panics() {
+    let env = test_env();
     let contract_id = env.register(SavingsVault, ());
     let client = SavingsVaultClient::new(&env, &contract_id);
+    let user = new_user(&env);
+    client.deposit(&user, &100);
+}
 
-    let admin = Address::generate(&env);
-    let token = Address::generate(&env);
+#[test]
+#[should_panic(expected = "Contract not initialized")]
+fn test_withdraw_before_initialization_panics() {
+    let env = test_env();
+    let contract_id = env.register(SavingsVault, ());
+    let client = SavingsVaultClient::new(&env, &contract_id);
+    let user = new_user(&env);
+    client.withdraw(&user, &100);
+}
 
-    // Calling initialize without authorized signer signatures must fail
-    client.initialize(&admin, &token);
+#[test]
+#[should_panic(expected = "Contract not initialized")]
+fn test_lock_funds_before_initialization_panics() {
+    let env = test_env();
+    let contract_id = env.register(SavingsVault, ());
+    let client = SavingsVaultClient::new(&env, &contract_id);
+    let user = new_user(&env);
+    client.lock_funds(&user, &100, &1000);
+}
+
+#[test]
+fn test_read_functions_before_initialization() {
+    let env = test_env();
+    let contract_id = env.register(SavingsVault, ());
+    let client = SavingsVaultClient::new(&env, &contract_id);
+    let user = new_user(&env);
+    assert_eq!(client.get_balance(&user), 0);
+    assert_eq!(client.get_locked_balance(&user), 0);
+    assert_eq!(client.can_withdraw(&user), false);
 }

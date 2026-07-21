@@ -237,23 +237,13 @@ impl SavingsVault {
     /// - Emits a log event with deposit details
     ///
     /// # Panics
-    ///
-    /// - If `amount` is zero or negative
-    ///
-    /// # Notes
-    ///
-    /// - **Internal Accounting Only**: The user's balance is a bookkeeping entry maintained
-    ///   by the contract. It is not backed by real token transfers until SAC integration is implemented.
-    /// - **No Double-Lock Prevention**: If funds are already locked, calling deposit does not
-    ///   affect the locked amount. Locked funds remain locked until their unlock_time.
-    ///
-    /// # Example
-    ///
-    /// ```ignore
-    /// let user = Address::from_account_id(&env, &user_account_id);
-    /// SavingsVault::deposit(&env, user, 1000);
-    /// ```
+    /// - If the contract has not been initialized.
+    /// - If `amount` is zero or negative.
     pub fn deposit(env: Env, user: Address, amount: i128) {
+        if !env.storage().instance().has(&DataKey::Initialized) {
+            panic!("Contract not initialized");
+        }
+
         // Authorization: only the user can deposit on their own behalf
         user.require_auth();
 
@@ -326,31 +316,14 @@ impl SavingsVault {
     /// - Emits a log event with withdrawal details
     ///
     /// # Panics
-    ///
-    /// - If `amount` is zero or negative
-    /// - If `amount` exceeds the user's total available funds (deposited + matured locks)
-    ///   with the error message "Insufficient balance"
-    ///
-    /// # Withdrawal Order
-    ///
-    /// Funds are withdrawn in this order:
-    /// 1. From the user's available (non-locked) balance first
-    /// 2. From matured locks (oldest/earliest unlock times first) if needed
-    ///
-    /// # Notes
-    ///
-    /// - **Internal Accounting**: Currently, withdrawals update internal accounting but
-    ///   real token transfers require SAC integration.
-    /// - **Partial Lock Deduction**: If a matured lock has more funds than needed,
-    ///   only the required amount is deducted from that lock.
-    ///
-    /// # Example
-    ///
-    /// ```ignore
-    /// let user = Address::from_account_id(&env, &user_account_id);
-    /// SavingsVault::withdraw(&env, user, 500);
-    /// ```
+    /// - If the contract has not been initialized.
+    /// - If `amount` is zero or negative.
+    /// - If `amount` exceeds the user's available balance.
     pub fn withdraw(env: Env, user: Address, amount: i128) {
+        if !env.storage().instance().has(&DataKey::Initialized) {
+            panic!("Contract not initialized");
+        }
+
         // Authorization
         user.require_auth();
 
@@ -533,32 +506,15 @@ impl SavingsVault {
     /// - Emits a log event with lock details
     ///
     /// # Panics
-    ///
-    /// - If `amount` is zero or negative
-    /// - If `amount` exceeds the user's available balance with error "Insufficient balance to lock"
-    /// - If `unlock_time` is not in the future (current_time >= unlock_time)
-    ///   with error "Unlock time must be in the future"
-    ///
-    /// # Multiple Locks
-    ///
-    /// A user can have multiple active locks at different unlock times. Each lock is
-    /// tracked independently. When withdrawing, matured locks are consumed first.
-    ///
-    /// # Notes
-    ///
-    /// - **Overwrite Behavior**: Unlike some vault designs, locking funds multiple times
-    ///   does not overwrite a previous lock; instead, a new lock entry is created.
-    /// - **Lock ID Uniqueness**: Lock IDs are unique per user (not globally unique).
-    ///
-    /// # Example
-    ///
-    /// ```ignore
-    /// let user = Address::from_account_id(&env, &user_account_id);
-    /// let unlock_time = env.ledger().timestamp() + 86400; // 1 day from now (86400 seconds)
-    /// let lock_id = SavingsVault::lock_funds(&env, user, 500, unlock_time);
-    /// println!("Created lock with ID: {}", lock_id);
-    /// ```
+    /// - If the contract has not been initialized.
+    /// - If `amount` is zero or negative.
+    /// - If `amount` exceeds the user's available balance.
+    /// - If `unlock_time` is in the past.
     pub fn lock_funds(env: Env, user: Address, amount: i128, unlock_time: u64) -> u64 {
+        if !env.storage().instance().has(&DataKey::Initialized) {
+            panic!("Contract not initialized");
+        }
+
         // Authorization
         user.require_auth();
 
@@ -748,3 +704,6 @@ impl SavingsVault {
 
 #[cfg(test)]
 mod test;
+#[cfg(test)]
+#[path = "test/test_helpers.rs"]
+mod test_helpers;
