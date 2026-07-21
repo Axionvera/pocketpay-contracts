@@ -253,7 +253,7 @@ stellar-pocketpay-contracts/
   [docs/upgrade-strategy.md](docs/upgrade-strategy.md) for research into possible upgrade paths.
 - **No pause / emergency stop**: There is no mechanism to halt operations in an emergency.
   See [docs/pause-design.md](docs/pause-design.md) for research and trade-offs.
-- **No on-chain events**: No events are emitted for state changes (deposit, withdraw, lock, unlock). See [docs/events.md](docs/events.md) for planned event schemas.
+
 - **No custom error enum**: Contract uses panic strings instead of a structured error enum for off-chain callers.
 
 ---

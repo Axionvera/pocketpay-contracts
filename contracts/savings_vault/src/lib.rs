@@ -63,7 +63,7 @@
 
 #![no_std]
 
-use soroban_sdk::{contract, contractimpl, contracttype, log, token, Address, Env, Vec};
+use soroban_sdk::{contract, contractimpl, contracttype, log, symbol_short, token, Address, Env, Symbol, Vec};
 
 // ---------------------------------------------------------------------------
 // Structs
@@ -218,6 +218,10 @@ impl SavingsVault {
         env.storage().instance().set(&DataKey::Initialized, &true);
         env.storage().instance().set(&DataKey::Token, &token);
 
+        // Emit initialize event
+        let topics = (symbol_short!("initialize"), admin.clone());
+        env.events().publish(topics, token.clone());
+
         log!(&env, "Savings Vault initialized with admin: {}", admin);
     }
 
@@ -317,6 +321,11 @@ impl SavingsVault {
         env.storage()
             .persistent()
             .set(&DataKey::Balance(user.clone()), &new_balance);
+
+        // Emit deposit event
+        let topics = (symbol_short!("deposit"), user.clone());
+        let payload = (amount, new_balance);
+        env.events().publish(topics, payload);
 
         log!(
             &env,
@@ -444,6 +453,11 @@ impl SavingsVault {
         env.storage()
             .persistent()
             .set(&DataKey::Locks(user.clone()), &locks);
+
+        // Emit withdraw event
+        let topics = (symbol_short!("withdraw"), user.clone());
+        let payload = (amount, current_balance);
+        env.events().publish(topics, payload);
 
         log!(
             &env,
@@ -618,6 +632,14 @@ impl SavingsVault {
         env.storage()
             .persistent()
             .set(&DataKey::Locks(user.clone()), &locks);
+
+        // Calculate new_locked for the event
+        let new_locked: i128 = locks.iter().map(|l| l.amount).sum();
+
+        // Emit lock event
+        let topics = (symbol_short!("lock"), user.clone());
+        let payload = (amount, unlock_time, current_balance, new_locked);
+        env.events().publish(topics, payload);
 
         log!(
             &env,

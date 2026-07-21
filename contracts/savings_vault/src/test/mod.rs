@@ -963,3 +963,91 @@ fn balance_isolation_between_users_lock() {
     assert_eq!(client.get_balance(&bob), 1_500);
     assert_eq!(client.get_locked_balance(&bob), 2_500);
 }
+
+#[test]
+fn test_initialize_emits_event() {
+    use soroban_sdk::symbol_short;
+    
+    let env = test_env();
+    let admin = Address::generate(&env);
+    let token = Address::generate(&env);
+    let contract_id = env.register(SavingsVault, ());
+    let client = SavingsVaultClient::new(&env, &contract_id);
+
+    client.mock_all_auths().initialize(&admin, &token);
+
+    let events = env.events().all();
+    assert_eq!(events.len(), 1);
+
+    let event = events.get(0).unwrap();
+    let expected_topics = (symbol_short!("initialize"), admin.clone());
+    assert_eq!(event.topics, expected_topics);
+    assert_eq!(event.data, token.clone());
+}
+
+#[test]
+fn test_deposit_emits_event() {
+    use soroban_sdk::symbol_short;
+    
+    let env = test_env();
+    let (_current_contract_address, client) = init_contract(&env);
+    let (env, _admin, client, _token_client, token_admin) = test_token(env, client);
+
+    let user = new_user(&env);
+    token_admin.mint(&user, &1000);
+
+    deposit_balance(&client, &user, 100);
+
+    let events = env.events().all();
+    // Get last event (initialize event is first)
+    let event = events.get(events.len() - 1).unwrap();
+    let expected_topics = (symbol_short!("deposit"), user.clone());
+    let expected_payload = (100_i128, 100_i128);
+    assert_eq!(event.topics, expected_topics);
+    assert_eq!(event.data, expected_payload);
+}
+
+#[test]
+fn test_withdraw_emits_event() {
+    use soroban_sdk::symbol_short;
+    
+    let env = test_env();
+    let (_current_contract_address, client) = init_contract(&env);
+    let (env, _admin, client, _token_client, token_admin) = test_token(env, client);
+
+    let user = new_user(&env);
+    token_admin.mint(&user, &1000);
+
+    deposit_balance(&client, &user, 100);
+    withdraw_balance(&client, &user, 50);
+
+    let events = env.events().all();
+    let event = events.get(events.len() - 1).unwrap();
+    let expected_topics = (symbol_short!("withdraw"), user.clone());
+    let expected_payload = (50_i128, 50_i128);
+    assert_eq!(event.topics, expected_topics);
+    assert_eq!(event.data, expected_payload);
+}
+
+#[test]
+fn test_lock_funds_emits_event() {
+    use soroban_sdk::symbol_short;
+    
+    let env = test_env();
+    let (_current_contract_address, client) = init_contract(&env);
+    let (env, _admin, client, _token_client, token_admin) = test_token(env, client);
+
+    let user = new_user(&env);
+    token_admin.mint(&user, &1000);
+    set_ledger_timestamp(&env, 1_000);
+
+    deposit_balance(&client, &user, 200);
+    client.lock_funds(&user, &100, &2_000);
+
+    let events = env.events().all();
+    let event = events.get(events.len() - 1).unwrap();
+    let expected_topics = (symbol_short!("lock"), user.clone());
+    let expected_payload = (100_i128, 2_000_u64, 100_i128, 100_i128);
+    assert_eq!(event.topics, expected_topics);
+    assert_eq!(event.data, expected_payload);
+}
