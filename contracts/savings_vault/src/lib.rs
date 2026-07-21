@@ -480,6 +480,82 @@ impl SavingsVault {
         );
     }
 
+    /// Withdraw a specific matured lock entry.
+    ///
+    /// This function allows a user to withdraw the funds associated with a specific
+    /// lock entry, provided that the lock has matured (current_time >= unlock_time).
+    ///
+    /// # Arguments
+    ///
+    /// * `env` - The Soroban environment
+    /// * `user` - The owner of the lock (must authorize this transaction via `require_auth()`)
+    /// * `lock_id` - The unique identifier of the lock to withdraw
+    ///
+    /// # Authorization
+    ///
+    /// The `user` address must sign the transaction.
+    ///
+    /// # Panics
+    /// - If the contract has not been initialized.
+    /// - If the lock with the given `lock_id` does not exist for the `user`.
+    /// - If the lock has not yet matured (current_time < unlock_time).
+    pub fn withdraw_lock(env: Env, user: Address, lock_id: u64) {
+        if !env.storage().instance().has(&DataKey::Initialized) {
+            panic!("Contract not initialized");
+        }
+
+        // Authorization
+        user.require_auth();
+
+        // Load locks
+        let mut locks = Self::load_locks(&env, user.clone());
+
+        // Find the lock index
+        let lock_index = locks.iter().position(|lock| lock.id == lock_id);
+
+        let index = match lock_index {
+            Some(i) => i,
+            None => panic!("Lock not found"),
+        };
+
+        let lock = locks.get(index).unwrap();
+
+        // Verify maturity
+        let current_time = env.ledger().timestamp();
+        if current_time < lock.unlock_time {
+            panic!("Lock has not matured yet");
+        }
+
+        // Get token address & client
+        let token = env.storage().instance().get(&DataKey::Token).unwrap();
+        let token_client = token::Client::new(&env, &token);
+        let contract_address = env.current_contract_address();
+
+        // Perform token transfer to the user
+        token_client.transfer(&contract_address, &user, &lock.amount);
+
+        // Remove the lock from the locks vector
+        locks.remove(index);
+
+        // Save updated locks back to persistent storage
+        env.storage()
+            .persistent()
+            .set(&DataKey::Locks(user.clone()), &locks);
+
+        // Emit withdrawal lock event
+        let topics = (Symbol::new(&env, "withdraw_lock"), user.clone());
+        let payload = (lock_id, lock.amount);
+        env.events().publish(topics, payload);
+
+        log!(
+            &env,
+            "WithdrawLock: user={}, lock_id={}, amount={}",
+            user,
+            lock_id,
+            lock.amount
+        );
+    }
+
     // -----------------------------------------------------------------------
     // Balance Queries
     // -----------------------------------------------------------------------
