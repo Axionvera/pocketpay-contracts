@@ -33,6 +33,44 @@ fn test_initialize_twice_panics() {
     client.initialize(&admin, &token);
 }
 
+#[test]
+#[should_panic(expected = "Contract not initialized")]
+fn test_deposit_before_initialization_panics() {
+    let env = test_env();
+    let (_id, client) = init_contract(&env);
+    let user = new_user(&env);
+    client.deposit(&user, &100);
+}
+
+#[test]
+#[should_panic(expected = "Contract not initialized")]
+fn test_withdraw_before_initialization_panics() {
+    let env = test_env();
+    let (_id, client) = init_contract(&env);
+    let user = new_user(&env);
+    client.withdraw(&user, &100);
+}
+
+#[test]
+#[should_panic(expected = "Contract not initialized")]
+fn test_lock_funds_before_initialization_panics() {
+    let env = test_env();
+    let (_id, client) = init_contract(&env);
+    let user = new_user(&env);
+    client.lock_funds(&user, &100, &1000);
+}
+
+#[test]
+fn test_read_functions_before_initialization() {
+    // Verify that read functions safely return default/0 before initialization
+    let env = test_env();
+    let (_id, client) = init_contract(&env);
+    let user = new_user(&env);
+    assert_eq!(client.get_balance(&user), 0);
+    assert_eq!(client.get_locked_balance(&user), 0);
+    assert_eq!(client.can_withdraw(&user), false);
+}
+
 // =========================================================================
 // Deposit Tests
 // =========================================================================
@@ -41,6 +79,7 @@ fn test_initialize_twice_panics() {
 fn test_deposit() {
     let env = test_env();
     let (_id, client) = init_contract(&env);
+    client.initialize(&new_user(&env), &new_user(&env));
     let user = new_user(&env);
     deposit_balance(&client, &user, 100);
     assert_eq!(client.get_balance(&user), 100);
@@ -50,6 +89,7 @@ fn test_deposit() {
 fn test_multiple_deposits() {
     let env = test_env();
     let (_id, client) = init_contract(&env);
+    client.initialize(&new_user(&env), &new_user(&env));
     let user = new_user(&env);
     seed_balances(&client, &user, &[100, 250]);
     assert_eq!(client.get_balance(&user), 350);
@@ -60,6 +100,7 @@ fn test_multiple_deposits() {
 fn test_deposit_zero_panics() {
     let env = test_env();
     let (_id, client) = init_contract(&env);
+    client.initialize(&new_user(&env), &new_user(&env));
     let user = new_user(&env);
     client.deposit(&user, &0);
 }
@@ -69,6 +110,7 @@ fn test_deposit_zero_panics() {
 fn test_deposit_negative_panics() {
     let env = test_env();
     let (_id, client) = init_contract(&env);
+    client.initialize(&new_user(&env), &new_user(&env));
     let user = new_user(&env);
     client.deposit(&user, &-50);
 }
@@ -80,7 +122,6 @@ fn test_deposit_negative_panics() {
 #[test]
 fn test_withdraw() {
     let (env, current_contract_address, client) = setup();
-
     let (env, _admin, client, token_client, token_admin) = test_token(env, client);
 
     let user = Address::generate(&env);
@@ -145,6 +186,7 @@ fn test_withdraw_more_than_balance_panics() {
 fn test_withdraw_zero_panics() {
     let env = test_env();
     let (_id, client) = init_contract(&env);
+    client.initialize(&new_user(&env), &new_user(&env));
     let user = new_user(&env);
     deposit_balance(&client, &user, 100);
     client.withdraw(&user, &0);
@@ -171,6 +213,7 @@ fn test_withdraw_negative_panics() {
 fn test_withdraw_from_empty_balance_panics() {
     // AC: Withdrawing from an empty balance fails.
     let (env, _id, client) = setup();
+    client.initialize(&Address::generate(&env), &Address::generate(&env));
     let user = Address::generate(&env);
 
     // User never deposited — balance is implicitly 0
@@ -182,6 +225,7 @@ fn test_withdraw_from_empty_balance_panics() {
 fn test_withdraw_exceeds_available_after_deposit_panics() {
     // AC: Withdrawing more than available balance fails.
     let (env, _id, client) = setup();
+    client.initialize(&Address::generate(&env), &Address::generate(&env));
     let user = Address::generate(&env);
 
     client.deposit(&user, &100);
@@ -226,6 +270,7 @@ fn test_failed_withdraw_does_not_change_available_balance_panics() {
     // Confirms that attempting to withdraw 1 unit more than deposited
     // is rejected (panics) — i.e. the balance is never decremented.
     let (env, _id, client) = setup();
+    client.initialize(&Address::generate(&env), &Address::generate(&env));
     let user = Address::generate(&env);
 
     client.deposit(&user, &100);
@@ -239,6 +284,7 @@ fn test_failed_withdraw_does_not_change_locked_balance() {
     // Depositing 500 and locking 300 leaves 200 available.
     // Attempting to withdraw 201 must panic, leaving both balances intact.
     let (env, _id, client) = setup();
+    client.initialize(&Address::generate(&env), &Address::generate(&env));
     let user = Address::generate(&env);
 
     env.ledger().with_mut(|li| {
@@ -266,6 +312,7 @@ fn test_failed_withdraw_does_not_change_locked_balance() {
 fn test_get_balance_no_deposits() {
     let env = test_env();
     let (_id, client) = init_contract(&env);
+    client.initialize(&new_user(&env), &new_user(&env));
     let user = new_user(&env);
     assert_eq!(client.get_balance(&user), 0);
 }
@@ -278,6 +325,7 @@ fn test_get_balance_no_deposits() {
 fn test_lock_funds() {
     let env = test_env();
     let (_id, client) = init_contract(&env);
+    client.initialize(&new_user(&env), &new_user(&env));
     let user = new_user(&env);
     set_ledger_timestamp(&env, 1_000);
     deposit_balance(&client, &user, 500);
@@ -290,6 +338,7 @@ fn test_lock_funds() {
 fn test_lock_funds_multiple_times() {
     let env = test_env();
     let (_id, client) = init_contract(&env);
+    client.initialize(&new_user(&env), &new_user(&env));
     let user = new_user(&env);
     set_ledger_timestamp(&env, 1_000);
     deposit_balance(&client, &user, 1_000);
@@ -304,6 +353,7 @@ fn test_lock_funds_multiple_times() {
 fn test_lock_zero_panics() {
     let env = test_env();
     let (_id, client) = init_contract(&env);
+    client.initialize(&new_user(&env), &new_user(&env));
     let user = new_user(&env);
     set_ledger_timestamp(&env, 1_000);
     deposit_balance(&client, &user, 100);
@@ -315,6 +365,7 @@ fn test_lock_zero_panics() {
 fn test_lock_more_than_balance_panics() {
     let env = test_env();
     let (_id, client) = init_contract(&env);
+    client.initialize(&new_user(&env), &new_user(&env));
     let user = new_user(&env);
     set_ledger_timestamp(&env, 1_000);
     deposit_balance(&client, &user, 100);
@@ -326,6 +377,7 @@ fn test_lock_more_than_balance_panics() {
 fn test_lock_past_time_panics() {
     let env = test_env();
     let (_id, client) = init_contract(&env);
+    client.initialize(&new_user(&env), &new_user(&env));
     let user = new_user(&env);
     set_ledger_timestamp(&env, 5_000);
     deposit_balance(&client, &user, 100);
@@ -340,6 +392,7 @@ fn test_lock_past_time_panics() {
 fn test_can_withdraw_before_unlock() {
     let env = test_env();
     let (_id, client) = init_contract(&env);
+    client.initialize(&new_user(&env), &new_user(&env));
     let user = new_user(&env);
     set_ledger_timestamp(&env, 1_000);
     deposit_balance(&client, &user, 500);
@@ -351,6 +404,7 @@ fn test_can_withdraw_before_unlock() {
 fn test_can_withdraw_after_unlock() {
     let env = test_env();
     let (_id, client) = init_contract(&env);
+    client.initialize(&new_user(&env), &new_user(&env));
     let user = new_user(&env);
     set_ledger_timestamp(&env, 1_000);
     deposit_balance(&client, &user, 500);
@@ -363,6 +417,7 @@ fn test_can_withdraw_after_unlock() {
 fn test_can_withdraw_exactly_at_unlock() {
     let env = test_env();
     let (_id, client) = init_contract(&env);
+    client.initialize(&new_user(&env), &new_user(&env));
     let user = new_user(&env);
     set_ledger_timestamp(&env, 1_000);
     deposit_balance(&client, &user, 500);
@@ -375,6 +430,7 @@ fn test_can_withdraw_exactly_at_unlock() {
 fn test_can_withdraw_no_locked_funds() {
     let env = test_env();
     let (_id, client) = init_contract(&env);
+    client.initialize(&new_user(&env), &new_user(&env));
     let user = new_user(&env);
     assert_eq!(client.can_withdraw(&user), false);
 }

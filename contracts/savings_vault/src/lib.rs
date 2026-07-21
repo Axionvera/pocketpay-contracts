@@ -88,8 +88,13 @@ impl SavingsVault {
     /// * `amount` - The amount to deposit (must be > 0).
     ///
     /// # Panics
-    /// Panics if `amount` is zero or negative.
+    /// - If the contract has not been initialized.
+    /// - If `amount` is zero or negative.
     pub fn deposit(env: Env, user: Address, amount: i128) {
+        if !env.storage().instance().has(&DataKey::Initialized) {
+            panic!("Contract not initialized");
+        }
+
         // Authorization: only the user can deposit on their own behalf
         user.require_auth();
 
@@ -131,9 +136,14 @@ impl SavingsVault {
     /// * `amount` - The amount to withdraw (must be > 0).
     ///
     /// # Panics
+    /// - If the contract has not been initialized.
     /// - If `amount` is zero or negative.
     /// - If `amount` exceeds the user's available balance.
     pub fn withdraw(env: Env, user: Address, amount: i128) {
+        if !env.storage().instance().has(&DataKey::Initialized) {
+            panic!("Contract not initialized");
+        }
+
         // Authorization
         user.require_auth();
 
@@ -204,10 +214,15 @@ impl SavingsVault {
     /// * `unlock_time` - Unix timestamp (seconds) when the funds unlock.
     ///
     /// # Panics
+    /// - If the contract has not been initialized.
     /// - If `amount` is zero or negative.
     /// - If `amount` exceeds the user's available balance.
     /// - If `unlock_time` is in the past.
     pub fn lock_funds(env: Env, user: Address, amount: i128, unlock_time: u64) {
+        if !env.storage().instance().has(&DataKey::Initialized) {
+            panic!("Contract not initialized");
+        }
+
         // Authorization
         user.require_auth();
 
