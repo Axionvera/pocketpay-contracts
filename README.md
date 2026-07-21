@@ -26,6 +26,7 @@ See the [Admin Role](docs/admin-role.md) document for details on what the `initi
 | `lock_funds(user, amount, unlock_time)` | Lock funds until a Unix timestamp |
 | `get_locked_balance(user)` | Query locked balance |
 | `can_withdraw(user)` | Check if locked funds are withdrawable |
+| `get_version()` | Query the deployed contract version |
 
 ### Deposit and custody
 
@@ -220,6 +221,7 @@ stellar-pocketpay-contracts/
 - [Documentation Style Guide](docs/docs-style-guide.md) — Conventions for Testnet wording, avoiding production claims, placeholders, command formatting, and linking related docs.
 - [Sample Vault Interaction Walkthrough](docs/walkthrough.md) — End-to-end deploy, deposit, lock, query, and withdraw example with expected state changes and current limitations.
 - [Balance Reconciliation Design Note](docs/balance-reconciliation.md) — How internal accounting should reconcile with real token balances once SAC integration is implemented, including failure modes and invariants tests must enforce.
+- [Version Metadata](docs/version-metadata.md) — How the `get_version` read-only function works, how SDKs and deployment scripts should use it, and how to bump the version.
 
 ---
 

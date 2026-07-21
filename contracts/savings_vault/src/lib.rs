@@ -212,6 +212,41 @@ impl SavingsVault {
     }
 
     // -----------------------------------------------------------------------
+    // Version Metadata
+    // -----------------------------------------------------------------------
+
+    /// Get the contract version.
+    ///
+    /// Returns a hard-coded semantic version string that matches the contract
+    /// crate version in `Cargo.toml`. Because the value is baked into the
+    /// compiled WASM binary, no on-chain storage is read or written.
+    ///
+    /// SDKs and deployment tooling can call this to verify contract
+    /// compatibility before executing state-changing operations.
+    ///
+    /// # Arguments
+    ///
+    /// * `env` - The Soroban environment
+    ///
+    /// # Returns
+    ///
+    /// A string containing the contract version (e.g. `"0.1.0"`).
+    ///
+    /// # Authorization
+    ///
+    /// No authorization required (read-only operation).
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// let version = SavingsVault::get_version(&env);
+    /// assert_eq!(version, "0.1.0");
+    /// ```
+    pub fn get_version(env: Env) -> soroban_sdk::String {
+        soroban_sdk::String::from_str(&env, "0.1.0")
+    }
+
+    // -----------------------------------------------------------------------
     // Deposits
     // -----------------------------------------------------------------------
 
