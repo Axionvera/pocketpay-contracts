@@ -4,8 +4,19 @@ This document outlines the expected event topics, payloads, and naming conventio
 
 SDK maintainers can use this stable schema to consume contract events safely.
 
-> [!NOTE]
-> As events are not yet implemented in the contract, this document defines a **proposed schema**.
+---
+
+## Breaking Changes
+
+Event schema changes are considered breaking and require updates to consumer SDKs. The following changes are breaking:
+- Changing the order of topics or payload fields
+- Changing the type of any topic or payload field
+- Removing a topic or payload field
+- Changing the event name (topic 0)
+
+Non-breaking changes include adding new optional fields to the payload (if the schema allows) or adding new event types.
+
+When making any event schema change, the event compatibility tests in `contracts/savings_vault/src/test/mod.rs` must be updated to match the new schema.
 
 ---
 
