@@ -1051,3 +1051,68 @@ fn test_lock_funds_emits_event() {
     assert_eq!(event.topics, expected_topics);
     assert_eq!(event.data, expected_payload);
 }
+
+#[test]
+fn test_initialize_sets_storage_version_1() {
+    use crate::DataKey;
+
+    let env = test_env();
+    let admin = Address::generate(&env);
+    let token = Address::generate(&env);
+    let contract_id = env.register(crate::SavingsVault, ());
+    let client = crate::SavingsVaultClient::new(&env, &contract_id);
+
+    client.mock_all_auths().initialize(&admin, &token);
+
+    let version: u64 = env.storage().instance().get(&DataKey::StorageVersion).unwrap();
+    assert_eq!(version, 1);
+}
+
+#[test]
+fn test_legacy_missing_storage_version_works() {
+    // Simulate a legacy contract that was initialized without a StorageVersion
+    use crate::DataKey;
+
+    let env = test_env();
+    let admin = Address::generate(&env);
+    let token = Address::generate(&env);
+    let contract_id = env.register(crate::SavingsVault, ());
+
+    // Manually initialize without StorageVersion to simulate legacy state
+    env.storage().instance().set(&DataKey::Admin, &admin);
+    env.storage().instance().set(&DataKey::Initialized, &true);
+    env.storage().instance().set(&DataKey::Token, &token);
+
+    let client = crate::SavingsVaultClient::new(&env, &contract_id);
+    let user = new_user(&env);
+    let token_admin = test_helpers::test_token_setup(&env, &token);
+    token_admin.mint(&user, &1000);
+
+    // Verify operations still work with missing StorageVersion (backward compatible)
+    client.mock_all_auths().deposit(&user, &100);
+    assert_eq!(client.get_balance(&user), 100);
+}
+
+#[test]
+#[should_panic(expected = "Unsupported storage version")]
+fn test_invalid_storage_version_fails_safely() {
+    // Test that contract panics when encountering unsupported storage version
+    use crate::DataKey;
+
+    let env = test_env();
+    let admin = Address::generate(&env);
+    let token = Address::generate(&env);
+    let contract_id = env.register(crate::SavingsVault, ());
+
+    // Initialize with invalid version 99
+    env.storage().instance().set(&DataKey::Admin, &admin);
+    env.storage().instance().set(&DataKey::Initialized, &true);
+    env.storage().instance().set(&DataKey::Token, &token);
+    env.storage().instance().set(&DataKey::StorageVersion, &99_u64);
+
+    let client = crate::SavingsVaultClient::new(&env, &contract_id);
+    let user = new_user(&env);
+
+    // Try to deposit - should panic
+    client.mock_all_auths().deposit(&user, &100);
+}

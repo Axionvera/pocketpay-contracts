@@ -102,7 +102,8 @@ pub struct LockEntry {
 /// * `Locks(Address)` - Vector of lock entries for a specific user
 /// * `NextLockId(Address)` - Counter for generating unique lock IDs per user
 /// * `Initialized` - Boolean flag indicating contract initialization status
-/// * `Token` - The token contract address for real token transfers (future integration)
+/// * `Token` - The token contract address for real token transfers
+/// * `StorageVersion` - Version of storage layout, for future compatibility/migrations
 #[contracttype]
 #[derive(Clone)]
 pub enum DataKey {
@@ -118,6 +119,8 @@ pub enum DataKey {
     Initialized,
     /// Token Address
     Token,
+    /// Storage version marker
+    StorageVersion,
 }
 
 // ---------------------------------------------------------------------------
@@ -155,6 +158,21 @@ impl SavingsVault {
     fn assert_initialized(env: &Env) {
         if !env.storage().instance().has(&DataKey::Initialized) {
             panic!("Contract is not initialized");
+        }
+    }
+
+    fn assert_supported_storage_version(env: &Env) {
+        const CURRENT_STORAGE_VERSION: u64 = 1;
+
+        let version: Option<u64> = env.storage().instance().get(&DataKey::StorageVersion);
+
+        match version {
+            // No version found: assume legacy (version 1, backward compatible)
+            None => {}
+            // Current version: proceed
+            Some(1) => {}
+            // Unsupported version: panic safely
+            Some(v) => panic!("Unsupported storage version: {}", v),
         }
     }
 
@@ -217,6 +235,7 @@ impl SavingsVault {
         env.storage().instance().set(&DataKey::Admin, &admin);
         env.storage().instance().set(&DataKey::Initialized, &true);
         env.storage().instance().set(&DataKey::Token, &token);
+        env.storage().instance().set(&DataKey::StorageVersion, &1_u64);
 
         // Emit initialize event
         let topics = (symbol_short!("initialize"), admin.clone());
@@ -289,9 +308,8 @@ impl SavingsVault {
     /// - If the contract has not been initialized.
     /// - If `amount` is zero or negative.
     pub fn deposit(env: Env, user: Address, amount: i128) {
-        if !env.storage().instance().has(&DataKey::Initialized) {
-            panic!("Contract not initialized");
-        }
+        Self::assert_initialized(&env);
+        Self::assert_supported_storage_version(&env);
 
         // Authorization: only the user can deposit on their own behalf
         user.require_auth();
@@ -370,9 +388,8 @@ impl SavingsVault {
     /// - If `amount` is zero or negative.
     /// - If `amount` exceeds the user's available balance.
     pub fn withdraw(env: Env, user: Address, amount: i128) {
-        if !env.storage().instance().has(&DataKey::Initialized) {
-            panic!("Contract not initialized");
-        }
+        Self::assert_initialized(&env);
+        Self::assert_supported_storage_version(&env);
 
         // Authorization
         user.require_auth();
@@ -504,6 +521,7 @@ impl SavingsVault {
     /// ```
     pub fn get_balance(env: Env, user: Address) -> i128 {
         Self::assert_initialized(&env);
+        Self::assert_supported_storage_version(&env);
         let deposited_balance: i128 = env
             .storage()
             .persistent()
@@ -567,9 +585,8 @@ impl SavingsVault {
     /// - If `amount` exceeds the user's available balance.
     /// - If `unlock_time` is in the past.
     pub fn lock_funds(env: Env, user: Address, amount: i128, unlock_time: u64) -> u64 {
-        if !env.storage().instance().has(&DataKey::Initialized) {
-            panic!("Contract not initialized");
-        }
+        Self::assert_initialized(&env);
+        Self::assert_supported_storage_version(&env);
 
         // Authorization
         user.require_auth();
@@ -686,6 +703,7 @@ impl SavingsVault {
     /// ```
     pub fn get_locked_balance(env: Env, user: Address) -> i128 {
         Self::assert_initialized(&env);
+        Self::assert_supported_storage_version(&env);
         let locks: Vec<LockEntry> = env
             .storage()
             .persistent()
@@ -747,6 +765,7 @@ impl SavingsVault {
     /// ```
     pub fn can_withdraw(env: Env, user: Address) -> bool {
         Self::assert_initialized(&env);
+        Self::assert_supported_storage_version(&env);
         let locks: Vec<LockEntry> = env
             .storage()
             .persistent()
