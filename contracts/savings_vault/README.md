@@ -6,6 +6,7 @@ For project-wide setup, architecture, deployment guidance, and contribution inst
 
 ## Documentation
 - **Audit Readiness Review: [docs/audit-readiness.md](../../docs/audit-readiness.md) — Pre-audit assessment of storage, authorization, token custody, accounting, events, and documentation gaps.
+- **Custody Assumptions: [docs/vault-custody-assumptions.md](../../docs/vault-custody-assumptions.md) — Token custody guarantees, limitations, token flow diagrams, and production readiness assessment.
 - **State Machine: [docs/state-machine.md](../../docs/state-machine.md) — Contract lifecycle, user account states, valid/invalid transitions, and error states.
 - **Failure Mode Catalogue: [docs/failure-mode-catalogue.md](../../docs/failure-mode-catalogue.md) - Complete list of all known failure modes with test links
 - **All other docs are in the repo root `docs/` directory.
