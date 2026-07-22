@@ -104,3 +104,29 @@ fn test_read_functions_before_initialization() {
     assert_eq!(client.get_locked_balance(&user), 0);
     assert_eq!(client.can_withdraw(&user), false);
 }
+
+#[test]
+fn test_get_token_after_initialization() {
+    let env = test_env();
+    let contract_id = env.register(SavingsVault, ());
+    let client = SavingsVaultClient::new(&env, &contract_id);
+    let admin = Address::generate(&env);
+    let token = Address::generate(&env);
+
+    // Initialize with token
+    client.initialize(&admin, &token);
+
+    // Verify we can retrieve the token
+    assert_eq!(client.get_token(), token);
+}
+
+#[test]
+#[should_panic(expected = "Contract is not initialized")]
+fn test_get_token_before_initialization_panics() {
+    let env = test_env();
+    let contract_id = env.register(SavingsVault, ());
+    let client = SavingsVaultClient::new(&env, &contract_id);
+
+    // This should panic because the contract isn't initialized
+    client.get_token();
+}

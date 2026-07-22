@@ -214,6 +214,7 @@ stellar-pocketpay-contracts/
     ├── deployment-environments.md      # Deployment environment config
     ├── error-codes.md                  # Error code reference
     ├── events.md                       # Event schema documentation
+    ├── state-machine.md                # Vault state machine documentation
     ├── pause-design.md                 # Pause / emergency stop research
     ├── storage-migration.md            # Storage versioning and migration guide
     ├── storage-ttl.md                  # Storage TTL guide
@@ -229,6 +230,7 @@ stellar-pocketpay-contracts/
 - [Deployment Environments](docs/deployment-environments.md) — Network configuration for local, testnet, and future mainnet, including RPC URLs, identities, environment variables, and deployment commands.
 - [Contract Error Reference](docs/error-codes.md) - Current savings vault failure conditions and guidance for SDK and mobile callers.
 - [SDK Error Mapping Guide](docs/sdk-error-mapping-guide.md) — Maps contract errors to SDK handling expectations with user-facing and developer-facing examples.
+- [State Machine Documentation](docs/state-machine.md) — Contract lifecycle, user account states, valid and invalid transitions, and error states.
 - [Architecture Documentation](docs/architecture.md) – Overview of project structure, state management, storage, SDK integration, and future extension points.
 - [SDK ↔ Contract Sequence Diagrams](docs/sdk-contract-sequence.md) – Mermaid sequence diagrams for balance query, deposit, withdraw, and error paths across mobile, SDK, Soroban RPC, and the vault contract.
 - [Event Schema Documentation](docs/events.md) – Overview of event names, topics, payload schemas, and JSON examples for vault actions.
@@ -240,6 +242,7 @@ stellar-pocketpay-contracts/
 - [Version Metadata](docs/version-metadata.md) — How the `get_version` read-only function works, how SDKs and deployment scripts should use it, and how to bump the version.
 - [Lock Read Helpers](docs/lock-read-helpers.md) — Response shapes and pagination for `get_lock` and `list_locks`.
 - [Test Coverage Summary](docs/test-coverage.md) — Maps initialization, deposit, withdrawal, and locking behaviours to the tests that cover them, plus known test gaps.
+- [Failure Mode Catalogue](docs/failure-mode-catalogue.md) — Comprehensive list of all contract failure modes with expected behavior and test coverage.
 
 ---
 

@@ -1,133 +1,99 @@
-# Storage Audit — Savings Vault Contract
-
-This document provides a detailed storage audit for the Savings Vault smart contract. It maps the contract's Soroban storage keys to their respective mutating functions, defines their expected types and storage layers, and lists critical storage invariants.
-
-> **Important:** This contract is designed for educational and testnet use. It is not production-ready or mainnet-ready.
-
----
-
-## 1. Storage Keys and Schema
-
-The contract uses the [DataKey](../contracts/savings_vault/src/lib.rs#L113-L126) enum to define all storage locations. Storage is split between **Instance** storage (tied to the contract lifetime) and **Persistent** storage (associated with individual user state and requires active TTL management).
-
-### Storage Layout Summary
-
-| Key Variant | Storage Layer | Rust Type | Description |
-|---|---|---|---|
-| `DataKey::Admin` | Instance | `Address` | The address of the contract administrator. |
-| `DataKey::Initialized` | Instance | `bool` | Flag indicating if the contract has been initialized. |
-| `DataKey::Token` | Instance | `Address` | The address of the token contract (SAC) used for transfers. |
-| `DataKey::Balance(Address)` | Persistent | `i128` | The available (unlocked) balance of a specific user. |
-| `DataKey::Locks(Address)` | Persistent | `Vec<LockEntry>` | A vector of active or matured lock records for a user. |
-| `DataKey::NextLockId(Address)` | Persistent | `u64` | A sequential counter for generating unique lock IDs per user. |
+# Storage Audit: Savings Vault Contract
+This document provides a comprehensive audit of all storage keys used in the Savings Vault contract, including:
+- Storage key definitions and types
+- Mutation points (which functions modify which keys)
+- Invariants that must always hold
+- TTL management guidelines
 
 ---
 
-## 2. Storage Entries Detail
+## 1. Storage Layers
+The contract uses two Soroban storage layers:
 
-### `DataKey::Admin`
-- **Storage Layer**: Instance
-- **Value Type**: `Address`
-- **Initialization**: Set once during [initialize](../contracts/savings_vault/src/lib.rs#L219-L238).
-- **Mutating Functions**: None (read-only after initialization).
-- **Invariants**: 
-  - Must represent a valid authorized address on the network.
-  - Can never be updated or overwritten once set.
-
-### `DataKey::Initialized`
-- **Storage Layer**: Instance
-- **Value Type**: `bool`
-- **Initialization**: Set once to `true` during [initialize](../contracts/savings_vault/src/lib.rs#L219-L238).
-- **Mutating Functions**: None (read-only after initialization).
-- **Invariants**:
-  - Once set to `true`, any subsequent calls to [initialize](../contracts/savings_vault/src/lib.rs#L219-L238) will panic.
-  - All state-changing functions and queries (except `get_version`) assert that this key is set to `true`.
-
-### `DataKey::Token`
-- **Storage Layer**: Instance
-- **Value Type**: `Address`
-- **Initialization**: Set once during [initialize](../contracts/savings_vault/src/lib.rs#L219-L238).
-- **Mutating Functions**: None (read-only after initialization).
-- **Invariants**:
-  - Must represent a valid token contract address (Stellar Asset Contract) deployed on the network.
-  - Can never be updated or overwritten once set.
-
-### `DataKey::Balance(Address)`
-- **Storage Layer**: Persistent
-- **Value Type**: `i128`
-- **Initialization**: Created on first [deposit](../contracts/savings_vault/src/lib.rs#L303-L350).
-- **Mutating Functions**:
-  - [deposit](../contracts/savings_vault/src/lib.rs#L303-L350): Increments the balance by the deposited amount.
-  - [withdraw](../contracts/savings_vault/src/lib.rs#L384-L481): Decrements the balance (and potentially modifies matured locks).
-  - [lock_funds](../contracts/savings_vault/src/lib.rs#L577-L663): Decrements the available balance by the locked amount.
-- **Invariants**:
-  - `Balance(user) >= 0` at all times.
-  - Only modified when authorization is successfully checked via `user.require_auth()`.
-
-### `DataKey::Locks(Address)`
-- **Storage Layer**: Persistent
-- **Value Type**: `Vec<LockEntry>` where [LockEntry](../contracts/savings_vault/src/lib.rs#L88-L92) is defined as:
-  ```rust
-  pub struct LockEntry {
-      pub id: u64,
-      pub amount: i128,
-      pub unlock_time: u64,
-  }
-  ```
-- **Initialization**: Created on first call to [lock_funds](../contracts/savings_vault/src/lib.rs#L577-L663).
-- **Mutating Functions**:
-  - [lock_funds](../contracts/savings_vault/src/lib.rs#L577-L663): Appends a new `LockEntry` to the user's locks vector.
-  - [withdraw](../contracts/savings_vault/src/lib.rs#L384-L481): Consumes matured locks (deleting fully consumed ones and updating the remaining amount on partially consumed ones) if the withdrawal amount exceeds the user's basic available balance.
-- **Invariants**:
-  - For each `LockEntry`, `amount > 0` must hold true.
-  - When created, `unlock_time` must be in the future relative to the current ledger timestamp (`unlock_time > env.ledger().timestamp()`).
-  - Active and matured locks remain in this vector until a [withdraw](../contracts/savings_vault/src/lib.rs#L384-L481) transaction explicitly processes/consumes them.
-  - Total funds tracked in locks for a user must equal the sum of all `amount` values in the vector.
-
-### `DataKey::NextLockId(Address)`
-- **Storage Layer**: Persistent
-- **Value Type**: `u64`
-- **Initialization**: Defaults to `1` if not found. Created and set to `2` during the first call to [lock_funds](../contracts/savings_vault/src/lib.rs#L577-L663).
-- **Mutating Functions**:
-  - [lock_funds](../contracts/savings_vault/src/lib.rs#L577-L663): Increments the ID counter by 1.
-- **Invariants**:
-  - Monotonically increasing counter starting at `1`.
-  - For any user lock index, the generated ID will satisfy `NextLockId(user) > max(lock.id for lock in Locks(user))` (unless locks are empty).
+| Layer | Purpose |
+|-------|---------|
+| **Instance Storage** | Stores configuration and initialization state (admin, token, initialized flag, storage version) |
+| **Persistent Storage** | Stores per-user state (balances, locks, lock ID counter) |
 
 ---
 
-## 3. Storage Mutation Mapping
+## 2. Storage Key Audit
 
-The following matrix maps contract entry points to their impact on each storage key (No Access, Read, Write, or Read/Write):
+### Instance Storage Keys
+| Key | Type | Default | Initialization | Mutation Points | Invariants |
+|-----|------|---------|----------------|-----------------|------------|
+| `DataKey::Admin` | `Address` | None | Set once in `initialize` | `transfer_admin` | - Immutable after `transfer_admin`; only admin can change |
+| `DataKey::Initialized` | `bool` | None | Set to `true` in `initialize` | None (never modified after initialization) | - Always `true` after initialization; never unset |
+| `DataKey::Token` | `Address` | None | Set once in `initialize` | None (never modified after initialization) | - Immutable after initialization |
+| `DataKey::StorageVersion` | `u64` | None | Set to `STORAGE_VERSION` (1) in `initialize` | None (never modified after initialization) | - Always equals `STORAGE_VERSION` |
 
-| Function | `Admin` | `Initialized` | `Token` | `Balance(user)` | `Locks(user)` | `NextLockId(user)` |
-|---|---|---|---|---|---|---|
-| `initialize` | Write | Write (Check/Write) | Write | No Access | No Access | No Access |
-| `get_version` | No Access | No Access | No Access | No Access | No Access | No Access |
-| `deposit` | No Access | Read | Read | Read & Write | No Access | No Access |
-| `withdraw` | No Access | Read | Read | Read & Write | Read & Write | No Access |
-| `get_balance` | No Access | Read | No Access | Read | Read | No Access |
-| `lock_funds` | No Access | Read | No Access | Read & Write | Read & Write | Read & Write |
-| `get_locked_balance`| No Access | Read | No Access | No Access | Read | No Access |
-| `can_withdraw` | No Access | Read | No Access | No Access | Read | No Access |
-| `get_lock` | No Access | Read | No Access | No Access | Read | No Access |
-| `list_locks` | No Access | Read | No Access | No Access | Read | No Access |
+### Persistent Storage Keys
+| Key | Type | Default | Initialization | Mutation Points | Invariants |
+|-----|------|---------|----------------|-----------------|------------|
+| `DataKey::Balance(Address)` | `i128` | `0` (implicit) | Not set at initialization | `deposit`, `withdraw`, `lock_funds` | - ≥ 0 at all times; represents available balance |
+| `DataKey::Locks(Address)` | `Vec<LockEntry>` | Empty `Vec` | Not set at initialization | `lock_funds`, `withdraw`, `withdraw_lock` | - All `LockEntry.amount` ≥ 0; `LockEntry.id` unique for user; `LockEntry.unlock_time` ≥ 0 |
+| `DataKey::NextLockId(Address)` | `u64` | `1` (implicit) | Not set at initialization | `lock_funds` | - Strictly increasing (monotonic); never decreases |
 
 ---
 
-## 4. Key Security Invariants & Potential Risks
+## 3. Mutation Point Mapping
+This section maps each storage key to the functions that modify it:
 
-### 4.1 Balance Invariant
-The total custody balance of the contract on-chain (the Stellar Asset Contract balance of the contract's address) must always equal the sum of all users' `Balance(user)` entries and the amounts in all users' `Locks(user)` entries.
-$$\text{Contract Token Balance} = \sum_{u} \left( \text{Balance}(u) + \sum_{l \in \text{Locks}(u)} l.\text{amount} \right)$$
-*Security Impact*: Since Soroban contract balances are backed by the SAC, any discrepancy where internal accounting exceeds the actual contract balance would result in transaction panics during withdrawal.
+### Instance Storage
+| Function | Modifies |
+|----------|----------|
+| `initialize` | `Admin`, `Initialized`, `Token`, `StorageVersion` |
+| `transfer_admin` | `Admin` |
 
-### 4.2 Storage Expiry (TTL) Hazards
-Since user balances use **Persistent** storage, they are subject to expiration if not read/written (or extended) within the network's maximum TTL period.
-- **Risk**: If `Balance(user)` expires, the contract defaults to `0` via `unwrap_or(0)` logic. If a user subsequently deposits or checks their balance, they might read `0` or write a new balance that does not include their prior funds, potentially leading to state loss.
-- **Mitigation**: Users must interact with the contract or invoke `extend` to keep their persistent entries active. See [Storage TTL](storage-ttl.md) for detailed guidelines.
+### Persistent Storage
+| Function | Modifies |
+|----------|----------|
+| `deposit` | `Balance(user)` |
+| `withdraw` | `Balance(user)`, `Locks(user)` |
+| `lock_funds` | `Balance(user)`, `Locks(user)`, `NextLockId(user)` |
+| `withdraw_lock` | `Locks(user)` |
 
-### 4.3 Lock Manipulation
-Matured locks are not moved automatically back to the available balance. Instead, they remain in the `Locks` vector until a `withdraw` is triggered.
-- **Invariance**: A lock is only consumed when the user requests a withdrawal of an amount that exceeds their available balance.
-- **Risk**: If the `Locks` vector grows too large (e.g., thousands of lock entries per user), iterating over all locks in `withdraw`, `get_balance`, or `get_locked_balance` could exceed CPU instructions or memory limits, causing denial of service (DoS) for the user.
+---
+
+## 4. Critical Storage Invariants
+These invariants must hold at all times, across all function calls:
+
+### Invariant 1: User Available Balance ≥ 0
+- **Description**: `Balance(user)` must never be negative
+- **Enforced By**: `deposit`, `withdraw`, `lock_funds`
+- **Tested By**: `balance_conservation.rs` tests and `property_vault_accounting.rs` proptests
+
+### Invariant 2: User Lock Entry Amounts ≥ 0
+- **Description**: Every `LockEntry.amount` in `Locks(user)` must be ≥ 0
+- **Enforced By**: `lock_funds`
+- **Tested By**: `balance_conservation.rs` tests
+
+### Invariant 3: NextLockId Is Monotonic
+- **Description**: `NextLockId(user)` must never decrease; only increments by 1 per `lock_funds` call
+- **Enforced By**: `lock_funds`
+- **Tested By**: `lock_read_helpers.rs` tests
+
+### Invariant 4: Lock Entry IDs Are Unique Per User
+- **Description**: No two `LockEntry` in `Locks(user)` share the same `id`
+- **Enforced By**: `lock_funds` (uses `NextLockId` to generate unique IDs)
+- **Tested By**: Implicit via monotonic `NextLockId`
+
+### Invariant 5: Token Custody Invariant
+- **Description**: The sum of all user balances + sum of all user locked balances ≤ SAC balance of the contract
+- **Enforced By**: All functions that perform token transfers (`deposit`, `withdraw`, `withdraw_lock`)
+- **Tested By**: `property_vault_accounting::prop_global_token_custody` (proptest)
+
+### Invariant 6: Initialized Flag Remains True After Initialization
+- **Description**: Once `initialize` has been called, `Initialized` remains `true` forever
+- **Enforced By**: `initialize` (sets flag; no other function modifies it)
+- **Tested By**: `initialization.rs` tests
+
+---
+
+## 5. TTL Management Guidelines
+See [storage-ttl.md](storage-ttl.md) for full TTL management guidelines!
+
+---
+
+## 6. Storage Upgrade / Migration Plan
+See [upgrade-strategy.md](upgrade-strategy.md) for future upgrade/migration planning!
