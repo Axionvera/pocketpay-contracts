@@ -1,15 +1,17 @@
-//! Zero-duration and minimal-duration lock tests for the Savings Vault contract.
-//!
-//! `lock_funds` validates `unlock_time` with `unlock_time <= current_time`,
-//! which means the check is **inclusive**: a lock whose `unlock_time` equals
-//! the current ledger timestamp (a zero-second duration) is rejected exactly
-//! like a lock in the past. There is no code path that allows creating a lock
-//! that is already matured the instant it is created.
-//!
-//! This module documents and verifies that behaviour explicitly, and then
-//! exercises the smallest duration the contract *does* accept — one second —
-//! to confirm such a lock stays locked at creation time and matures (and
-//! becomes withdrawable) as soon as the ledger timestamp advances to it.
+extern crate std;
+
+// Zero-duration and minimal-duration lock tests for the Savings Vault contract.
+//
+// `lock_funds` validates `unlock_time` with `unlock_time <= current_time`,
+// which means the check is **inclusive**: a lock whose `unlock_time` equals
+// the current ledger timestamp (a zero-second duration) is rejected exactly
+// like a lock in the past. There is no code path that allows creating a lock
+// that is already matured the instant it is created.
+//
+// This module documents and verifies that behaviour explicitly, and then
+// exercises the smallest duration the contract *does* accept — one second —
+// to confirm such a lock stays locked at creation time and matures (and
+// becomes withdrawable) as soon as the ledger timestamp advances to it.
 
 use super::test_helpers::*;
 use soroban_sdk::{testutils::Address as _, Address};
@@ -157,7 +159,7 @@ fn test_lock_minimal_one_second_duration_matures_after_advancing_one_second() {
 #[test]
 fn test_withdraw_succeeds_immediately_after_minimal_duration_lock_matures() {
     let (env, current_contract_address, client) = setup();
-    let (env, _admin, client, token_client, token_admin) = test_token(env, client);
+    let (env, _admin, client, token_client, token_admin) = test_token(env, current_contract_address.clone(), client);
     let user = Address::generate(&env);
 
     set_ledger_timestamp(&env, 1_000);

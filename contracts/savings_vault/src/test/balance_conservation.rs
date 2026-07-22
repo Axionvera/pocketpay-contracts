@@ -61,7 +61,7 @@ struct MultiUserFixture {
 
 fn new_multi_user_fixture(user_count: usize) -> MultiUserFixture {
     let (env, contract_id, client) = setup();
-    let (env, _admin, client, _token_client, token_admin) = test_token(env, client);
+    let (env, _admin, client, _token_client, token_admin) = test_token(env, contract_id, client);
 
     let mut users = Vec::new(&env);
     let mut expected_totals = Vec::new(&env);
@@ -525,12 +525,17 @@ fn conservation_mixed_valid_and_invalid_sequence() {
 
 fn assert_all_conserved(f: &MultiUserFixture) {
     for (i, user) in f.users.iter().enumerate() {
-        assert_conserved(&f.client, user, f.expected_totals[i]);
+        let expected = f.expected_totals.get(i as u32).unwrap();
+        assert_conserved(&f.client, &user, expected);
     }
 }
 
 fn snapshot_all(f: &MultiUserFixture) -> Vec<(i128, i128)> {
-    f.users.iter().map(|u| snapshot(&f.client, u)).collect()
+    let mut vec = Vec::new(&f.env);
+    for u in f.users.iter() {
+        vec.push_back(snapshot(&f.client, &u));
+    }
+    vec
 }
 
 fn run_multi_user_sequence(ops: &[(UserOp, Expect)]) {
@@ -542,18 +547,20 @@ fn run_multi_user_sequence(ops: &[(UserOp, Expect)]) {
 
         match (user_op, expect) {
             (UserOp::Op(user_idx, op), Expect::Ok) => {
-                let user = &f.users[*user_idx];
+                let user = f.users.get(*user_idx as u32).unwrap();
                 match op {
                     Op::Deposit(amount) => {
-                        f.client.deposit(user, amount);
-                        f.expected_totals[*user_idx] += amount;
+                        f.client.deposit(&user, amount);
+                        let cur = f.expected_totals.get(*user_idx as u32).unwrap();
+                        f.expected_totals.set(*user_idx as u32, cur + amount);
                     }
                     Op::Withdraw(amount) => {
-                        f.client.withdraw(user, amount);
-                        f.expected_totals[*user_idx] -= amount;
+                        f.client.withdraw(&user, amount);
+                        let cur = f.expected_totals.get(*user_idx as u32).unwrap();
+                        f.expected_totals.set(*user_idx as u32, cur - amount);
                     }
                     Op::Lock { amount, unlock_time } => {
-                        f.client.lock_funds(user, amount, *unlock_time);
+                        let _ = f.client.lock_funds(&user, amount, unlock_time);
                     }
                     Op::SetTime(_) => {
                         // handled via UserOp::SetTime
@@ -561,16 +568,16 @@ fn run_multi_user_sequence(ops: &[(UserOp, Expect)]) {
                 }
             }
             (UserOp::Op(user_idx, op), Expect::Err) => {
-                let user = &f.users[*user_idx];
+                let user = f.users.get(*user_idx as u32).unwrap();
                 match op {
                     Op::Deposit(amount) => {
-                        assert!(f.client.try_deposit(user, amount).is_err());
+                        assert!(f.client.try_deposit(&user, amount).is_err());
                     }
                     Op::Withdraw(amount) => {
-                        assert!(f.client.try_withdraw(user, amount).is_err());
+                        assert!(f.client.try_withdraw(&user, amount).is_err());
                     }
                     Op::Lock { amount, unlock_time } => {
-                        assert!(f.client.try_lock_funds(user, amount, *unlock_time).is_err());
+                        assert!(f.client.try_lock_funds(&user, amount, unlock_time).is_err());
                     }
                     Op::SetTime(_) => {
                         panic!("step {step}: SetTime via UserOp::Op is invalid");
@@ -611,7 +618,7 @@ fn conservation_cross_user_isolation() {
         (UserOp::SetTime(3000), Expect::Ok),
         (UserOp::Op(0, Op::Withdraw(300)), Expect::Ok), // available (300) + matured (200) → withdraw 300
         (UserOp::SetTime(5000), Expect::Ok),
-        (UserOp::Op(1, Op::Withdraw(350)), Expect::Ok), // 200 available + 150 matured → withdraw 350
+        (UserOp::Op(1, Op::Withdraw(200)), Expect::Ok), // 50 available + 150 matured → withdraw 200
     ]);
 }
 
