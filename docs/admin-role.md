@@ -1,6 +1,6 @@
 # Admin Role — Savings Vault
 
-This document explains what the `admin` address recorded by `initialize(admin)` currently stores, what (if anything) the admin can do today, and design considerations for future admin powers.
+This document explains what the `admin` address recorded by `initialize(admin)` currently stores, what the admin can do today, and design considerations for future admin powers.
 
 ## What `initialize(admin)` stores
 
@@ -8,12 +8,22 @@ This document explains what the `admin` address recorded by `initialize(admin)` 
 - It also sets an `Initialized` flag so `initialize()` can only be called once.
 - The recorded admin address is required to have signed the `initialize()` transaction (the function calls `admin.require_auth()`).
 
-## Current admin capabilities (today)
+## Current admin capabilities
 
-- None beyond being recorded in contract storage. The contract currently does not implement any admin-only functions such as pausing, migrating, fund recovery, or changing settings.
-- The `admin` value may be used by off-chain tooling or by future on-chain upgradeable/admin-only functions if added later.
+### `get_admin()`
+- **Access**: Public, no authorization required.
+- **Description**: Returns the current admin address stored in instance storage.
+- **State changes**: None (read-only).
+- **Panics**: If the contract has not been initialized yet.
 
-## What the admin cannot do (today)
+### `transfer_admin(new_admin)`
+- **Access**: Admin-only.
+- **Description**: Transfers admin privileges from the current admin to a new address.
+- **Authorization**: Must be called by the current admin (requires `admin.require_auth()`).
+- **State changes**: Updates the `Admin` key in instance storage to the new admin address, emits a `transfer_admin` event.
+- **Panics**: If the contract has not been initialized, or if the caller is not the current admin.
+
+## What the admin cannot do
 
 - Cannot pause contract execution or halt deposits/withdrawals.
 - Cannot migrate or sweep funds from user balances.
@@ -23,8 +33,9 @@ This document explains what the `admin` address recorded by `initialize(admin)` 
 
 ## Security & trust implications
 
-- Recording an admin address by itself does not grant powers; the contract's code determines those powers. At present, storing the admin is informational and preparatory only.
-- Users and auditors should treat the admin as inert unless/until admin-only functions are explicitly added and documented.
+- The admin's powers are currently limited to transferring admin rights; they cannot access or modify user funds.
+- Users and auditors should review any future changes to the admin's capabilities carefully.
+- Multi-signature (multisig) administration is recommended for the admin key to reduce the risk of a single point of failure.
 
 ## Future design considerations
 
@@ -40,12 +51,14 @@ When adding admin capabilities in the future, consider the following best practi
 ## Where to find this in the code
 
 - The admin value is stored under `DataKey::Admin` in [`contracts/savings_vault/src/lib.rs`](contracts/savings_vault/src/lib.rs).
+- Admin helper functions: `assert_initialized()`, `assert_supported_storage_version()`, `assert_admin()`.
+- Admin functions: `get_admin()`, `transfer_admin()`.
 
 ## Acceptance checklist
 
 - [x] Admin role documentation exists.
 - [x] Docs explain what `initialize(admin)` stores.
-- [x] Docs explain current admin capabilities (none beyond storage).
+- [x] Docs explain current admin capabilities.
 - [x] Docs explain what admin cannot do.
 - [x] Docs mention future admin design considerations.
 

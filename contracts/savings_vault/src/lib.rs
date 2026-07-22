@@ -62,6 +62,9 @@
 //! ```
 
 #![no_std]
+extern crate alloc;
+#[cfg(test)]
+extern crate std;
 
 use soroban_sdk::{
     contract, contractimpl, contracttype, log, symbol_short, token, Address, Env, Symbol, Vec,
@@ -170,6 +173,24 @@ impl SavingsVault {
         }
     }
 
+    fn assert_supported_storage_version(env: &Env) {
+        let version: u64 = env
+            .storage()
+            .instance()
+            .get(&DataKey::StorageVersion)
+            .unwrap_or(0);
+        if version != STORAGE_VERSION {
+            panic!("Unsupported storage version");
+        }
+    }
+
+    fn assert_admin(env: &Env, admin: &Address) {
+        let stored_admin: Address = env.storage().instance().get(&DataKey::Admin).unwrap();
+        if admin != &stored_admin {
+            panic!("Not authorized");
+        }
+    }
+
     fn load_locks(env: &Env, user: Address) -> Vec<LockEntry> {
         env.storage()
             .persistent()
@@ -262,6 +283,10 @@ impl SavingsVault {
         env.events().publish(topics, token.clone());
 
         log!(&env, "Savings Vault initialized with admin: {}, storage version: {}", admin, STORAGE_VERSION);
+        let topics = (symbol_short!("init"), admin.clone());
+        env.events().publish(topics, token.clone());
+
+        log!(&env, "Vault init: admin={}, version={}", admin, STORAGE_VERSION);
     }
 
     // -----------------------------------------------------------------------
@@ -589,7 +614,7 @@ impl SavingsVault {
             None => panic!("Lock not found"),
         };
 
-        let lock = locks.get(index).unwrap();
+        let lock = locks.get(index as u32).unwrap();
 
         // Verify maturity
         let current_time = env.ledger().timestamp();
@@ -606,7 +631,7 @@ impl SavingsVault {
         token_client.transfer(&contract_address, &user, &lock.amount);
 
         // Remove the lock from the locks vector
-        locks.remove(index);
+        locks.remove(index as u32);
 
         // Save updated locks back to persistent storage
         env.storage()
@@ -983,6 +1008,64 @@ impl SavingsVault {
             page.push_back(locks.get(i).unwrap());
         }
         page
+    }
+
+    // -----------------------------------------------------------------------
+    // Admin Functions
+    // -----------------------------------------------------------------------
+
+    /// Get the admin address.
+    ///
+    /// Returns the address stored as admin during contract initialization.
+    ///
+    /// # Arguments
+    ///
+    /// * `env` - The Soroban environment
+    ///
+    /// # Returns
+    ///
+    /// The admin `Address`.
+    ///
+    /// # Authorization
+    ///
+    /// No authorization required (read-only operation).
+    pub fn get_admin(env: Env) -> Address {
+        Self::assert_initialized(&env);
+        env.storage().instance().get(&DataKey::Admin).unwrap()
+    }
+
+    /// Transfer admin privileges to a new address.
+    ///
+    /// This function replaces the current admin address with a new one. Only the current admin
+    /// can call this function.
+    ///
+    /// # Arguments
+    ///
+    /// * `env` - The Soroban environment
+    /// * `admin` - The current admin address (must authorize this transaction)
+    /// * `new_admin` - The new admin address to set
+    ///
+    /// # Authorization
+    ///
+    /// The `admin` address must sign the transaction.
+    ///
+    /// # State Changes
+    ///
+    /// - Updates the admin address in instance storage
+    /// - Emits an event with the old and new admin addresses
+    pub fn transfer_admin(env: Env, admin: Address, new_admin: Address) {
+        Self::assert_initialized(&env);
+        admin.require_auth();
+        Self::assert_admin(&env, &admin);
+
+        let old_admin: Address = env.storage().instance().get(&DataKey::Admin).unwrap();
+        env.storage().instance().set(&DataKey::Admin, &new_admin);
+
+        // Emit transfer_admin event
+        let topics = (symbol_short!("xferadmin"), old_admin.clone());
+        env.events().publish(topics, new_admin.clone());
+
+        log!(&env, "Admin transferred from {} to {}", old_admin, new_admin);
     }
 }
 

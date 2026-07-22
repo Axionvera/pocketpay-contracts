@@ -16,7 +16,7 @@ The contract exposes these public functions in `src/lib.rs`:
 - `deposit(env, user, amount)` records a deposit in the user's available vault balance.
 - `withdraw(env, user, amount)` withdraws an amount from the user's available balance.
 - `get_balance(env, user)` returns the user's available balance.
-- `lock_funds(env, user, amount, unlock_time)` moves available funds into the locked balance until a Unix timestamp.
+- `lock_funds(env, user, amount, unlock_time)` moves available funds into the locked balance until a Unix timestamp. `unlock_time` must be strictly later than the current ledger timestamp — a zero-duration lock (`unlock_time == current_time`) is rejected with `"Unlock time must be in the future"`; the shortest valid duration is one second.
 - `get_locked_balance(env, user)` returns the user's locked balance.
 - `get_lock(env, user, lock_id)` returns one lock record when it exists.
 - `list_locks(env, user, offset, limit)` returns a paginated list of lock records.

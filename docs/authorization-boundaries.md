@@ -18,6 +18,8 @@ This document defines the authorization rules for every public function in the S
 | `get_lock(env, user, lock_id)` | Anyone (public) | None | ❌ No |
 | `list_locks(env, user, offset, limit)` | Anyone (public) | None | ❌ No |
 | `can_withdraw(env, user)` | Anyone (public) | None | ❌ No |
+| `get_admin(env)` | Anyone (public) | None | ❌ No |
+| `transfer_admin(env, admin, new_admin)` | Current admin | `admin.require_auth()` + admin check | ✅ Yes |
 
 ---
 ## Authorization Assumptions
@@ -46,6 +48,10 @@ This document defines the authorization rules for every public function in the S
 - **Expected Behavior**: Returns correct value (no authorization required for read-only queries)
 - **Tests**: All get_* tests work for any user!
 
+### Scenario 6: Call `transfer_admin` as non-admin
+- **Expected Behavior**: Panics with message `Not authorized`
+- **Test**: [test_transfer_admin_not_authorized_panics](file:///Users/amiroyeleke/Desktop/Stellar/pocketpay-contracts/contracts/savings_vault/src/test/mod.rs#L1479)
+
 ---
 ## Test Coverage
 | Misuse Scenario | Test Exists? |
@@ -55,3 +61,4 @@ This document defines the authorization rules for every public function in the S
 | Unauthorized deposit | Implied (same mechanism as withdraw) |
 | Unauthorized lock | ❌ No (though mechanism is identical to withdraw/deposit) |
 | Cross-user balance queries (allowed) | ✅ Yes |
+| Unauthorized admin transfer | ✅ Yes |
