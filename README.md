@@ -14,6 +14,7 @@ See [Known Limitations](#known-limitations) for other current constraints.
 > **This contract is for educational and testnet use.** Review the following before any mainnet deployment.
 
 See the [Admin Role](docs/admin-role.md) document for details on what the `initialize(admin)` value records, what the admin can and cannot do today, and future admin design considerations.
+See the [Emergency Pause and Admin Misuse Threat Model](docs/admin-pause-threat-model.md) for malicious or compromised admin scenarios, withdrawal impact, recovery assumptions, mitigations, and residual risks.
 
 ## Features
 
@@ -216,6 +217,7 @@ stellar-pocketpay-contracts/
     ├── events.md                       # Event schema documentation
     ├── state-machine.md                # Vault state machine documentation
     ├── pause-design.md                 # Pause / emergency stop research
+    ├── admin-pause-threat-model.md    # Emergency pause and admin misuse threat model
     ├── storage-migration.md            # Storage versioning and migration guide
     ├── storage-ttl.md                  # Storage TTL guide
     ├── troubleshooting.md              # Troubleshooting guide
@@ -226,6 +228,7 @@ stellar-pocketpay-contracts/
 ## Documentation
 
 - [Audit Preparation Checklist](docs/audit-preparation.md) — Checklist of documentation, tests, threat model, and deployment details required before any external security review or audit.
+- [Emergency Pause and Admin Misuse Threat Model](docs/admin-pause-threat-model.md) — Threat scenarios, withdrawal impact, recovery assumptions, mitigations, limitations, and residual risks for admin-controlled pause mechanisms.
 - [Storage Audit](docs/storage-audit.md) — Comprehensive details on the contract's storage layout, keys, mutating functions, and security invariants.
 - [Storage Migration Guide](docs/storage-migration.md) — Safe storage versioning and migration strategy for future contract upgrades.
 - [Deployment Environments](docs/deployment-environments.md) — Network configuration for local, testnet, and future mainnet, including RPC URLs, identities, environment variables, and deployment commands.
