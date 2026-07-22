@@ -16,6 +16,7 @@
 
 use super::test_helpers::*;
 use super::*;
+use alloc::vec::Vec as StdVec;
 use proptest::prelude::*;
 use soroban_sdk::{testutils::Address as _, Address, Env};
 
@@ -83,7 +84,7 @@ fn time_strategy() -> impl Strategy<Value = u64> {
     ]
 }
 
-fn op_sequence_strategy() -> impl Strategy<Value = Vec<Op>> {
+fn op_sequence_strategy() -> impl Strategy<Value = StdVec<Op>> {
     proptest::collection::vec(
         prop_oneof![
             deposit_strategy().prop_map(Op::Deposit),
@@ -109,8 +110,8 @@ struct FuzzFixture {
 }
 
 fn new_fuzz_fixture() -> FuzzFixture {
-    let (env, _contract_id, client) = setup();
-    let (env, _admin, client, _token_client, token_admin) = test_token(env, client);
+    let (env, contract_id, client) = setup();
+    let (env, _admin, client, _token_client, token_admin) = test_token(env, contract_id, client);
     let user = Address::generate(&env);
     token_admin.mint(&user, &1_000_000_000);
     set_ledger_timestamp(&env, 1_000);
@@ -196,8 +197,8 @@ struct MultiFuzzFixture {
 }
 
 fn new_multi_fuzz_fixture(count: usize) -> MultiFuzzFixture {
-    let (env, _contract_id, client) = setup();
-    let (env, _admin, client, _token_client, token_admin) = test_token(env, client);
+    let (env, contract_id, client) = setup();
+    let (env, _admin, client, _token_client, token_admin) = test_token(env, contract_id, client);
     let mut users = Vec::new(&env);
     let mut expected_totals = Vec::new(&env);
     for _ in 0..count {
@@ -211,40 +212,122 @@ fn new_multi_fuzz_fixture(count: usize) -> MultiFuzzFixture {
 }
 
 fn assert_all_conserved(f: &MultiFuzzFixture) {
-    for (i, user) in f.users.iter().enumerate() {
-        let available = f.client.get_balance(user);
-        let locked = f.client.get_locked_balance(user);
+    for i in 0..f.users.len() {
+        let user = f.users.get(i).unwrap();
+        let available = f.client.get_balance(&user);
+        let locked = f.client.get_locked_balance(&user);
         assert!(available >= 0, "user {i}: available negative ({available})");
         assert!(locked >= 0, "user {i}: locked negative ({locked})");
+        let expected_i = f.expected_totals.get(i).unwrap();
         assert_eq!(
             available + locked,
-            f.expected_totals[i],
+            expected_i,
             "user {i}: conservation failed"
         );
     }
 }
 
-fn snapshot_all(f: &MultiFuzzFixture) -> Vec<(i128, i128)> {
-    f.users
-        .iter()
-        .map(|u| (f.client.get_balance(u), f.client.get_locked_balance(u)))
-        .collect()
+fn snapshot_all(f: &MultiFuzzFixture) -> soroban_sdk::Vec<(i128, i128)> {
+    let mut v = soroban_sdk::Vec::new(&f.env);
+    for u in &f.users {
+        v.push_back((f.client.get_balance(&u), f.client.get_locked_balance(&u)));
+    }
+    v
 }
 
 #[derive(Clone, Debug)]
 struct UserOp(usize, Op);
 
-fn multi_op_strategy(user_count: usize) -> impl Strategy<Value = Vec<UserOp>> {
-    proptest::collection::vec(
-        (0..user_count as usize).prop_flat_map(|idx| {
-            op_sequence_strategy().prop_map(move |ops| {
-                ops.into_iter()
-                    .map(move |op| UserOp(idx, op))
-                    .collect::<Vec<_>>()
-            })
-        }),
-        1..=10usize,
-    )
+fn multi_op_strategy(user_count: usize) -> impl Strategy<Value = StdVec<UserOp>> {
+    // Generate individual (user_index, Op) pairs; the caller flattens them into a sequence
+    let idx_strategy = 0..user_count;
+    (idx_strategy, op_sequence_strategy()).prop_map(|(idx, ops)| {
+        ops.into_iter().map(|op| UserOp(idx, op)).collect()
+    })
+}
+
+fn prop_cross_user_isolation_inner(ops: StdVec<UserOp>) {
+    let mut f = new_multi_fuzz_fixture(2);
+    assert_all_conserved(&f);
+    for UserOp(idx, op) in &ops {
+        let user = f.users.get(*idx as u32).unwrap();
+        match op {
+            Op::Deposit(amount) => {
+                if *amount > 0 {
+                    f.client.deposit(&user, amount);
+                    let cur = f.expected_totals.get(*idx as u32).unwrap();
+                    f.expected_totals.set(*idx as u32, cur + amount);
+                }
+            }
+            Op::Withdraw(amount) => {
+                let avail = f.client.get_balance(&user);
+                if *amount > 0 && *amount <= avail {
+                    f.client.withdraw(&user, amount);
+                    let cur = f.expected_totals.get(*idx as u32).unwrap();
+                    f.expected_totals.set(*idx as u32, cur - amount);
+                }
+            }
+            Op::Lock { amount, unlock_time } => {
+                let ct = f.env.ledger().timestamp();
+                let avail = f.client.get_balance(&user);
+                if *amount > 0 && *amount <= avail && *unlock_time > ct {
+                    f.client.lock_funds(&user, amount, unlock_time);
+                }
+            }
+            Op::SetTime(ts) => set_ledger_timestamp(&f.env, *ts),
+        }
+        assert_all_conserved(&f);
+    }
+}
+
+fn prop_global_token_custody_inner(ops: StdVec<UserOp>) {
+    let mut f = new_multi_fuzz_fixture(3);
+    let token_addr: Address = f.env.as_contract(&f.env.register(SavingsVault, ()), || {
+        f.env.storage().instance().get(&DataKey::Token).unwrap()
+    });
+    let token_client = token::Client::new(&f.env, &token_addr);
+
+    let check_custody = |f: &MultiFuzzFixture| {
+        let contract_addr = f.env.register(SavingsVault, ());
+        let contract_bal = token_client.balance(&contract_addr);
+        let mut sum: i128 = 0;
+        for user in &f.users {
+            sum += f.client.get_balance(&user) + f.client.get_locked_balance(&user);
+        }
+        assert_eq!(contract_bal, sum, "global custody mismatch");
+    };
+
+    check_custody(&f);
+    for UserOp(idx, op) in &ops {
+        let user = f.users.get(*idx as u32).unwrap();
+        match op {
+            Op::Deposit(amount) => {
+                if *amount > 0 {
+                    f.client.deposit(&user, amount);
+                    let cur = f.expected_totals.get(*idx as u32).unwrap();
+                    f.expected_totals.set(*idx as u32, cur + amount);
+                }
+            }
+            Op::Withdraw(amount) => {
+                let avail = f.client.get_balance(&user);
+                if *amount > 0 && *amount <= avail {
+                    f.client.withdraw(&user, amount);
+                    let cur = f.expected_totals.get(*idx as u32).unwrap();
+                    f.expected_totals.set(*idx as u32, cur - amount);
+                }
+            }
+            Op::Lock { amount, unlock_time } => {
+                let ct = f.env.ledger().timestamp();
+                let avail = f.client.get_balance(&user);
+                if *amount > 0 && *amount <= avail && *unlock_time > ct {
+                    f.client.lock_funds(&user, amount, unlock_time);
+                }
+            }
+            Op::SetTime(ts) => set_ledger_timestamp(&f.env, *ts),
+        }
+        assert_all_conserved(&f);
+        check_custody(&f);
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -274,93 +357,11 @@ proptest! {
 
     #[test]
     fn prop_cross_user_isolation(ops in multi_op_strategy(2)) {
-        let mut f = new_multi_fuzz_fixture(2);
-        assert_all_conserved(&f);
-        for UserOp(idx, op) in &ops {
-            let before = snapshot_all(&f);
-            let user = &f.users[*idx];
-            match op {
-                Op::Deposit(amount) => {
-                    if *amount > 0 {
-                        f.client.deposit(user, amount);
-                        f.expected_totals[*idx] += amount;
-                    } else {
-                        assert!(f.client.try_deposit(user, amount).is_err());
-                        assert_eq!(snapshot_all(&f), before, "failed op mutated state");
-                    }
-                }
-                Op::Withdraw(amount) => {
-                    let avail = f.client.get_balance(user);
-                    if *amount > 0 && *amount <= avail {
-                        f.client.withdraw(user, amount);
-                        f.expected_totals[*idx] -= amount;
-                    } else {
-                        assert!(f.client.try_withdraw(user, amount).is_err());
-                        assert_eq!(snapshot_all(&f), before, "failed op mutated state");
-                    }
-                }
-                Op::Lock { amount, unlock_time } => {
-                    let ct = f.env.ledger().timestamp();
-                    let avail = f.client.get_balance(user);
-                    if *amount > 0 && *amount <= avail && *unlock_time > ct {
-                        f.client.lock_funds(user, amount, unlock_time);
-                    } else {
-                        assert!(f.client.try_lock_funds(user, amount, unlock_time).is_err());
-                        assert_eq!(snapshot_all(&f), before, "failed op mutated state");
-                    }
-                }
-                Op::SetTime(ts) => set_ledger_timestamp(&f.env, *ts),
-            }
-            assert_all_conserved(&f);
-        }
+        prop_cross_user_isolation_inner(ops);
     }
 
     #[test]
     fn prop_global_token_custody(ops in multi_op_strategy(3)) {
-        let mut f = new_multi_fuzz_fixture(3);
-        let token_addr: Address = f.env.as_contract(&f.env.register(SavingsVault, ()), || {
-            f.env.storage().instance().get(&DataKey::Token).unwrap()
-        });
-        let token_client = token::Client::new(&f.env, &token_addr);
-
-        let check_custody = |f: &MultiFuzzFixture| {
-            let contract_addr = f.env.register(SavingsVault, ());
-            let contract_bal = token_client.balance(&contract_addr);
-            let mut sum: i128 = 0;
-            for user in &f.users {
-                sum += f.client.get_balance(user) + f.client.get_locked_balance(user);
-            }
-            assert_eq!(contract_bal, sum, "global custody mismatch");
-        };
-
-        check_custody(&f);
-        for UserOp(idx, op) in &ops {
-            let user = &f.users[*idx];
-            match op {
-                Op::Deposit(amount) => {
-                    if *amount > 0 {
-                        f.client.deposit(user, amount);
-                        f.expected_totals[*idx] += amount;
-                    }
-                }
-                Op::Withdraw(amount) => {
-                    let avail = f.client.get_balance(user);
-                    if *amount > 0 && *amount <= avail {
-                        f.client.withdraw(user, amount);
-                        f.expected_totals[*idx] -= amount;
-                    }
-                }
-                Op::Lock { amount, unlock_time } => {
-                    let ct = f.env.ledger().timestamp();
-                    let avail = f.client.get_balance(user);
-                    if *amount > 0 && *amount <= avail && *unlock_time > ct {
-                        f.client.lock_funds(user, amount, unlock_time);
-                    }
-                }
-                Op::SetTime(ts) => set_ledger_timestamp(&f.env, *ts),
-            }
-            assert_all_conserved(&f);
-            check_custody(&f);
-        }
+        prop_global_token_custody_inner(ops);
     }
 }

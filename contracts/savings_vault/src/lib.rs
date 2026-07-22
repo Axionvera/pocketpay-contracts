@@ -62,6 +62,9 @@
 //! ```
 
 #![no_std]
+extern crate alloc;
+#[cfg(test)]
+extern crate std;
 
 use soroban_sdk::{
     contract, contractimpl, contracttype, log, symbol_short, token, Address, Env, Symbol, Vec,
@@ -257,10 +260,10 @@ impl SavingsVault {
         env.storage().instance().set(&DataKey::StorageVersion, &1_u64);
 
         // Emit initialize event
-        let topics = (Symbol::new(&env, "initialize"), admin.clone());
+        let topics = (symbol_short!("init"), admin.clone());
         env.events().publish(topics, token.clone());
 
-        log!(&env, "Savings Vault initialized with admin: {}, storage version: {}", admin, STORAGE_VERSION);
+        log!(&env, "Vault init: admin={}, version={}", admin, STORAGE_VERSION);
     }
 
     // -----------------------------------------------------------------------
@@ -987,7 +990,7 @@ impl SavingsVault {
         env.storage().instance().set(&DataKey::Admin, &new_admin);
 
         // Emit transfer_admin event
-        let topics = (symbol_short!("transfer_admin"), old_admin);
+        let topics = (symbol_short!("xferadmin"), old_admin.clone());
         env.events().publish(topics, new_admin.clone());
 
         log!(&env, "Admin transferred from {} to {}", old_admin, new_admin);

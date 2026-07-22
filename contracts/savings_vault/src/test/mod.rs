@@ -7,6 +7,7 @@ mod initialization;
 mod lock_read_helpers;
 mod maximum_amount_boundary;
 mod property_vault_accounting;
+mod property_fee_invariants;
 mod test_helpers;
 mod unauthorized_access;
 mod zero_duration_lock;
@@ -1108,15 +1109,6 @@ fn test_transfer_admin_requires_auth() {
     
     // Call without auth mocking
     client.transfer_admin(&admin, &new_admin);
-}
-    assert_eq!(client.get_balance(&bob), 4_000);
-    assert_eq!(client.get_locked_balance(&bob), 0);
-
-    client.lock_funds(&bob, &2_500, &3600);
-    assert_eq!(client.get_balance(&alice), 1_000);
-    assert_eq!(client.get_locked_balance(&alice), 1_000);
-    assert_eq!(client.get_balance(&bob), 1_500);
-    assert_eq!(client.get_locked_balance(&bob), 2_500);
 }
 
 #[test]
