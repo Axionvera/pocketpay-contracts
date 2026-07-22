@@ -5,6 +5,7 @@ This directory is the contract workspace for PocketPay's savings vault logic. It
 For project-wide setup, architecture, deployment guidance, and contribution instructions, see the [root README](../../README.md).
 
 ## Documentation
+- **State Machine: [docs/state-machine.md](../../docs/state-machine.md) — Contract lifecycle, user account states, valid/invalid transitions, and error states.
 - **Failure Mode Catalogue: [docs/failure-mode-catalogue.md](../../docs/failure-mode-catalogue.md) - Complete list of all known failure modes with test links
 - **All other docs are in the repo root `docs/` directory.
 
