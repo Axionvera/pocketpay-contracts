@@ -15,6 +15,7 @@ mod withdraw_lock;
 mod replay_protection;
 mod admin_invariant_guard;
 mod pause;
+mod token_transfer_rollback;
 
 use super::*;
 use soroban_sdk::{testutils::Address as _, testutils::Events, Address};
