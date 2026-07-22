@@ -222,6 +222,7 @@ stellar-pocketpay-contracts/
 
 - [Audit Preparation Checklist](docs/audit-preparation.md) — Checklist of documentation, tests, threat model, and deployment details required before any external security review or audit.
 - [Storage Audit](docs/storage-audit.md) — Comprehensive details on the contract's storage layout, keys, mutating functions, and security invariants.
+- [Storage Migration Guide](docs/storage-migration.md) — Safe storage versioning and migration strategy for future contract upgrades.
 - [Deployment Environments](docs/deployment-environments.md) — Network configuration for local, testnet, and future mainnet, including RPC URLs, identities, environment variables, and deployment commands.
 - [Contract Error Reference](docs/error-codes.md) - Current savings vault failure conditions and guidance for SDK and mobile callers.
 - [SDK Error Mapping Guide](docs/sdk-error-mapping-guide.md) — Maps contract errors to SDK handling expectations with user-facing and developer-facing examples.

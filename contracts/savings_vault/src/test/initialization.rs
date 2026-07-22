@@ -177,3 +177,33 @@ fn test_storage_version_current_succeeds() {
     client.get_locked_balance(&user);
     client.can_withdraw(&user);
 }
+
+#[test]
+fn test_v0_to_v1_migration() {
+    let env = test_env();
+    let contract_id = env.register(SavingsVault, ());
+    let client = SavingsVaultClient::new(&env, &contract_id);
+    let admin = new_user(&env);
+    let token = new_user(&env);
+
+    // Manually initialize without StorageVersion (simulating a v0 contract)!
+    env.as_contract(&contract_id, || {
+        env.storage().instance().set(&DataKey::Admin, &admin);
+        env.storage().instance().set(&DataKey::Initialized, &true);
+        env.storage().instance().set(&DataKey::Token, &token);
+        // Intentionally NOT setting DataKey::StorageVersion (treated as 0)!
+    });
+
+    // Now call a function (which triggers try_migrate)!
+    let user = new_user(&env);
+    client.get_balance(&user);
+
+    // Verify StorageVersion was updated to 1!
+    let stored_version: u64 = env.as_contract(&contract_id, || {
+        env.storage()
+            .instance()
+            .get(&DataKey::StorageVersion)
+            .unwrap()
+    });
+    assert_eq!(stored_version, 1);
+}
