@@ -195,15 +195,15 @@ impl SavingsVault {
         env.storage().instance().set(&DataKey::Token, &token);
         env.storage().instance().set(&DataKey::StorageVersion, &1_u64);
 
-        // Emit initialize event
+        // Emit a single initialize event. Topic tuple `(Symbol("initialize"), admin)`
+        // with the token address as the data payload. The prior redundant
+        // `symbol_short!("init")` publish was removed: it duplicated every
+        // initialization event and left the strict `test_initialize_emits_event`
+        // check failing against the documented shape.
         let topics = (Symbol::new(&env, "initialize"), admin.clone());
         env.events().publish(topics, token.clone());
 
         log!(&env, "Savings Vault initialized with admin: {}, storage version: {}", admin, STORAGE_VERSION);
-        let topics = (symbol_short!("init"), admin.clone());
-        env.events().publish(topics, token.clone());
-
-        log!(&env, "Vault init: admin={}, version={}", admin, STORAGE_VERSION);
     }
 
     // -----------------------------------------------------------------------
