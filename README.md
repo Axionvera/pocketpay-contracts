@@ -236,6 +236,7 @@ stellar-pocketpay-contracts/
 - [Version Metadata](docs/version-metadata.md) — How the `get_version` read-only function works, how SDKs and deployment scripts should use it, and how to bump the version.
 - [Lock Read Helpers](docs/lock-read-helpers.md) — Response shapes and pagination for `get_lock` and `list_locks`.
 - [Test Coverage Summary](docs/test-coverage.md) — Maps initialization, deposit, withdrawal, and locking behaviours to the tests that cover them, plus known test gaps.
+- [Failure Mode Catalogue](docs/failure-mode-catalogue.md) — Comprehensive list of all contract failure modes with expected behavior and test coverage.
 
 ---
 
