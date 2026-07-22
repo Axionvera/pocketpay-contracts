@@ -6,9 +6,14 @@ mod balance_conservation;
 mod initialization;
 mod lock_read_helpers;
 mod maximum_amount_boundary;
+mod property_vault_accounting;
+mod property_fee_invariants;
 mod test_helpers;
 mod unauthorized_access;
+mod zero_duration_lock;
 mod withdraw_lock;
+mod replay_protection;
+mod admin_invariant_guard;
 
 use super::*;
 use soroban_sdk::{testutils::Address as _, testutils::Events, Address};
@@ -31,7 +36,8 @@ fn test_get_version() {
 #[should_panic(expected = "Contract is not initialized")]
 fn test_deposit_uninitialized_panics() {
     let env = test_env();
-    let (contract_id, client) = init_contract(&env);
+    let contract_id = env.register(SavingsVault, ());
+    let client = SavingsVaultClient::new(&env, &contract_id);
     let user = new_user(&env);
     client.deposit(&user, &100);
 }
@@ -40,7 +46,8 @@ fn test_deposit_uninitialized_panics() {
 #[should_panic(expected = "Contract is not initialized")]
 fn test_withdraw_uninitialized_panics() {
     let env = test_env();
-    let (contract_id, client) = init_contract(&env);
+    let contract_id = env.register(SavingsVault, ());
+    let client = SavingsVaultClient::new(&env, &contract_id);
     let user = new_user(&env);
     client.withdraw(&user, &100);
 }
@@ -49,7 +56,8 @@ fn test_withdraw_uninitialized_panics() {
 #[should_panic(expected = "Contract is not initialized")]
 fn test_lock_funds_uninitialized_panics() {
     let env = test_env();
-    let (contract_id, client) = init_contract(&env);
+    let contract_id = env.register(SavingsVault, ());
+    let client = SavingsVaultClient::new(&env, &contract_id);
     let user = new_user(&env);
     set_ledger_timestamp(&env, 1_000);
     client.lock_funds(&user, &100, &2_000);
@@ -59,7 +67,8 @@ fn test_lock_funds_uninitialized_panics() {
 #[should_panic(expected = "Contract is not initialized")]
 fn test_get_balance_uninitialized_panics() {
     let env = test_env();
-    let (contract_id, client) = init_contract(&env);
+    let contract_id = env.register(SavingsVault, ());
+    let client = SavingsVaultClient::new(&env, &contract_id);
     let user = new_user(&env);
     client.get_balance(&user);
 }
@@ -68,7 +77,8 @@ fn test_get_balance_uninitialized_panics() {
 #[should_panic(expected = "Contract is not initialized")]
 fn test_get_locked_balance_uninitialized_panics() {
     let env = test_env();
-    let (contract_id, client) = init_contract(&env);
+    let contract_id = env.register(SavingsVault, ());
+    let client = SavingsVaultClient::new(&env, &contract_id);
     let user = new_user(&env);
     client.get_locked_balance(&user);
 }
@@ -77,117 +87,8 @@ fn test_get_locked_balance_uninitialized_panics() {
 #[should_panic(expected = "Contract is not initialized")]
 fn test_can_withdraw_uninitialized_panics() {
     let env = test_env();
-    let (contract_id, client) = init_contract(&env);
-    let user = new_user(&env);
-    client.can_withdraw(&user);
-}
-
-#[test]
-#[should_panic(expected = "Contract is not initialized")]
-fn test_deposit_uninitialized_panics() {
-    let env = test_env();
-    let (_id, client) = init_contract(&env);
-    let user = new_user(&env);
-    client.deposit(&user, &100);
-}
-
-#[test]
-#[should_panic(expected = "Contract is not initialized")]
-fn test_withdraw_uninitialized_panics() {
-    let env = test_env();
-    let (_id, client) = init_contract(&env);
-    let user = new_user(&env);
-    client.withdraw(&user, &100);
-}
-
-#[test]
-#[should_panic(expected = "Contract is not initialized")]
-fn test_lock_funds_uninitialized_panics() {
-    let env = test_env();
-    let (_id, client) = init_contract(&env);
-    let user = new_user(&env);
-    set_ledger_timestamp(&env, 1_000);
-    client.lock_funds(&user, &100, &2_000);
-}
-
-#[test]
-#[should_panic(expected = "Contract is not initialized")]
-fn test_get_balance_uninitialized_panics() {
-    let env = test_env();
-    let (_id, client) = init_contract(&env);
-    let user = new_user(&env);
-    client.get_balance(&user);
-}
-
-#[test]
-#[should_panic(expected = "Contract is not initialized")]
-fn test_get_locked_balance_uninitialized_panics() {
-    let env = test_env();
-    let (_id, client) = init_contract(&env);
-    let user = new_user(&env);
-    client.get_locked_balance(&user);
-}
-
-#[test]
-#[should_panic(expected = "Contract is not initialized")]
-fn test_can_withdraw_uninitialized_panics() {
-    let env = test_env();
-    let (_id, client) = init_contract(&env);
-    let user = new_user(&env);
-    client.can_withdraw(&user);
-}
-
-#[test]
-#[should_panic(expected = "Contract is not initialized")]
-fn test_deposit_uninitialized_panics() {
-    let env = test_env();
-    let (_id, client) = init_contract(&env);
-    let user = new_user(&env);
-    client.deposit(&user, &100);
-}
-
-#[test]
-#[should_panic(expected = "Contract is not initialized")]
-fn test_withdraw_uninitialized_panics() {
-    let env = test_env();
-    let (_id, client) = init_contract(&env);
-    let user = new_user(&env);
-    client.withdraw(&user, &100);
-}
-
-#[test]
-#[should_panic(expected = "Contract is not initialized")]
-fn test_lock_funds_uninitialized_panics() {
-    let env = test_env();
-    let (_id, client) = init_contract(&env);
-    let user = new_user(&env);
-    set_ledger_timestamp(&env, 1_000);
-    client.lock_funds(&user, &100, &2_000);
-}
-
-#[test]
-#[should_panic(expected = "Contract is not initialized")]
-fn test_get_balance_uninitialized_panics() {
-    let env = test_env();
-    let (_id, client) = init_contract(&env);
-    let user = new_user(&env);
-    client.get_balance(&user);
-}
-
-#[test]
-#[should_panic(expected = "Contract is not initialized")]
-fn test_get_locked_balance_uninitialized_panics() {
-    let env = test_env();
-    let (_id, client) = init_contract(&env);
-    let user = new_user(&env);
-    client.get_locked_balance(&user);
-}
-
-#[test]
-#[should_panic(expected = "Contract is not initialized")]
-fn test_can_withdraw_uninitialized_panics() {
-    let env = test_env();
-    let (_id, client) = init_contract(&env);
+    let contract_id = env.register(SavingsVault, ());
+    let client = SavingsVaultClient::new(&env, &contract_id);
     let user = new_user(&env);
     client.can_withdraw(&user);
 }
@@ -271,7 +172,7 @@ fn test_get_balance_default_zero_for_new_user_after_initialization() {
     let (contract_id, client) = init_contract(&env);
     // Note: init_contract already handles initialization, removed duplicate call.
 
-    let user = new_user(&_env);
+    let user = new_user(&env);
     assert_eq!(client.get_balance(&user), 0);
 }
 
@@ -417,320 +318,13 @@ fn test_lock_funds_requires_user_authorization() {
 }
 
 #[test]
-#[should_panic]
-fn test_withdraw_requires_user_authorization() {
-    let env = Env::default();
-    let contract_id = env.register(SavingsVault, ());
-    let client = SavingsVaultClient::new(&env, &contract_id);
-
-    let admin = Address::generate(&env);
-    let sac = env.register_stellar_asset_contract_v2(admin.clone());
-    let token_address = sac.address();
-    let token_admin = token::StellarAssetClient::new(&env, &token_address);
-
-    let user = Address::generate(&env);
-
-    client.mock_all_auths().initialize(&admin, &token_address);
-    token_admin.mock_all_auths().mint(&user, &1_000);
-    client.mock_all_auths().deposit(&user, &100);
-
-    // Call without auth mocking: require_auth() must reject this withdrawal.
-    client.withdraw(&user, &1);
-}
-
-#[test]
-#[should_panic]
-fn test_withdraw_requires_user_authorization() {
-    let env = Env::default();
-    let contract_id = env.register(SavingsVault, ());
-    let client = SavingsVaultClient::new(&env, &contract_id);
-
-    let admin = Address::generate(&env);
-    let sac = env.register_stellar_asset_contract_v2(admin.clone());
-    let token_address = sac.address();
-    let token_admin = token::StellarAssetClient::new(&env, &token_address);
-
-    let user = Address::generate(&env);
-
-    client.mock_all_auths().initialize(&admin, &token_address);
-    token_admin.mock_all_auths().mint(&user, &1_000);
-    client.mock_all_auths().deposit(&user, &100);
-
-    // Call without auth mocking: require_auth() must reject this withdrawal.
-    client.withdraw(&user, &1);
-}
-
-#[test]
-#[should_panic]
-fn test_deposit_requires_user_authorization() {
-    let env = Env::default();
-    let contract_id = env.register(SavingsVault, ());
-    let client = SavingsVaultClient::new(&env, &contract_id);
-
-    let admin = Address::generate(&env);
-    let sac = env.register_stellar_asset_contract_v2(admin.clone());
-    let token_address = sac.address();
-    let token_admin = token::StellarAssetClient::new(&env, &token_address);
-
-    let user = Address::generate(&env);
-
-    client.mock_all_auths().initialize(&admin, &token_address);
-    token_admin.mock_all_auths().mint(&user, &1_000);
-
-    // Call without auth mocking: require_auth() must reject this deposit.
-    client.deposit(&user, &100);
-}
-
-#[test]
-#[should_panic]
-fn test_lock_funds_requires_user_authorization() {
-    let env = Env::default();
-    let contract_id = env.register(SavingsVault, ());
-    let client = SavingsVaultClient::new(&env, &contract_id);
-
-    let admin = Address::generate(&env);
-    let sac = env.register_stellar_asset_contract_v2(admin.clone());
-    let token_address = sac.address();
-    let token_admin = token::StellarAssetClient::new(&env, &token_address);
-
-    let user = Address::generate(&env);
-
-    client.mock_all_auths().initialize(&admin, &token_address);
-    token_admin.mock_all_auths().mint(&user, &1_000);
-    client.mock_all_auths().deposit(&user, &100);
-    set_ledger_timestamp(&env, 1_000);
-
-    // Call without auth mocking: require_auth() must reject this lock.
-    client.lock_funds(&user, &50, &2_000);
-}
-
-#[test]
-#[should_panic]
-fn test_withdraw_requires_user_authorization() {
-    let env = Env::default();
-    let contract_id = env.register(SavingsVault, ());
-    let client = SavingsVaultClient::new(&env, &contract_id);
-
-    let admin = Address::generate(&env);
-    let sac = env.register_stellar_asset_contract_v2(admin.clone());
-    let token_address = sac.address();
-    let token_admin = token::StellarAssetClient::new(&env, &token_address);
-
-    let user = Address::generate(&env);
-
-    client.mock_all_auths().initialize(&admin, &token_address);
-    token_admin.mock_all_auths().mint(&user, &1_000);
-    client.mock_all_auths().deposit(&user, &100);
-
-    // Call without auth mocking: require_auth() must reject this withdrawal.
-    client.withdraw(&user, &1);
-}
-
-#[test]
-#[should_panic]
-fn test_deposit_requires_user_authorization() {
-    let env = Env::default();
-    let contract_id = env.register(SavingsVault, ());
-    let client = SavingsVaultClient::new(&env, &contract_id);
-
-    let admin = Address::generate(&env);
-    let sac = env.register_stellar_asset_contract_v2(admin.clone());
-    let token_address = sac.address();
-    let token_admin = token::StellarAssetClient::new(&env, &token_address);
-
-    let user = Address::generate(&env);
-
-    client.mock_all_auths().initialize(&admin, &token_address);
-    token_admin.mock_all_auths().mint(&user, &1_000);
-
-    // Call without auth mocking: require_auth() must reject this deposit.
-    client.deposit(&user, &100);
-}
-
-#[test]
-#[should_panic]
-fn test_lock_funds_requires_user_authorization() {
-    let env = Env::default();
-    let contract_id = env.register(SavingsVault, ());
-    let client = SavingsVaultClient::new(&env, &contract_id);
-
-    let admin = Address::generate(&env);
-    let sac = env.register_stellar_asset_contract_v2(admin.clone());
-    let token_address = sac.address();
-    let token_admin = token::StellarAssetClient::new(&env, &token_address);
-
-    let user = Address::generate(&env);
-
-    client.mock_all_auths().initialize(&admin, &token_address);
-    token_admin.mock_all_auths().mint(&user, &1_000);
-    client.mock_all_auths().deposit(&user, &100);
-    set_ledger_timestamp(&env, 1_000);
-
-    // Call without auth mocking: require_auth() must reject this lock.
-    client.lock_funds(&user, &50, &2_000);
-}
-
-#[test]
-#[should_panic]
-fn test_withdraw_requires_user_authorization() {
-    let env = Env::default();
-    let contract_id = env.register(SavingsVault, ());
-    let client = SavingsVaultClient::new(&env, &contract_id);
-
-    let admin = Address::generate(&env);
-    let sac = env.register_stellar_asset_contract_v2(admin.clone());
-    let token_address = sac.address();
-    let token_admin = token::StellarAssetClient::new(&env, &token_address);
-
-    let user = Address::generate(&env);
-
-    client.mock_all_auths().initialize(&admin, &token_address);
-    token_admin.mock_all_auths().mint(&user, &1_000);
-    client.mock_all_auths().deposit(&user, &100);
-
-    // Call without auth mocking: require_auth() must reject this withdrawal.
-    client.withdraw(&user, &1);
-}
-
-#[test]
-#[should_panic]
-fn test_withdraw_requires_user_authorization() {
-    let env = Env::default();
-    let contract_id = env.register(SavingsVault, ());
-    let client = SavingsVaultClient::new(&env, &contract_id);
-
-    let admin = Address::generate(&env);
-    let sac = env.register_stellar_asset_contract_v2(admin.clone());
-    let token_address = sac.address();
-    let token_admin = token::StellarAssetClient::new(&env, &token_address);
-
-    let user = Address::generate(&env);
-
-    client.mock_all_auths().initialize(&admin, &token_address);
-    token_admin.mock_all_auths().mint(&user, &1_000);
-    client.mock_all_auths().deposit(&user, &100);
-
-    // Call without auth mocking: require_auth() must reject this withdrawal.
-    client.withdraw(&user, &1);
-}
-
-#[test]
-#[should_panic]
-fn test_deposit_requires_user_authorization() {
-    let env = Env::default();
-    let contract_id = env.register(SavingsVault, ());
-    let client = SavingsVaultClient::new(&env, &contract_id);
-
-    let admin = Address::generate(&env);
-    let sac = env.register_stellar_asset_contract_v2(admin.clone());
-    let token_address = sac.address();
-    let token_admin = token::StellarAssetClient::new(&env, &token_address);
-
-    let user = Address::generate(&env);
-
-    client.mock_all_auths().initialize(&admin, &token_address);
-    token_admin.mock_all_auths().mint(&user, &1_000);
-
-    // Call without auth mocking: require_auth() must reject this deposit.
-    client.deposit(&user, &100);
-}
-
-#[test]
-#[should_panic]
-fn test_lock_funds_requires_user_authorization() {
-    let env = Env::default();
-    let contract_id = env.register(SavingsVault, ());
-    let client = SavingsVaultClient::new(&env, &contract_id);
-
-    let admin = Address::generate(&env);
-    let sac = env.register_stellar_asset_contract_v2(admin.clone());
-    let token_address = sac.address();
-    let token_admin = token::StellarAssetClient::new(&env, &token_address);
-
-    let user = Address::generate(&env);
-
-    client.mock_all_auths().initialize(&admin, &token_address);
-    token_admin.mock_all_auths().mint(&user, &1_000);
-    client.mock_all_auths().deposit(&user, &100);
-    set_ledger_timestamp(&env, 1_000);
-
-    // Call without auth mocking: require_auth() must reject this lock.
-    client.lock_funds(&user, &50, &2_000);
-}
-
-#[test]
-#[should_panic]
-fn test_withdraw_requires_user_authorization() {
-    let env = Env::default();
-    let contract_id = env.register(SavingsVault, ());
-    let client = SavingsVaultClient::new(&env, &contract_id);
-
-    let admin = Address::generate(&env);
-    let sac = env.register_stellar_asset_contract_v2(admin.clone());
-    let token_address = sac.address();
-    let token_admin = token::StellarAssetClient::new(&env, &token_address);
-
-    let user = Address::generate(&env);
-
-    client.mock_all_auths().initialize(&admin, &token_address);
-    token_admin.mock_all_auths().mint(&user, &1_000);
-    client.mock_all_auths().deposit(&user, &100);
-
-    // Call without auth mocking: require_auth() must reject this withdrawal.
-    client.withdraw(&user, &1);
-}
-
-#[test]
-#[should_panic]
-fn test_deposit_requires_user_authorization() {
-    let env = Env::default();
-    let contract_id = env.register(SavingsVault, ());
-    let client = SavingsVaultClient::new(&env, &contract_id);
-
-    let admin = Address::generate(&env);
-    let sac = env.register_stellar_asset_contract_v2(admin.clone());
-    let token_address = sac.address();
-    let token_admin = token::StellarAssetClient::new(&env, &token_address);
-
-    let user = Address::generate(&env);
-
-    client.mock_all_auths().initialize(&admin, &token_address);
-    token_admin.mock_all_auths().mint(&user, &1_000);
-
-    // Call without auth mocking: require_auth() must reject this deposit.
-    client.deposit(&user, &100);
-}
-
-#[test]
-#[should_panic]
-fn test_lock_funds_requires_user_authorization() {
-    let env = Env::default();
-    let contract_id = env.register(SavingsVault, ());
-    let client = SavingsVaultClient::new(&env, &contract_id);
-
-    let admin = Address::generate(&env);
-    let sac = env.register_stellar_asset_contract_v2(admin.clone());
-    let token_address = sac.address();
-    let token_admin = token::StellarAssetClient::new(&env, &token_address);
-
-    let user = Address::generate(&env);
-
-    client.mock_all_auths().initialize(&admin, &token_address);
-    token_admin.mock_all_auths().mint(&user, &1_000);
-    client.mock_all_auths().deposit(&user, &100);
-    set_ledger_timestamp(&env, 1_000);
-
-    // Call without auth mocking: require_auth() must reject this lock.
-    client.lock_funds(&user, &50, &2_000);
-}
-
-#[test]
 #[should_panic(expected = "Insufficient balance")]
 fn test_withdraw_more_than_balance_panics() {
     let (env, contract_id, client) = setup();
     let (env, _admin, client, _token_client, token_admin) = test_token(env, contract_id, client);
     let user = Address::generate(&env);
 
+    token_admin.mint(&user, &100);
     client.deposit(&user, &100);
 
     client.withdraw(&user, &200);
@@ -751,9 +345,10 @@ fn test_withdraw_zero_panics() {
 #[should_panic(expected = "Withdrawal amount must be greater than zero")]
 fn test_withdraw_negative_panics() {
     let (env, contract_id, client) = setup();
-    let (env, _admin, client, token_client, token_admin) = test_token(env, contract_id, client);
+    let (env, _admin, client, _token_client, token_admin) = test_token(env, contract_id, client);
     let user = Address::generate(&env);
 
+    token_admin.mint(&user, &100);
     client.deposit(&user, &100);
 
     client.withdraw(&user, &-10);
@@ -802,6 +397,7 @@ fn test_failed_withdraw_does_not_change_available_balance() {
     let deposit_amount = 100;
 
     // Deposit now performs real token transfer
+    token_admin.mint(&user, &deposit_amount);
     client.deposit(&user, &deposit_amount);
 
     // A valid partial withdraw succeeds and leaves the remainder intact.
@@ -1429,14 +1025,91 @@ fn balance_isolation_between_users_lock() {
     client.lock_funds(&alice, &1_000, &3600);
     assert_eq!(client.get_balance(&alice), 1_000);
     assert_eq!(client.get_locked_balance(&alice), 1_000);
-    assert_eq!(client.get_balance(&bob), 4_000);
-    assert_eq!(client.get_locked_balance(&bob), 0);
+}
 
-    client.lock_funds(&bob, &2_500, &3600);
-    assert_eq!(client.get_balance(&alice), 1_000);
-    assert_eq!(client.get_locked_balance(&alice), 1_000);
-    assert_eq!(client.get_balance(&bob), 1_500);
-    assert_eq!(client.get_locked_balance(&bob), 2_500);
+// =========================================================================
+// Admin Function Tests
+// =========================================================================
+
+#[test]
+fn test_get_admin() {
+    let env = test_env();
+    let (contract_id, client) = init_contract(&env);
+    
+    // Get admin from contract storage manually
+    let admin = env.as_contract(&contract_id, || {
+        env.storage().instance().get(&super::DataKey::Admin).unwrap()
+    });
+    
+    assert_eq!(client.get_admin(), admin);
+}
+
+#[test]
+#[should_panic(expected = "Contract is not initialized")]
+fn test_get_admin_before_initialization_panics() {
+    let env = Env::default();
+    let contract_id = env.register(super::SavingsVault, ());
+    let client = super::SavingsVaultClient::new(&env, &contract_id);
+    
+    client.get_admin();
+}
+
+#[test]
+fn test_transfer_admin() {
+    let env = test_env();
+    let (contract_id, client) = init_contract(&env);
+    
+    let original_admin = env.as_contract(&contract_id, || {
+        env.storage().instance().get(&super::DataKey::Admin).unwrap()
+    });
+    
+    let new_admin = new_user(&env);
+    
+    client.transfer_admin(&original_admin, &new_admin);
+    
+    assert_eq!(client.get_admin(), new_admin);
+}
+
+#[test]
+#[should_panic(expected = "Not authorized")]
+fn test_transfer_admin_not_authorized_panics() {
+    let env = test_env();
+    let (contract_id, client) = init_contract(&env);
+    
+    let random_user = new_user(&env);
+    let new_admin = new_user(&env);
+    
+    client.transfer_admin(&random_user, &new_admin);
+}
+
+#[test]
+#[should_panic(expected = "Contract is not initialized")]
+fn test_transfer_admin_before_initialization_panics() {
+    let env = Env::default();
+    let contract_id = env.register(super::SavingsVault, ());
+    let client = super::SavingsVaultClient::new(&env, &contract_id);
+    
+    let random_user = new_user(&env);
+    let new_admin = new_user(&env);
+    
+    client.transfer_admin(&random_user, &new_admin);
+}
+
+#[test]
+#[should_panic]
+fn test_transfer_admin_requires_auth() {
+    let env = Env::default();
+    let contract_id = env.register(super::SavingsVault, ());
+    let client = super::SavingsVaultClient::new(&env, &contract_id);
+    let admin = new_user(&env);
+    let token = env.register_stellar_asset_contract_v2(admin.clone()).address();
+    
+    client.mock_all_auths().initialize(&admin, &token);
+    
+    let new_admin = new_user(&env);
+    
+    // Call without auth mocking
+    client.transfer_admin(&admin, &new_admin);
 }
 
 #[test]

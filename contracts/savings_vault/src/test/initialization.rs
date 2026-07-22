@@ -64,7 +64,7 @@ fn test_initialize_fails_on_second_call() {
 }
 
 #[test]
-#[should_panic(expected = "Contract not initialized")]
+#[should_panic(expected = "Contract is not initialized")]
 fn test_deposit_before_initialization_panics() {
     let env = test_env();
     let contract_id = env.register(SavingsVault, ());
@@ -74,7 +74,7 @@ fn test_deposit_before_initialization_panics() {
 }
 
 #[test]
-#[should_panic(expected = "Contract not initialized")]
+#[should_panic(expected = "Contract is not initialized")]
 fn test_withdraw_before_initialization_panics() {
     let env = test_env();
     let contract_id = env.register(SavingsVault, ());
@@ -84,7 +84,7 @@ fn test_withdraw_before_initialization_panics() {
 }
 
 #[test]
-#[should_panic(expected = "Contract not initialized")]
+#[should_panic(expected = "Contract is not initialized")]
 fn test_lock_funds_before_initialization_panics() {
     let env = test_env();
     let contract_id = env.register(SavingsVault, ());
@@ -94,6 +94,7 @@ fn test_lock_funds_before_initialization_panics() {
 }
 
 #[test]
+#[should_panic(expected = "Contract is not initialized")]
 fn test_read_functions_before_initialization() {
     let env = test_env();
     let contract_id = env.register(SavingsVault, ());
