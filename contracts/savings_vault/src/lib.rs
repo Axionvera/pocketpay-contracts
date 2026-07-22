@@ -172,10 +172,6 @@ impl SavingsVault {
         }
     }
 
-    fn try_migrate(env: &Env) {
-        // Placeholder for future migration logic
-        // When STORAGE_VERSION is incremented, implement migration here
-    }
 
     // -----------------------------------------------------------------------
     // Initialization
@@ -199,7 +195,7 @@ impl SavingsVault {
         env.storage().instance().set(&DataKey::StorageVersion, &1_u64);
 
         // Emit initialize event
-        let topics = (symbol_short!("initialize"), admin.clone());
+        let topics = (Symbol::new(&env, "initialize"), admin.clone());
         env.events().publish(topics, token.clone());
 
         log!(&env, "Savings Vault initialized with admin: {}, storage version: {}", admin, STORAGE_VERSION);
