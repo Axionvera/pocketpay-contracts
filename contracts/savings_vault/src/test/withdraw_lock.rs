@@ -107,7 +107,22 @@ fn test_unauthorized_withdraw_lock_fails() {
     let env = Env::default();
     let contract_id = env.register(SavingsVault, ());
     let client = SavingsVaultClient::new(&env, &contract_id);
+    
+    let admin = Address::generate(&env);
+    let sac = env.register_stellar_asset_contract_v2(admin.clone());
+    let token_address = sac.address();
+    let token_admin = token::StellarAssetClient::new(&env, &token_address);
+    
     let user = Address::generate(&env);
-
+    
+    client.mock_all_auths().initialize(&admin, &token_address);
+    token_admin.mock_all_auths().mint(&user, &1_000);
+    client.mock_all_auths().deposit(&user, &100);
+    set_ledger_timestamp(&env, 1_000);
+    client.mock_all_auths().lock_funds(&user, &50, &2_000);
+    
+    set_ledger_timestamp(&env, 3_000);
+    
+    // Call without auth mocking: require_auth() must reject this withdrawal.
     client.withdraw_lock(&user, &1);
 }
