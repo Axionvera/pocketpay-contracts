@@ -175,9 +175,16 @@ impl SavingsVault {
             .storage()
             .instance()
             .get(&DataKey::StorageVersion)
-            .unwrap_or(1);
+            .unwrap_or(0);
         if version != STORAGE_VERSION {
             panic!("Unsupported storage version");
+        }
+    }
+
+    fn assert_admin(env: &Env, admin: &Address) {
+        let stored_admin: Address = env.storage().instance().get(&DataKey::Admin).unwrap();
+        if admin != &stored_admin {
+            panic!("Not authorized");
         }
     }
 
@@ -926,6 +933,64 @@ impl SavingsVault {
             page.push_back(locks.get(i).unwrap());
         }
         page
+    }
+
+    // -----------------------------------------------------------------------
+    // Admin Functions
+    // -----------------------------------------------------------------------
+
+    /// Get the admin address.
+    ///
+    /// Returns the address stored as admin during contract initialization.
+    ///
+    /// # Arguments
+    ///
+    /// * `env` - The Soroban environment
+    ///
+    /// # Returns
+    ///
+    /// The admin `Address`.
+    ///
+    /// # Authorization
+    ///
+    /// No authorization required (read-only operation).
+    pub fn get_admin(env: Env) -> Address {
+        Self::assert_initialized(&env);
+        env.storage().instance().get(&DataKey::Admin).unwrap()
+    }
+
+    /// Transfer admin privileges to a new address.
+    ///
+    /// This function replaces the current admin address with a new one. Only the current admin
+    /// can call this function.
+    ///
+    /// # Arguments
+    ///
+    /// * `env` - The Soroban environment
+    /// * `admin` - The current admin address (must authorize this transaction)
+    /// * `new_admin` - The new admin address to set
+    ///
+    /// # Authorization
+    ///
+    /// The `admin` address must sign the transaction.
+    ///
+    /// # State Changes
+    ///
+    /// - Updates the admin address in instance storage
+    /// - Emits an event with the old and new admin addresses
+    pub fn transfer_admin(env: Env, admin: Address, new_admin: Address) {
+        Self::assert_initialized(&env);
+        admin.require_auth();
+        Self::assert_admin(&env, &admin);
+
+        let old_admin: Address = env.storage().instance().get(&DataKey::Admin).unwrap();
+        env.storage().instance().set(&DataKey::Admin, &new_admin);
+
+        // Emit transfer_admin event
+        let topics = (symbol_short!("transfer_admin"), old_admin);
+        env.events().publish(topics, new_admin.clone());
+
+        log!(&env, "Admin transferred from {} to {}", old_admin, new_admin);
     }
 }
 

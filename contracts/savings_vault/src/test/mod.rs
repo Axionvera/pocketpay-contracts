@@ -6,6 +6,7 @@ mod balance_conservation;
 mod initialization;
 mod lock_read_helpers;
 mod maximum_amount_boundary;
+mod property_vault_accounting;
 mod test_helpers;
 mod unauthorized_access;
 mod zero_duration_lock;
@@ -1022,6 +1023,92 @@ fn balance_isolation_between_users_lock() {
     client.lock_funds(&alice, &1_000, &3600);
     assert_eq!(client.get_balance(&alice), 1_000);
     assert_eq!(client.get_locked_balance(&alice), 1_000);
+}
+
+// =========================================================================
+// Admin Function Tests
+// =========================================================================
+
+#[test]
+fn test_get_admin() {
+    let env = test_env();
+    let (contract_id, client) = init_contract(&env);
+    
+    // Get admin from contract storage manually
+    let admin = env.as_contract(&contract_id, || {
+        env.storage().instance().get(&super::DataKey::Admin).unwrap()
+    });
+    
+    assert_eq!(client.get_admin(), admin);
+}
+
+#[test]
+#[should_panic(expected = "Contract is not initialized")]
+fn test_get_admin_before_initialization_panics() {
+    let env = Env::default();
+    let contract_id = env.register(super::SavingsVault, ());
+    let client = super::SavingsVaultClient::new(&env, &contract_id);
+    
+    client.get_admin();
+}
+
+#[test]
+fn test_transfer_admin() {
+    let env = test_env();
+    let (contract_id, client) = init_contract(&env);
+    
+    let original_admin = env.as_contract(&contract_id, || {
+        env.storage().instance().get(&super::DataKey::Admin).unwrap()
+    });
+    
+    let new_admin = new_user(&env);
+    
+    client.transfer_admin(&original_admin, &new_admin);
+    
+    assert_eq!(client.get_admin(), new_admin);
+}
+
+#[test]
+#[should_panic(expected = "Not authorized")]
+fn test_transfer_admin_not_authorized_panics() {
+    let env = test_env();
+    let (contract_id, client) = init_contract(&env);
+    
+    let random_user = new_user(&env);
+    let new_admin = new_user(&env);
+    
+    client.transfer_admin(&random_user, &new_admin);
+}
+
+#[test]
+#[should_panic(expected = "Contract is not initialized")]
+fn test_transfer_admin_before_initialization_panics() {
+    let env = Env::default();
+    let contract_id = env.register(super::SavingsVault, ());
+    let client = super::SavingsVaultClient::new(&env, &contract_id);
+    
+    let random_user = new_user(&env);
+    let new_admin = new_user(&env);
+    
+    client.transfer_admin(&random_user, &new_admin);
+}
+
+#[test]
+#[should_panic]
+fn test_transfer_admin_requires_auth() {
+    let env = Env::default();
+    let contract_id = env.register(super::SavingsVault, ());
+    let client = super::SavingsVaultClient::new(&env, &contract_id);
+    let admin = new_user(&env);
+    let token = env.register_stellar_asset_contract_v2(admin.clone()).address();
+    
+    client.mock_all_auths().initialize(&admin, &token);
+    
+    let new_admin = new_user(&env);
+    
+    // Call without auth mocking
+    client.transfer_admin(&admin, &new_admin);
+}
     assert_eq!(client.get_balance(&bob), 4_000);
     assert_eq!(client.get_locked_balance(&bob), 0);
 
