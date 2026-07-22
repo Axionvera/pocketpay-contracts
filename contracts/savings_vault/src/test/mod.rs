@@ -13,6 +13,7 @@ mod unauthorized_access;
 mod zero_duration_lock;
 mod withdraw_lock;
 mod replay_protection;
+mod admin_invariant_guard;
 
 use super::*;
 use soroban_sdk::{testutils::Address as _, testutils::Events, Address};
