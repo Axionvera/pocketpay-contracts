@@ -88,11 +88,6 @@ These invariants must hold at all times, across all function calls:
 - **Enforced By**: `initialize` (sets flag; no other function modifies it)
 - **Tested By**: `initialization.rs` tests
 
-### Invariant 7: Storage Version Compatibility
-- **Description**: Only contracts with `StorageVersion = 1` are supported
-- **Enforced By**: All functions except `initialize` (via `assert_supported_storage_version()`)
-- **Tested By**: `test_storage_version_missing_panics`, `test_storage_version_invalid_panics`, and `test_storage_version_current_succeeds` in `initialization.rs`
-
 ---
 
 ## 5. TTL Management Guidelines
