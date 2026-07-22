@@ -68,14 +68,31 @@ impl SavingsVault {
         }
     }
 
-    fn assert_supported_storage_version(env: &Env) {
-        let version: u64 = env
+    fn try_migrate(env: &Env) {
+        let current_version: u64 = env
             .storage()
             .instance()
             .get(&DataKey::StorageVersion)
             .unwrap_or(0);
-        if version != STORAGE_VERSION {
-            panic!("Unsupported storage version");
+
+        if current_version == STORAGE_VERSION {
+            return;
+        }
+
+        // Migrate from older versions to newer versions incrementally!
+        match current_version {
+            0 => {
+                // For legacy contracts without StorageVersion (treated as v0),
+                // migrate them directly to v1!
+                // Since v0 and v1 have same storage layout (just added version marker),
+                // no changes needed except setting the version!
+                env.storage().instance().set(&DataKey::StorageVersion, &STORAGE_VERSION);
+                log!(&env, "Migrated storage from version 0 to version {}", STORAGE_VERSION);
+            }
+            _ => {
+                // If current version > STORAGE_VERSION, panic to prevent downgrades!
+                panic!("Unsupported storage version: {}", current_version);
+            }
         }
     }
 
