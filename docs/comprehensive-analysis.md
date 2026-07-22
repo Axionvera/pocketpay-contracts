@@ -8,23 +8,33 @@
 pocketpay-contracts/
 ├── .github/
 │   └── workflows/
-│       └── ci.yml                    # GitHub Actions CI/CD (unit tests, WASM build)
+│       └── trigger-auto-merge.yml     # GitHub Actions CI/CD
 ├── contracts/
-│   └── savings_vault/               # Main contract crate
-│       ├── Cargo.toml               # Crate config
+│   └── savings_vault/                 # Main contract crate
+│       ├── Cargo.toml                 # Crate config
 │       ├── src/
-│       │   ├── lib.rs               # Contract implementation
-│       │   └── test/
-│       │       ├── mod.rs           # Unit tests
-│       │       ├── test_helpers.rs  # Test utilities (env setup, tokens)
-│       │       └── balance_conservation.rs # Property-driven conservation tests
-│       └── test_snapshots/          # Snapshots for balance conservation tests
-├── docs/                            # Comprehensive documentation
-│   ├── SECURITY_REVIEW.md
+│       │   ├── lib.rs                 # Contract implementation
+│       │   └── test/                  # Unit & property tests
+│       │       ├── mod.rs
+│       │       ├── admin_invariant_guard.rs
+│       │       ├── balance_conservation.rs
+│       │       ├── initialization.rs
+│       │       ├── lock_read_helpers.rs
+│       │       ├── maximum_amount_boundary.rs
+│       │       ├── property_fee_invariants.rs
+│       │       ├── property_vault_accounting.rs
+│       │       ├── replay_protection.rs
+│       │       ├── test_helpers.rs
+│       │       ├── unauthorized_access.rs
+│       │       ├── withdraw_lock.rs
+│       │       └── zero_duration_lock.rs
+│       └── test_snapshots/            # Snapshots for tests
+├── docs/                              # Comprehensive documentation
 │   ├── accounting-invariants.md
 │   ├── admin-role.md
 │   ├── architecture.md
 │   ├── audit-readiness.md
+│   ├── balance-reconciliation.md
 │   ├── contract-id-handoff.md
 │   ├── deployment-environments.md
 │   ├── deployment-output-example.md
@@ -33,13 +43,11 @@ pocketpay-contracts/
 │   ├── pause-design.md
 │   ├── storage-ttl.md
 │   ├── troubleshooting.md
-│   └── upgrade-strategy.md
-├── scripts/
-│   ├── deploy-testnet.sh            # Stellar Testnet deployment script
-│   └── report-wasm-size.sh          # WASM size reporter
-├── .env.example                     # Environment variable template
-├── Cargo.toml                       # Rust workspace root config
-└── Makefile                         # Task runner (build, test, size)
+│   ├── upgrade-strategy.md
+│   └── comprehensive-analysis.md
+├── .env.example                       # Environment variable template
+├── Cargo.toml                         # Rust workspace root config
+└── Makefile                           # Task runner (build, test, size)
 ```
 
 ### System Architecture Paradigm
@@ -52,6 +60,7 @@ pocketpay-contracts/
   3. **Accounting**: Balance/lock management, `get_balance`, `get_locked_balance`
   4. **Time-Based Logic**: Unlock time checks, `can_withdraw`
   5. **Authorization**: `require_auth()` for all state-changing operations
+  6. **Events**: On-chain event emission for all state changes
 
 ---
 ## 2. Component Functionality and Tech Stack
@@ -64,56 +73,87 @@ pocketpay-contracts/
 | Compilation Target | WASM | `wasm32-unknown-unknown` |
 | Build Tool | Cargo | Rust package manager |
 | Task Runner | Make | Build/test shortcuts |
-| CI/CD | GitHub Actions | Ubuntu-latest runners |
+| CI/CD | GitHub Actions | Triggered on PR merge |
+| Property Testing | proptest | Randomized operation sequence testing |
 
 ### Key Files and Their Purpose
 | File | Purpose |
 |------|---------|
-| [lib.rs](file:///c:/Users/Muhammad/.trae/Grantfox/pocketpay-contracts/contracts/savings_vault/src/lib.rs) | Main contract implementation, all public functions |
-| [test/mod.rs](file:///c:/Users/Muhammad/.trae/Grantfox/pocketpay-contracts/contracts/savings_vault/src/test/mod.rs) | Unit tests for all public functions and edge cases |
-| [test/balance_conservation.rs](file:///c:/Users/Muhammad/.trae/Grantfox/pocketpay-contracts/contracts/savings_vault/src/test/balance_conservation.rs) | Property-driven tests to enforce balance invariants |
-| [test/test_helpers.rs](file:///c:/Users/Muhammad/.trae/Grantfox/pocketpay-contracts/contracts/savings_vault/src/test/test_helpers.rs) | Reusable test setup (env, tokens, users) |
-| [Cargo.toml](file:///c:/Users/Muhammad/.trae/Grantfox/pocketpay-contracts/Cargo.toml) | Workspace config, soroban-sdk dependency, release profile |
-| [Makefile](file:///c:/Users/Muhammad/.trae/Grantfox/pocketpay-contracts/Makefile) | `make build-release`, `make wasm-size` |
-| [scripts/deploy-testnet.sh](file:///c:/Users/Muhammad/.trae/Grantfox/pocketpay-contracts/scripts/deploy-testnet.sh) | Testnet deployment (builds WASM, deploys via soroban CLI) |
-| [.github/workflows/ci.yml](file:///c:/Users/Muhammad/.trae/Grantfox/pocketpay-contracts/.github/workflows/ci.yml) | CI: runs tests, builds WASM |
+| [lib.rs](file:///c:/Users/muham/.trae/Grantfox%20Coder%20x/pocketpay-contracts/contracts/savings_vault/src/lib.rs) | Main contract implementation, all public functions |
+| [test/property_vault_accounting.rs](file:///c:/Users/muham/.trae/Grantfox%20Coder%20x/pocketpay-contracts/contracts/savings_vault/src/test/property_vault_accounting.rs) | Property-driven tests for accounting invariants and global token custody |
+| [test/admin_invariant_guard.rs](file:///c:/Users/muham/.trae/Grantfox%20Coder%20x/pocketpay-contracts/contracts/savings_vault/src/test/admin_invariant_guard.rs) | Tests for admin role isolation |
+| [test/withdraw_lock.rs](file:///c:/Users/muham/.trae/Grantfox%20Coder%20x/pocketpay-contracts/contracts/savings_vault/src/test/withdraw_lock.rs) | Tests for `withdraw_lock` function |
+| [test/maximum_amount_boundary.rs](file:///c:/Users/muham/.trae/Grantfox%20Coder%20x/pocketpay-contracts/contracts/savings_vault/src/test/maximum_amount_boundary.rs) | Tests for large amount (near i128 MAX) handling |
+| [Cargo.toml (workspace)](file:///c:/Users/muham/.trae/Grantfox%20Coder%20x/pocketpay-contracts/Cargo.toml) | Workspace config, soroban-sdk dependency |
+| [Cargo.toml (contract)](file:///c:/Users/muham/.trae/Grantfox%20Coder%20x/pocketpay-contracts/contracts/savings_vault/Cargo.toml) | Contract-specific dependencies (proptest in dev) |
 
 ---
 ## 3. Core Business Logic and Data Flows
+### Public Contract Functions
+| Function | Purpose |
+|----------|---------|
+| [initialize(env, admin, token)](file:///c:/Users/muham/.trae/Grantfox%20Coder%20x/pocketpay-contracts/contracts/savings_vault/src/lib.rs#L248) | Initialize contract with admin address and token SAC |
+| [get_version(env)](file:///c:/Users/muham/.trae/Grantfox%20Coder%20x/pocketpay-contracts/contracts/savings_vault/src/lib.rs#L300) | Return contract version string ("0.1.0") |
+| [deposit(env, user, amount)](file:///c:/Users/muham/.trae/Grantfox%20Coder%20x/pocketpay-contracts/contracts/savings_vault/src/lib.rs#L333) | Deposit tokens to user's vault |
+| [withdraw(env, user, amount)](file:///c:/Users/muham/.trae/Grantfox%20Coder%20x/pocketpay-contracts/contracts/savings_vault/src/lib.rs#L413) | Withdraw tokens from user's vault |
+| [withdraw_lock(env, user, lock_id)](file:///c:/Users/muham/.trae/Grantfox%20Coder%20x/pocketpay-contracts/contracts/savings_vault/src/lib.rs#L538) | Withdraw tokens from a specific matured lock |
+| [get_balance(env, user)](file:///c:/Users/muham/.trae/Grantfox%20Coder%20x/pocketpay-contracts/contracts/savings_vault/src/lib.rs#L629) | Query user's available (unlocked) balance |
+| [lock_funds(env, user, amount, unlock_time)](file:///c:/Users/muham/.trae/Grantfox%20Coder%20x/pocketpay-contracts/contracts/savings_vault/src/lib.rs#L689) | Lock user's available funds until a future time |
+| [get_locked_balance(env, user)](file:///c:/Users/muham/.trae/Grantfox%20Coder%20x/pocketpay-contracts/contracts/savings_vault/src/lib.rs#L805) | Query user's locked (unmatured) balance |
+| [can_withdraw(env, user)](file:///c:/Users/muham/.trae/Grantfox%20Coder%20x/pocketpay-contracts/contracts/savings_vault/src/lib.rs#L862) | Check if user has matured locks available to withdraw |
+| [get_lock(env, user, lock_id)](file:///c:/Users/muham/.trae/Grantfox%20Coder%20x/pocketpay-contracts/contracts/savings_vault/src/lib.rs#L895) | Get a single lock entry by lock ID |
+| [list_locks(env, user, offset, limit)](file:///c:/Users/muham/.trae/Grantfox%20Coder%20x/pocketpay-contracts/contracts/savings_vault/src/lib.rs#L921) | List user's locks with pagination (max 50 per page) |
+| [get_admin(env)](file:///c:/Users/muham/.trae/Grantfox%20Coder%20x/pocketpay-contracts/contracts/savings_vault/src/lib.rs#L961) | Get current admin address |
+| [transfer_admin(env, admin, new_admin)](file:///c:/Users/muham/.trae/Grantfox%20Coder%20x/pocketpay-contracts/contracts/savings_vault/src/lib.rs#L985) | Transfer admin privileges to new address |
+
 ### Critical User Journeys
 #### Journey 1: Initialize Contract
 1. Admin calls `initialize(env, admin, token)`
 2. `admin.require_auth()` verifies admin signature
 3. Check if `Initialized` is already set → panic if true
-4. Store `Admin`, `Initialized`, `Token` in **instance storage**
+4. Store `Admin`, `Initialized`, `Token`, and `StorageVersion` in **instance storage**
+5. Emit `(symbol_short!("init"), admin)` event with token as value
 
 #### Journey 2: Deposit Tokens
 1. User calls `deposit(env, user, amount)`
-2. `assert_initialized()` checks contract is set up
+2. `assert_initialized()` and `assert_supported_storage_version()` pass
 3. `user.require_auth()` verifies user signature
 4. Validate `amount > 0` → panic if not
 5. Retrieve SAC token address and create `token::Client`
 6. `token_client.transfer(user, contract_address, amount)` moves tokens to contract
 7. Update user's `Balance(user)` (persistent storage) by adding `amount`
+8. Emit `(symbol_short!("deposit"), user)` event with `(amount, new_balance)` as value
 
 #### Journey 3: Withdraw Tokens
 1. User calls `withdraw(env, user, amount)`
-2. `assert_initialized()` and `user.require_auth()` pass
+2. `assert_initialized()`, `assert_supported_storage_version()`, and `user.require_auth()` pass
 3. Validate `amount > 0`
 4. Calculate available balance = deposited `Balance(user)` + sum of matured `LockEntry.amount` (where `current_time >= unlock_time`)
 5. Panic if `amount > available`
 6. `token_client.transfer(contract_address, user, amount)` sends tokens to user
 7. Subtract amount from `Balance(user)` first, then from matured locks if needed
 8. Update `Balance(user)` and `Locks(user)` in persistent storage
+9. Emit `(symbol_short!("withdraw"), user)` event with `(amount, new_balance, new_locked)` as value
 
 #### Journey 4: Lock Funds
 1. User calls `lock_funds(env, user, amount, unlock_time)`
-2. `assert_initialized()`, `user.require_auth()` pass
-3. Validate `amount > 0`, `unlock_time > env.ledger().timestamp()`, `amount <= Balance(user)`
+2. `assert_initialized()`, `assert_supported_storage_version()`, and `user.require_auth()` pass
+3. Validate `amount > 0`, `unlock_time > env.ledger().timestamp()`, and `amount <= available balance`
 4. Retrieve `NextLockId(user)` (default to 1 if not set)
 5. Create new `LockEntry { id, amount, unlock_time }` and add to `Locks(user)`
 6. Subtract `amount` from `Balance(user)`
 7. Update `Balance(user)`, `Locks(user)`, and `NextLockId(user)` (increment by 1) in persistent storage
+8. Emit `(symbol_short!("lock"), user)` event with `(amount, unlock_time, new_balance, new_locked)` as value
+
+#### Journey 5: Withdraw a Specific Lock
+1. User calls `withdraw_lock(env, user, lock_id)`
+2. `assert_initialized()` and `user.require_auth()` pass
+3. Load user's locks and find lock by ID → panic if not found
+4. Verify lock is matured → panic if not
+5. `token_client.transfer(contract_address, user, lock.amount)` sends tokens to user
+6. Remove lock entry from `Locks(user)`
+7. Update `Locks(user)` in persistent storage
+8. Emit `(Symbol::new(env, "withdraw_lock"), user)` event with `(lock_id, amount)` as value
 
 ---
 ## 4. Coding Standards, Auth, and Data Validation
@@ -121,55 +161,51 @@ pocketpay-contracts/
 - Follow Rust idioms and Soroban best practices
 - Comprehensive inline doc comments for all public functions
 - Clear separation of concerns (initialization, deposits, withdrawals, locking, queries)
-- **No custom error enum**: Uses panic strings for errors (a known gap)
-- **No events emitted**: Another known gap (events.md exists but not implemented)
+- **No custom error enum**: Uses panic strings for errors
+- **Events emitted**: All state changes emit on-chain events!
 
 ### Authorization
 - **`initialize`**: Requires admin address authorization
-- **All state-changing functions** (`deposit`, `withdraw`, `lock_funds`): Require user address authorization via `Address::require_auth()`
-- **Read-only functions** (`get_balance`, `get_locked_balance`, `can_withdraw`): No authorization needed (public queries)
+- **`transfer_admin`**: Requires current admin address authorization
+- **All state-changing user functions** (`deposit`, `withdraw`, `withdraw_lock`, `lock_funds`): Require user address authorization via `Address::require_auth()`
+- **Read-only functions** (`get_balance`, `get_locked_balance`, `can_withdraw`, `get_lock`, `list_locks`, `get_version`, `get_admin`): No authorization needed (public queries)
 
 ### Data Validation
 - **Amount checks**: All functions accepting an amount panic if `amount <= 0`
 - **Balance checks**: Withdraw and lock panic if amount exceeds available balance
-- **Time checks**: `lock_funds` panics if `unlock_time <= current_time`
+- **Time checks**: `lock_funds` panics if `unlock_time <= current_time`; `withdraw_lock` panics if lock not matured
 - **Initialization checks**: All functions except `initialize` panic if called before contract is initialized
+- **Storage version check**: Most functions panic if storage version doesn't match `STORAGE_VERSION` (1)
 
 ---
 ## 5. External Integrations and Dependencies
 ### External Integrations
-- **Stellar Asset Contract (SAC)**: Used via `soroban_sdk::token::Client` for token transfers in `deposit` and `withdraw`
+- **Stellar Asset Contract (SAC)**: Used via `soroban_sdk::token::Client` for token transfers in `deposit`, `withdraw`, and `withdraw_lock`
 - **Soroban Network**:
   - Testnet: `https://soroban-testnet.stellar.org:443`
   - Passphrase: `Test SDF Network ; September 2015`
-  - Friendbot for testnet XLM funding
 
 ### Environment-Dependent Configurations
 - `.env.example`: Defines `VAULT_CONTRACT_ID`, `SOROBAN_RPC_URL`, `SOROBAN_NETWORK_PASSPHRASE`
-- [deployment-environments.md](file:///c:/Users/Muhammad/.trae/Grantfox/pocketpay-contracts/docs/deployment-environments.md) has full environment docs
+- [deployment-environments.md](file:///c:/Users/muham/.trae/Grantfox%20Coder%20x/pocketpay-contracts/docs/deployment-environments.md) has full environment docs
 
 ---
 ## 6. Summary Report
 ### Key Architectural Decisions
-1. **SAC Integration**: Real token custody implemented, no more "internal accounting only"
-2. **Per-User Lock Entries**: Multiple locks per user, each with independent unlock time
+1. **SAC Integration**: Real token custody implemented (internal accounting reconciled with SAC balance)
+2. **Per-User Lock Entries**: Multiple locks per user, each with unique ID and independent unlock time
 3. **Atomic Execution**: Soroban transactions are atomic, so failed operations leave no state changes
-4. **Separate Instance/Persistent Storage**: Instance storage for admin/init/token; persistent storage for user data
+4. **Separate Instance/Persistent Storage**: Instance storage for admin/init/token/version; persistent storage for user data
+5. **On-Chain Events**: All state changes emit events for off-chain tracking
+6. **Comprehensive Property Testing**: proptest covers thousands of randomized operation sequences
 
 ### Technical Debt
 1. **No custom error enum**: Uses panic strings, which are harder for off-chain SDKs to handle consistently
-2. **No on-chain events**: No events emitted for deposit/withdraw/lock/unlock actions (hinders off-chain tracking/analytics)
-3. **No pause/emergency stop mechanism**: Research exists in [pause-design.md](file:///c:/Users/Muhammad/.trae/Grantfox/pocketpay-contracts/docs/pause-design.md), but not implemented
-4. **No upgrade path**: Research exists in [upgrade-strategy.md](file:///c:/Users/Muhammad/.trae/Grantfox/pocketpay-contracts/docs/upgrade-strategy.md), but not implemented
-5. **No storage TTL automation**: Docs exist in [storage-ttl.md](file:///c:/Users/Muhammad/.trae/Grantfox/pocketpay-contracts/docs/storage-ttl.md), but no automation
+2. **No pause/emergency stop mechanism**: Research exists in [pause-design.md](file:///c:/Users/muham/.trae/Grantfox%20Coder%20x/pocketpay-contracts/docs/pause-design.md), but not implemented
+3. **No upgrade path**: Research exists in [upgrade-strategy.md](file:///c:/Users/muham/.trae/Grantfox%20Coder%20x/pocketpay-contracts/docs/upgrade-strategy.md), but not implemented
 
-### Unclear Code Sections
-None; code is well-commented and straightforward!
-
-### Unaddressed Edge Cases
-- **SAC transfer failures**: Tests don't simulate SAC transfer failures (e.g., token contract paused)
-- **Large amount handling**: Tests don't check near-i128-max deposits/withdrawals/locks
-- **Many locks per user**: Tests don't check performance/storage for users with 1000+ locks
-- **Global token custody invariant**: No tests that contract's SAC balance matches sum of all users' available + locked balances
-
----
+### Addressable Edge Cases Now Covered
+- ✅ **Global token custody invariant**: Tested in `property_vault_accounting::prop_global_token_custody`
+- ✅ **Large amount handling**: Tested in `maximum_amount_boundary.rs`
+- ✅ **User isolation**: Tested in `property_vault_accounting::prop_cross_user_isolation`
+- ✅ **Admin isolation**: Tested in `admin_invariant_guard.rs`
