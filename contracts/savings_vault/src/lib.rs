@@ -111,6 +111,8 @@ pub struct LockEntry {
 /// * `NextLockId(Address)` - Counter for generating unique lock IDs per user
 /// * `Initialized` - Boolean flag indicating contract initialization status
 /// * `Token` - The token contract address used for real token transfers
+/// * `Paused` - Boolean flag indicating the contract is in emergency pause
+/// * `PauseExpiry` - Unix timestamp (seconds) when the pause auto-expires (0 = no expiry set)
 #[contracttype]
 #[derive(Clone)]
 pub enum DataKey {
@@ -128,6 +130,10 @@ pub enum DataKey {
     Token,
     /// Storage version marker
     StorageVersion,
+    /// Global pause flag — when true, deposits and locks are blocked.
+    Paused,
+    /// Unix timestamp when the current pause expires and the contract auto-unpauses.
+    PauseExpiry,
 }
 
 /// Current storage schema version.
@@ -196,6 +202,39 @@ impl SavingsVault {
             .persistent()
             .get(&DataKey::Locks(user))
             .unwrap_or_else(|| Vec::new(env))
+    }
+
+    /// Assert the contract is not paused (or that the pause has expired).
+    ///
+    /// If a pause is active but its expiry timestamp has been reached, the pause
+    /// is automatically cleared so callers do not need to invoke `unpause`
+    /// explicitly after a time-bounded pause expires.
+    ///
+    /// # Panics
+    ///
+    /// Panics with `"Contract is paused"` when the pause is active and has not
+    /// expired.
+    fn require_not_paused(env: &Env) {
+        let paused: bool = env
+            .storage()
+            .instance()
+            .get(&DataKey::Paused)
+            .unwrap_or(false);
+
+        if paused {
+            let expiry: u64 = env
+                .storage()
+                .instance()
+                .get(&DataKey::PauseExpiry)
+                .unwrap_or(0);
+
+            if expiry != 0 && env.ledger().timestamp() >= expiry {
+                env.storage().instance().set(&DataKey::Paused, &false);
+                env.storage().instance().set(&DataKey::PauseExpiry, &0_u64);
+                return;
+            }
+            panic!("Contract is paused");
+        }
     }
 
     // -----------------------------------------------------------------------
@@ -302,6 +341,154 @@ impl SavingsVault {
     }
 
     // -----------------------------------------------------------------------
+    // Emergency Pause
+    // -----------------------------------------------------------------------
+
+    /// Activate an emergency pause on the contract.
+    ///
+    /// When paused, `deposit` and `lock_funds` are blocked. Withdrawals
+    /// (`withdraw` and `withdraw_lock`) remain available so users can always
+    /// exit. Read-only query functions are unaffected.
+    ///
+    /// The pause automatically expires after `duration_secs` seconds. If the
+    /// pause is still active when `env.ledger().timestamp() >= expiry`, the
+    /// next call to a mutating function will silently clear the pause
+    /// (auto-unpause).
+    ///
+    /// # Arguments
+    ///
+    /// * `env` - The Soroban environment
+    /// * `admin` - The current admin address (must authorize this transaction)
+    /// * `duration_secs` - How long the pause lasts, in seconds. Must be > 0.
+    ///
+    /// # Authorization
+    ///
+    /// The `admin` address must sign the transaction and must match the stored
+    /// admin.
+    ///
+    /// # State Changes
+    ///
+    /// - Sets `Paused` to `true` in instance storage
+    /// - Sets `PauseExpiry` to `current_timestamp + duration_secs`
+    /// - Emits a `pause` event with the admin address and expiry timestamp
+    ///
+    /// # Panics
+    ///
+    /// - If the contract has not been initialized
+    /// - If the caller is not the admin
+    /// - If `duration_secs` is zero
+    pub fn pause(env: Env, admin: Address, duration_secs: u64) {
+        Self::assert_initialized(&env);
+        admin.require_auth();
+        Self::assert_admin(&env, &admin);
+
+        if duration_secs == 0 {
+            panic!("Pause duration must be greater than zero");
+        }
+
+        let expiry = env.ledger().timestamp() + duration_secs;
+        env.storage().instance().set(&DataKey::Paused, &true);
+        env
+            .storage()
+            .instance()
+            .set(&DataKey::PauseExpiry, &expiry);
+
+        let topics = (symbol_short!("pause"), admin.clone());
+        env.events().publish(topics, expiry);
+
+        log!(
+            &env,
+            "Pause: admin={}, expiry={}",
+            admin,
+            expiry
+        );
+    }
+
+    /// Deactivate an active pause.
+    ///
+    /// Immediately clears the pause flag and expiry, re-enabling deposits and
+    /// locks. Can be called by the admin even before the pause expires, allowing
+    /// early restoration of normal operations after an incident is resolved.
+    ///
+    /// # Arguments
+    ///
+    /// * `env` - The Soroban environment
+    /// * `admin` - The current admin address (must authorize this transaction)
+    ///
+    /// # Authorization
+    ///
+    /// The `admin` address must sign the transaction and must match the stored
+    /// admin.
+    ///
+    /// # State Changes
+    ///
+    /// - Sets `Paused` to `false`
+    /// - Sets `PauseExpiry` to `0`
+    /// - Emits an `unpause` event with the admin address
+    ///
+    /// # Panics
+    ///
+    /// - If the contract has not been initialized
+    /// - If the caller is not the admin
+    pub fn unpause(env: Env, admin: Address) {
+        Self::assert_initialized(&env);
+        admin.require_auth();
+        Self::assert_admin(&env, &admin);
+
+        env.storage().instance().set(&DataKey::Paused, &false);
+        env.storage().instance().set(&DataKey::PauseExpiry, &0_u64);
+
+        let topics = (symbol_short!("unpause"), admin.clone());
+        env.events().publish(topics, ());
+
+        log!(&env, "Unpause: admin={}", admin);
+    }
+
+    /// Check whether the contract is currently paused.
+    ///
+    /// Returns `true` when the pause flag is set **and** the pause has not yet
+    /// expired. If the pause has expired, returns `false` (the flag is not
+    /// cleared by this read-only call — it will be cleared lazily on the next
+    /// mutating call via `require_not_paused`).
+    ///
+    /// # Arguments
+    ///
+    /// * `env` - The Soroban environment
+    ///
+    /// # Returns
+    ///
+    /// `true` if the contract is actively paused; `false` otherwise.
+    ///
+    /// # Authorization
+    ///
+    /// No authorization required (read-only operation).
+    pub fn is_paused(env: Env) -> bool {
+        Self::assert_initialized(&env);
+
+        let paused: bool = env
+            .storage()
+            .instance()
+            .get(&DataKey::Paused)
+            .unwrap_or(false);
+
+        if !paused {
+            return false;
+        }
+
+        let expiry: u64 = env
+            .storage()
+            .instance()
+            .get(&DataKey::PauseExpiry)
+            .unwrap_or(0);
+
+        if expiry != 0 && env.ledger().timestamp() >= expiry {
+            return false;
+        }
+
+        true
+    }
+
+    // -----------------------------------------------------------------------
     // Deposits
     // -----------------------------------------------------------------------
 
@@ -332,6 +519,7 @@ impl SavingsVault {
     pub fn deposit(env: Env, user: Address, amount: i128) {
         Self::assert_initialized(&env);
         Self::assert_supported_storage_version(&env);
+        Self::require_not_paused(&env);
 
         // Authorization: only the user can deposit on their own behalf
         user.require_auth();
@@ -688,6 +876,7 @@ impl SavingsVault {
     pub fn lock_funds(env: Env, user: Address, amount: i128, unlock_time: u64) -> u64 {
         Self::assert_initialized(&env);
         Self::assert_supported_storage_version(&env);
+        Self::require_not_paused(&env);
 
         // Authorization
         user.require_auth();

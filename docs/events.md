@@ -109,7 +109,41 @@ Emitted when a portion of the user's balance is locked.
 
 ---
 
-### 5. Future Token Transfer Event
+### 5. Pause Event
+Emitted when the admin activates an emergency pause.
+
+- **Topic 0**: `Symbol::new(&env, "pause")`
+- **Topic 1**: `admin` (`Address`) - The admin address that triggered the pause.
+- **Payload**: `expiry` (`u64`) - The Unix timestamp (seconds) when the pause auto-expires.
+
+#### Example Payload (JSON Representation)
+```json
+{
+  "topics": ["pause", "GB...ADMIN_ADDRESS"],
+  "value": 1785000600
+}
+```
+
+---
+
+### 6. Unpause Event
+Emitted when the admin deactivates an active pause.
+
+- **Topic 0**: `Symbol::new(&env, "unpause")`
+- **Topic 1**: `admin` (`Address`) - The admin address that triggered the unpause.
+- **Payload**: `()` - Empty payload (unit type).
+
+#### Example Payload (JSON Representation)
+```json
+{
+  "topics": ["unpause", "GB...ADMIN_ADDRESS"],
+  "value": null
+}
+```
+
+---
+
+### 7. Future Token Transfer Event
 Proposed event for future integration when the contract interacts directly with Stellar Asset Contract (SAC) or token transfers.
 
 - **Topic 0**: `Symbol::new(&env, "transfer")`

@@ -18,16 +18,20 @@ See the [Admin Role](docs/admin-role.md) document for details on what the `initi
 ## Features
 
 | Function | Description |
-|---|---|
-| `initialize(admin)` | One-time setup; records the admin address |
+| --- | --- |
+| `initialize(admin, token)` | One-time setup; records the admin and token addresses |
 | `deposit(user, amount)` | Add funds to a user's vault |
 | `withdraw(user, amount)` | Remove funds from a user's vault |
+| `withdraw_lock(user, lock_id)` | Withdraw a specific matured lock entry |
 | `get_balance(user)` | Query available (unlocked) balance |
 | `lock_funds(user, amount, unlock_time)` | Lock funds until a Unix timestamp |
 | `get_locked_balance(user)` | Query locked balance |
 | `get_lock(user, lock_id)` | Read one lock record by ID |
 | `list_locks(user, offset, limit)` | Page through a user's lock records |
 | `can_withdraw(user)` | Check if locked funds are withdrawable |
+| `pause(admin, duration_secs)` | Activate emergency pause (blocks deposits/locks; withdrawals remain open) |
+| `unpause(admin)` | Deactivate an active pause |
+| `is_paused()` | Check whether the contract is currently paused |
 | `get_version()` | Query the deployed contract version |
 
 ### Deposit and custody
@@ -252,9 +256,16 @@ stellar-pocketpay-contracts/
 - Withdrawals exceeding the available balance are rejected.
 - Lock amounts exceeding the available balance are rejected.
 - Unlock times in the past are rejected.
+- Pause duration of zero is rejected.
 
 ### Re-initialization Protection
 - `initialize()` can only be called once; subsequent calls panic.
+
+### Emergency Pause
+- The admin can activate a time-bounded pause via `pause(admin, duration_secs)`.
+- During a pause, `deposit` and `lock_funds` are blocked; `withdraw` and `withdraw_lock` remain available.
+- The pause auto-expires after `duration_secs` seconds (auto-unpause).
+- Only the admin can pause or unpause (single admin key; multi-sig recommended for mainnet).
 
 ### Storage Design
 - User balances are stored in **persistent** storage (survives ledger expiry longer).
@@ -264,8 +275,6 @@ stellar-pocketpay-contracts/
 - **No admin recovery**: There is no mechanism for the admin to recover or migrate funds.
 - **No upgrade mechanism**: The contract does not implement `upgrade()`. See
   [docs/upgrade-strategy.md](docs/upgrade-strategy.md) for research into possible upgrade paths.
-- **No pause / emergency stop**: There is no mechanism to halt operations in an emergency.
-  See [docs/pause-design.md](docs/pause-design.md) for research and trade-offs.
 - **No on-chain events**: No events are emitted for state changes (deposit, withdraw, lock, unlock). See [docs/events.md](docs/events.md) for planned event schemas.
 - **No custom error enum**: Contract uses panic strings instead of a structured error enum for off-chain callers.
 
