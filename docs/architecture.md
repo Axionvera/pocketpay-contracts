@@ -39,7 +39,7 @@ The state model is deliberately simple:
 | Key                | Type   | Description |
 |--------------------|--------|-------------|
 | `balance:{user}`   | `i128` | Unlocked funds available to a user.
-| `locks:{user}`     | `Vec<LockEntry>` | List of active and matured lock entries for a user.
+| `lock:{user}:{id}` | `LockEntry`| An individual active or matured lock entry for a user.
 | `next_lock_id:{user}` | `u64`| Monotonically increasing next lock ID for a user.
 | `admin`            | `Address` | Contract admin (set during `initialize`).
 | `initialized`      | `bool`   | Guard to ensure `initialize` runs only once.

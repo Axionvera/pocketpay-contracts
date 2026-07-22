@@ -58,7 +58,7 @@ fn test_withdraw_nonexistent_lock_fails() {
 }
 
 #[test]
-#[should_panic(expected = "Lock not found")]
+#[should_panic(expected = "Lock already withdrawn")]
 fn test_withdraw_repeated_lock_fails() {
     let (env, contract_id, client) = setup();
     let (env, _admin, client, token_client, token_admin) = test_token(env, contract_id, client);

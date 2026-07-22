@@ -18,7 +18,7 @@ The contract uses the [DataKey](../contracts/savings_vault/src/lib.rs#L113-L126)
 | `DataKey::Initialized` | Instance | `bool` | Flag indicating if the contract has been initialized. |
 | `DataKey::Token` | Instance | `Address` | The address of the token contract (SAC) used for transfers. |
 | `DataKey::Balance(Address)` | Persistent | `i128` | The available (unlocked) balance of a specific user. |
-| `DataKey::Locks(Address)` | Persistent | `Vec<LockEntry>` | A vector of active or matured lock records for a user. |
+| `DataKey::Lock(Address, u64)` | Persistent | `LockEntry` | An individual lock record for a user by lock ID. |
 | `DataKey::NextLockId(Address)` | Persistent | `u64` | A sequential counter for generating unique lock IDs per user. |
 
 ---
@@ -64,25 +64,28 @@ The contract uses the [DataKey](../contracts/savings_vault/src/lib.rs#L113-L126)
   - `Balance(user) >= 0` at all times.
   - Only modified when authorization is successfully checked via `user.require_auth()`.
 
-### `DataKey::Locks(Address)`
+### `DataKey::Lock(Address, u64)`
 - **Storage Layer**: Persistent
-- **Value Type**: `Vec<LockEntry>` where [LockEntry](../contracts/savings_vault/src/lib.rs#L88-L92) is defined as:
+- **Value Type**: `LockEntry` where [LockEntry](../contracts/savings_vault/src/lib.rs#L88-L92) is defined as:
   ```rust
   pub struct LockEntry {
       pub id: u64,
+      pub owner: Address,
       pub amount: i128,
+      pub created_time: u64,
       pub unlock_time: u64,
+      pub withdrawn: bool,
   }
   ```
 - **Initialization**: Created on first call to [lock_funds](../contracts/savings_vault/src/lib.rs#L577-L663).
 - **Mutating Functions**:
-  - [lock_funds](../contracts/savings_vault/src/lib.rs#L577-L663): Appends a new `LockEntry` to the user's locks vector.
-  - [withdraw](../contracts/savings_vault/src/lib.rs#L384-L481): Consumes matured locks (deleting fully consumed ones and updating the remaining amount on partially consumed ones) if the withdrawal amount exceeds the user's basic available balance.
+  - [lock_funds](../contracts/savings_vault/src/lib.rs#L577-L663): Creates a new `LockEntry` at index `NextLockId`.
+  - [withdraw](../contracts/savings_vault/src/lib.rs#L384-L481): Updates matured locks (setting `withdrawn` to `true` and reducing `amount` on fully consumed ones, or reducing `amount` on partially consumed ones) if the withdrawal amount exceeds the user's basic available balance.
+  - [withdraw_lock](../contracts/savings_vault/src/lib.rs#L601-L640): Marks an individual lock as withdrawn.
 - **Invariants**:
-  - For each `LockEntry`, `amount > 0` must hold true.
+  - For each `LockEntry`, `amount >= 0` must hold true.
   - When created, `unlock_time` must be in the future relative to the current ledger timestamp (`unlock_time > env.ledger().timestamp()`).
-  - Active and matured locks remain in this vector until a [withdraw](../contracts/savings_vault/src/lib.rs#L384-L481) transaction explicitly processes/consumes them.
-  - Total funds tracked in locks for a user must equal the sum of all `amount` values in the vector.
+  - Active and matured locks remain in storage until a withdrawal explicitly processes/consumes them, at which point `withdrawn = true` and `amount = 0`.
 
 ### `DataKey::NextLockId(Address)`
 - **Storage Layer**: Persistent
@@ -100,18 +103,18 @@ The contract uses the [DataKey](../contracts/savings_vault/src/lib.rs#L113-L126)
 
 The following matrix maps contract entry points to their impact on each storage key (No Access, Read, Write, or Read/Write):
 
-| Function | `Admin` | `Initialized` | `Token` | `Balance(user)` | `Locks(user)` | `NextLockId(user)` |
+| Function | `Admin` | `Initialized` | `Token` | `Balance(user)` | `Lock(user, id)` | `NextLockId(user)` |
 |---|---|---|---|---|---|---|
 | `initialize` | Write | Write (Check/Write) | Write | No Access | No Access | No Access |
 | `get_version` | No Access | No Access | No Access | No Access | No Access | No Access |
 | `deposit` | No Access | Read | Read | Read & Write | No Access | No Access |
-| `withdraw` | No Access | Read | Read | Read & Write | Read & Write | No Access |
-| `get_balance` | No Access | Read | No Access | Read | Read | No Access |
-| `lock_funds` | No Access | Read | No Access | Read & Write | Read & Write | Read & Write |
-| `get_locked_balance`| No Access | Read | No Access | No Access | Read | No Access |
-| `can_withdraw` | No Access | Read | No Access | No Access | Read | No Access |
+| `withdraw` | No Access | Read | Read | Read & Write | Read & Write | Read |
+| `get_balance` | No Access | Read | No Access | Read | Read | Read |
+| `lock_funds` | No Access | Read | No Access | Read & Write | Write | Read & Write |
+| `get_locked_balance`| No Access | Read | No Access | No Access | Read | Read |
+| `can_withdraw` | No Access | Read | No Access | No Access | Read | Read |
 | `get_lock` | No Access | Read | No Access | No Access | Read | No Access |
-| `list_locks` | No Access | Read | No Access | No Access | Read | No Access |
+| `list_locks` | No Access | Read | No Access | No Access | Read | Read |
 
 ---
 
