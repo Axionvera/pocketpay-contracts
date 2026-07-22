@@ -187,6 +187,7 @@ stellar-pocketpay-contracts/
             └── test.rs                 # Unit tests
 └── docs/
     ├── admin-role.md                   # Admin role documentation
+    ├── event-schema.md                 # Vault event schema for SDK/frontend consumers
     ├── pause-design.md                 # Pause / emergency stop research
     └── upgrade-strategy.md             # Upgrade strategy research
 ```
@@ -195,6 +196,7 @@ stellar-pocketpay-contracts/
 ## Documentation
 
 - [Architecture Documentation](docs/architecture.md) – Overview of project structure, state management, storage, SDK integration, and future extension points.
+- [Event Schema](docs/event-schema.md) – Contract event names, topics, payloads, and usage examples for SDK and frontend consumers.
 
 ---
 
