@@ -157,7 +157,7 @@ fn test_lock_minimal_one_second_duration_matures_after_advancing_one_second() {
 #[test]
 fn test_withdraw_succeeds_immediately_after_minimal_duration_lock_matures() {
     let (env, current_contract_address, client) = setup();
-    let (env, _admin, client, token_client, token_admin) = test_token(env, client);
+    let (env, _admin, client, token_client, token_admin) = test_token(env, current_contract_address.clone(), client);
     let user = Address::generate(&env);
 
     set_ledger_timestamp(&env, 1_000);

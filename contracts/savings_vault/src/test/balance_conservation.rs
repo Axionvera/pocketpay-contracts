@@ -11,6 +11,7 @@
 
 use super::test_helpers::*;
 use super::*;
+use alloc::vec::Vec as StdVec;
 use soroban_sdk::{testutils::Address as _, Address, Env};
 
 // ---------------------------------------------------------------------------
@@ -55,22 +56,22 @@ struct MultiUserFixture {
     env: Env,
     client: SavingsVaultClient<'static>,
     token_admin: token::StellarAssetClient<'static>,
-    users: Vec<Address>,
-    expected_totals: Vec<i128>, // one per user
+    users: StdVec<Address>,
+    expected_totals: StdVec<i128>, // one per user
 }
 
 fn new_multi_user_fixture(user_count: usize) -> MultiUserFixture {
     let (env, contract_id, client) = setup();
-    let (env, _admin, client, _token_client, token_admin) = test_token(env, client);
+    let (env, _admin, client, _token_client, token_admin) = test_token(env, contract_id, client);
 
-    let mut users = Vec::new(&env);
-    let mut expected_totals = Vec::new(&env);
+    let mut users = StdVec::new();
+    let mut expected_totals = StdVec::new();
 
     for _ in 0..user_count {
         let user = Address::generate(&env);
         token_admin.mint(&user, &1_000_000_000);
-        users.push_back(user);
-        expected_totals.push_back(0);
+        users.push(user);
+        expected_totals.push(0);
     }
 
     set_ledger_timestamp(&env, 1_000);
@@ -529,7 +530,7 @@ fn assert_all_conserved(f: &MultiUserFixture) {
     }
 }
 
-fn snapshot_all(f: &MultiUserFixture) -> Vec<(i128, i128)> {
+fn snapshot_all(f: &MultiUserFixture) -> StdVec<(i128, i128)> {
     f.users.iter().map(|u| snapshot(&f.client, u)).collect()
 }
 
@@ -553,7 +554,7 @@ fn run_multi_user_sequence(ops: &[(UserOp, Expect)]) {
                         f.expected_totals[*user_idx] -= amount;
                     }
                     Op::Lock { amount, unlock_time } => {
-                        f.client.lock_funds(user, amount, *unlock_time);
+                        f.client.lock_funds(user, amount, unlock_time);
                     }
                     Op::SetTime(_) => {
                         // handled via UserOp::SetTime
@@ -570,7 +571,7 @@ fn run_multi_user_sequence(ops: &[(UserOp, Expect)]) {
                         assert!(f.client.try_withdraw(user, amount).is_err());
                     }
                     Op::Lock { amount, unlock_time } => {
-                        assert!(f.client.try_lock_funds(user, amount, *unlock_time).is_err());
+                        assert!(f.client.try_lock_funds(user, amount, unlock_time).is_err());
                     }
                     Op::SetTime(_) => {
                         panic!("step {step}: SetTime via UserOp::Op is invalid");

@@ -62,6 +62,9 @@
 //! ```
 
 #![no_std]
+extern crate alloc;
+#[cfg(test)]
+extern crate std;
 
 use soroban_sdk::{
     contract, contractimpl, contracttype, log, symbol_short, token, Address, Env, Symbol, Vec,
@@ -257,11 +260,7 @@ impl SavingsVault {
         env.storage().instance().set(&DataKey::StorageVersion, &1_u64);
 
         // Emit initialize event
-        let topics = (symbol_short!("initialize"), admin.clone());
-        env.events().publish(topics, token.clone());
-
-        // Emit initialize event
-        let topics = (symbol_short!("initialize"), admin.clone());
+        let topics = (symbol_short!("init"), admin.clone());
         env.events().publish(topics, token.clone());
 
         log!(&env, "Savings Vault initialized with admin: {}, storage version: {}", admin, STORAGE_VERSION);
@@ -554,7 +553,7 @@ impl SavingsVault {
             None => panic!("Lock not found"),
         };
 
-        let lock = locks.get(index).unwrap();
+        let lock = locks.get(index as u32).unwrap();
 
         // Verify maturity
         let current_time = env.ledger().timestamp();
@@ -571,7 +570,7 @@ impl SavingsVault {
         token_client.transfer(&contract_address, &user, &lock.amount);
 
         // Remove the lock from the locks vector
-        locks.remove(index);
+        locks.remove(index as u32);
 
         // Save updated locks back to persistent storage
         env.storage()
@@ -991,7 +990,7 @@ impl SavingsVault {
         env.storage().instance().set(&DataKey::Admin, &new_admin);
 
         // Emit transfer_admin event
-        let topics = (symbol_short!("transfer_admin"), old_admin);
+        let topics = (symbol_short!("xferadmin"), old_admin.clone());
         env.events().publish(topics, new_admin.clone());
 
         log!(&env, "Admin transferred from {} to {}", old_admin, new_admin);
