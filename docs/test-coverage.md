@@ -7,7 +7,7 @@ new tests. It is a coverage **map**, not a line-coverage report — see
 
 Source: `contracts/savings_vault/src/test/` (`mod.rs`, `initialization.rs`,
 `balance_conservation.rs`, `withdraw_lock.rs`, `maximum_amount_boundary.rs`,
-`unauthorized_access.rs`, `lock_read_helpers.rs`).
+`unauthorized_access.rs`, `lock_read_helpers.rs`, `replay_protection.rs`).
 
 ## Initialization
 
@@ -68,6 +68,15 @@ Source: `contracts/savings_vault/src/test/` (`mod.rs`, `initialization.rs`,
 | `get_balance` default (no deposits / new user) | Covered | `test_get_balance_no_deposits`, `test_get_balance_default_zero_for_new_user_after_initialization` |
 | Balances are isolated per user | Covered | `test_separate_user_balances`, `balance_isolation_between_users_deposit`, `balance_isolation_between_users_lock`, `balance_isolation_between_users_withdraw` |
 | Balance is conserved across mixed deposit/withdraw/lock sequences | Covered | `conservation_deposit_withdraw_cycle`, `conservation_multiple_deposits_and_partial_withdrawals`, `conservation_lock_and_time_advance`, `conservation_withdraw_after_partial_lock_maturity`, `conservation_deposit_while_funds_locked`, `conservation_long_mixed_sequence`, `conservation_mixed_valid_and_invalid_sequence`, `conservation_table_driven_sequences` |
+
+## Replay Protection
+
+| Behaviour | Status | Test(s) |
+|---|---|---|
+| Repeated standard withdrawal attempts are rejected | Covered | `test_repeated_standard_withdraw_full_balance_fails`, `test_repeated_standard_withdraw_partial_exhaustion_fails`, `test_repeated_withdraw_spanning_matured_locks_fails` |
+| Repeated matured-lock withdrawal attempts are rejected | Covered | `test_repeated_matured_lock_withdraw_fails`, `test_withdraw_lock_after_standard_withdraw_consumed_lock_fails`, `test_standard_withdraw_after_withdraw_lock_fails_if_insufficient` |
+| Cross-user replay attempts are rejected | Covered | `test_cross_user_lock_withdraw_replay_fails`, `test_cross_user_standard_withdraw_from_unowned_balance_fails`, `test_cross_user_withdraw_unauthorized_signature_fails`, `test_cross_user_withdraw_lock_unauthorized_signature_fails` |
+| State and balances remain consistent after rejected replay attempts | Covered | `test_state_consistency_after_rejected_standard_withdraw_replay`, `test_state_consistency_after_rejected_withdraw_lock_replay` |
 
 ## Known Test Gaps
 
