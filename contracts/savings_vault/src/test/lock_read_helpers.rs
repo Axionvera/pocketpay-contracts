@@ -33,8 +33,11 @@ fn test_get_lock_single_lock() {
 
     let expected = LockEntry {
         id: lock_id,
+        owner: user.clone(),
         amount: 200,
+        created_time: 1_000,
         unlock_time: 5_000,
+        withdrawn: false,
     };
     assert_eq!(client.get_lock(&user, &lock_id), Some(expected.clone()));
     assert_eq!(client.list_locks(&user, &0, &10).len(), 1);
@@ -52,24 +55,33 @@ fn test_get_lock_multi_lock_and_pagination() {
         client.get_lock(&user, &id1),
         Some(LockEntry {
             id: id1,
+            owner: user.clone(),
             amount: 100,
+            created_time: 1_000,
             unlock_time: 3_000,
+            withdrawn: false,
         })
     );
     assert_eq!(
         client.get_lock(&user, &id2),
         Some(LockEntry {
             id: id2,
+            owner: user.clone(),
             amount: 200,
+            created_time: 1_000,
             unlock_time: 4_000,
+            withdrawn: false,
         })
     );
     assert_eq!(
         client.get_lock(&user, &id3),
         Some(LockEntry {
             id: id3,
+            owner: user.clone(),
             amount: 300,
+            created_time: 1_000,
             unlock_time: 5_000,
+            withdrawn: false,
         })
     );
     assert_eq!(client.get_lock(&user, &999), None);

@@ -27,8 +27,11 @@ const MAX_LOCK_PAGE_SIZE: u32 = 50;
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct LockEntry {
     pub id: u64,
+    pub owner: Address,
     pub amount: i128,
+    pub created_time: u64,
     pub unlock_time: u64,
+    pub withdrawn: bool,
 }
 
 // ---------------------------------------------------------------------------
@@ -471,17 +474,20 @@ impl SavingsVault {
             .get(&DataKey::Balance(user.clone()))
             .unwrap_or(0);
 
-        let mut locks: Vec<LockEntry> = env
+        let next_lock_id: u64 = env
             .storage()
             .persistent()
-            .get(&DataKey::Locks(user.clone()))
-            .unwrap_or_else(|| Vec::new(&env));
+            .get(&DataKey::NextLockId(user.clone()))
+            .unwrap_or(1);
 
         let current_time = env.ledger().timestamp();
         let mut total_matured: i128 = 0;
-        for lock in locks.iter() {
-            if current_time >= lock.unlock_time {
-                total_matured += lock.amount;
+        
+        for i in 1..next_lock_id {
+            if let Some(lock) = env.storage().persistent().get::<_, LockEntry>(&DataKey::Lock(user.clone(), i)) {
+                if !lock.withdrawn && current_time >= lock.unlock_time {
+                    total_matured += lock.amount;
+                }
             }
         }
 
@@ -506,25 +512,24 @@ impl SavingsVault {
         }
 
         if remaining_to_deduct > 0 {
-            let mut new_locks = Vec::new(&env);
-            for lock in locks.iter() {
-                if current_time >= lock.unlock_time && remaining_to_deduct > 0 {
-                    if lock.amount <= remaining_to_deduct {
-                        remaining_to_deduct -= lock.amount;
-                    } else {
-                        let updated_lock = LockEntry {
-                            id: lock.id,
-                            amount: lock.amount - remaining_to_deduct,
-                            unlock_time: lock.unlock_time,
-                        };
-                        remaining_to_deduct = 0;
-                        new_locks.push_back(updated_lock);
+            for i in 1..next_lock_id {
+                if remaining_to_deduct == 0 {
+                    break;
+                }
+                if let Some(mut lock) = env.storage().persistent().get::<_, LockEntry>(&DataKey::Lock(user.clone(), i)) {
+                    if !lock.withdrawn && current_time >= lock.unlock_time {
+                        if lock.amount <= remaining_to_deduct {
+                            remaining_to_deduct -= lock.amount;
+                            lock.amount = 0;
+                            lock.withdrawn = true;
+                        } else {
+                            lock.amount -= remaining_to_deduct;
+                            remaining_to_deduct = 0;
+                        }
+                        env.storage().persistent().set(&DataKey::Lock(user.clone(), i), &lock);
                     }
-                } else {
-                    new_locks.push_back(lock);
                 }
             }
-            locks = new_locks;
         }
 
         let new_locked: i128 = locks
@@ -536,9 +541,6 @@ impl SavingsVault {
         env.storage()
             .persistent()
             .set(&DataKey::Balance(user.clone()), &current_balance);
-        env.storage()
-            .persistent()
-            .set(&DataKey::Locks(user.clone()), &locks);
 
         let topics = (symbol_short!("withdraw"), user.clone());
         let payload = (amount, current_balance, new_locked);
@@ -572,7 +574,9 @@ impl SavingsVault {
             None => panic!("Lock not found"),
         };
 
-        let lock = locks.get(index as u32).unwrap();
+        if lock.withdrawn {
+            panic!("Lock already withdrawn");
+        }
 
         let current_time = env.ledger().timestamp();
         if current_time < lock.unlock_time {
@@ -589,7 +593,7 @@ impl SavingsVault {
 
         env.storage()
             .persistent()
-            .set(&DataKey::Locks(user.clone()), &locks);
+            .set(&DataKey::Lock(user.clone(), lock_id), &lock);
 
         let topics = (Symbol::new(&env, "withdraw_lock"), user.clone());
         let payload = (lock_id, lock.amount);
@@ -619,13 +623,20 @@ impl SavingsVault {
             .get(&DataKey::Balance(user.clone()))
             .unwrap_or(0);
 
-        let locks = Self::load_locks(&env, user);
+        let next_lock_id: u64 = env
+            .storage()
+            .persistent()
+            .get(&DataKey::NextLockId(user.clone()))
+            .unwrap_or(1);
 
         let current_time = env.ledger().timestamp();
         let mut matured_amount: i128 = 0;
-        for lock in locks.iter() {
-            if current_time >= lock.unlock_time {
-                matured_amount += lock.amount;
+        
+        for i in 1..next_lock_id {
+            if let Some(lock) = env.storage().persistent().get::<_, LockEntry>(&DataKey::Lock(user.clone(), i)) {
+                if !lock.withdrawn && current_time >= lock.unlock_time {
+                    matured_amount += lock.amount;
+                }
             }
         }
 
@@ -684,20 +695,22 @@ impl SavingsVault {
 
         let new_lock = LockEntry {
             id: next_id,
+            owner: user.clone(),
             amount,
+            created_time: current_time,
             unlock_time,
+            withdrawn: false,
         };
 
-        locks.push_back(new_lock);
+        env.storage()
+            .persistent()
+            .set(&DataKey::Lock(user.clone(), next_id), &new_lock);
 
         current_balance -= amount;
 
         env.storage()
             .persistent()
             .set(&DataKey::Balance(user.clone()), &current_balance);
-        env.storage()
-            .persistent()
-            .set(&DataKey::Locks(user.clone()), &locks);
 
         let new_locked: i128 = locks.iter().map(|l| l.amount).sum();
 
@@ -723,13 +736,19 @@ impl SavingsVault {
         Self::assert_initialized(&env);
         Self::try_migrate(&env);
         Self::assert_supported_storage_version(&env);
-        let locks = Self::load_locks(&env, user);
+        let next_lock_id: u64 = env
+            .storage()
+            .persistent()
+            .get(&DataKey::NextLockId(user.clone()))
+            .unwrap_or(1);
 
         let current_time = env.ledger().timestamp();
         let mut total_locked: i128 = 0;
-        for lock in locks.iter() {
-            if current_time < lock.unlock_time {
-                total_locked += lock.amount;
+        for i in 1..next_lock_id {
+            if let Some(lock) = env.storage().persistent().get::<_, LockEntry>(&DataKey::Lock(user.clone(), i)) {
+                if !lock.withdrawn && current_time < lock.unlock_time {
+                    total_locked += lock.amount;
+                }
             }
         }
         total_locked
@@ -740,12 +759,18 @@ impl SavingsVault {
         Self::assert_initialized(&env);
         Self::try_migrate(&env);
         Self::assert_supported_storage_version(&env);
-        let locks = Self::load_locks(&env, user);
+        let next_lock_id: u64 = env
+            .storage()
+            .persistent()
+            .get(&DataKey::NextLockId(user.clone()))
+            .unwrap_or(1);
 
         let current_time = env.ledger().timestamp();
-        for lock in locks.iter() {
-            if current_time >= lock.unlock_time {
-                return true;
+        for i in 1..next_lock_id {
+            if let Some(lock) = env.storage().persistent().get::<_, LockEntry>(&DataKey::Lock(user.clone(), i)) {
+                if !lock.withdrawn && current_time >= lock.unlock_time {
+                    return true;
+                }
             }
         }
 
@@ -757,8 +782,7 @@ impl SavingsVault {
         Self::assert_initialized(&env);
         Self::try_migrate(&env);
         Self::assert_supported_storage_version(&env);
-        let locks = Self::load_locks(&env, user);
-        locks.iter().find(|lock| lock.id == lock_id)
+        env.storage().persistent().get(&DataKey::Lock(user.clone(), lock_id))
     }
 
     /// Returns a paginated list of lock entries for a user (oldest first).
@@ -766,21 +790,27 @@ impl SavingsVault {
         Self::assert_initialized(&env);
         Self::try_migrate(&env);
         Self::assert_supported_storage_version(&env);
-        if limit == 0 {
+        let next_lock_id: u64 = env
+            .storage()
+            .persistent()
+            .get(&DataKey::NextLockId(user.clone()))
+            .unwrap_or(1);
+
+        let total = (next_lock_id - 1) as usize;
+        if limit == 0 || offset as usize >= total {
             return Vec::new(&env);
         }
 
         let page_limit = limit.min(MAX_LOCK_PAGE_SIZE);
-        let locks = Self::load_locks(&env, user);
-        let total = locks.len();
-        if offset >= total {
-            return Vec::new(&env);
-        }
-
-        let end = offset.saturating_add(page_limit).min(total);
+        let end = (offset as usize).saturating_add(page_limit as usize).min(total);
         let mut page = Vec::new(&env);
-        for i in offset..end {
-            page.push_back(locks.get(i).unwrap());
+
+        // Locks are 1-indexed (ids from 1 to next_lock_id - 1)
+        // offset 0 means start at id 1
+        for i in (offset as u64 + 1)..=(end as u64) {
+            if let Some(lock) = env.storage().persistent().get::<_, LockEntry>(&DataKey::Lock(user.clone(), i)) {
+                page.push_back(lock);
+            }
         }
         page
     }
