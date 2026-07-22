@@ -6,6 +6,7 @@ mod balance_conservation;
 mod initialization;
 mod lock_read_helpers;
 mod maximum_amount_boundary;
+mod property_vault_accounting;
 mod test_helpers;
 mod unauthorized_access;
 mod zero_duration_lock;
