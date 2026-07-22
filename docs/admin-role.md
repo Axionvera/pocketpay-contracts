@@ -23,13 +23,36 @@ This document explains what the `admin` address recorded by `initialize(admin)` 
 - **State changes**: Updates the `Admin` key in instance storage to the new admin address, emits a `transfer_admin` event.
 - **Panics**: If the contract has not been initialized, or if the caller is not the current admin.
 
+### `pause(duration_secs)`
+- **Access**: Admin-only.
+- **Description**: Activates an emergency pause on the contract. During a pause, `deposit` and `lock_funds` are blocked, but `withdraw` and `withdraw_lock` remain available so users can always exit. The pause automatically expires after `duration_secs` seconds.
+- **Authorization**: Must be called by the current admin (requires `admin.require_auth()`).
+- **State changes**: Sets `Paused` to `true` and `PauseExpiry` to `current_timestamp + duration_secs` in instance storage. Emits a `pause` event with the expiry timestamp.
+- **Panics**: If the contract has not been initialized, if the caller is not the admin, or if `duration_secs` is zero.
+- **Notes**: Calling `pause` while already paused refreshes the expiry (double-pause is allowed).
+
+### `unpause()`
+- **Access**: Admin-only.
+- **Description**: Immediately deactivates an active pause, re-enabling deposits and locks. Can be called before the pause expires to restore normal operations early.
+- **Authorization**: Must be called by the current admin (requires `admin.require_auth()`).
+- **State changes**: Sets `Paused` to `false` and `PauseExpiry` to `0` in instance storage. Emits an `unpause` event.
+- **Panics**: If the contract has not been initialized, or if the caller is not the admin.
+
+### `is_paused()`
+- **Access**: Public, no authorization required.
+- **Description**: Returns `true` if the contract is currently paused and the pause has not expired. Returns `false` if not paused or if the pause has expired.
+- **State changes**: None (read-only).
+- **Panics**: If the contract has not been initialized.
+
 ## What the admin cannot do
 
-- Cannot pause contract execution or halt deposits/withdrawals.
+- Cannot pause contract execution or halt deposits/withdrawals — **RESOLVED**: The admin can now pause via `pause(duration_secs)`, but withdrawals remain open during a pause.
 - Cannot migrate or sweep funds from user balances.
 - Cannot recover or forcibly withdraw user funds.
 - Cannot upgrade the contract (no `upgrade()` or proxy mechanism is present).
 - Cannot change user balances or unlock times except via the existing user-authorized functions (which call `require_auth()` on the user address).
+- Cannot pause indefinitely — the pause auto-expires after the specified duration.
+- Cannot pause withdrawals — the withdraw-only safety net is a hard guarantee.
 
 ## Security & trust implications
 

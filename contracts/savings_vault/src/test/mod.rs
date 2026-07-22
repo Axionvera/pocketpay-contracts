@@ -6,6 +6,8 @@ mod balance_conservation;
 mod initialization;
 mod lock_read_helpers;
 mod maximum_amount_boundary;
+mod event_compatibility;
+mod multi_lock_invariants;
 mod property_vault_accounting;
 mod property_fee_invariants;
 mod test_helpers;
@@ -14,6 +16,8 @@ mod zero_duration_lock;
 mod withdraw_lock;
 mod replay_protection;
 mod admin_invariant_guard;
+mod pause;
+mod token_transfer_rollback;
 
 use super::*;
 use soroban_sdk::{testutils::Address as _, testutils::Events, Address};
@@ -448,6 +452,90 @@ fn test_failed_withdraw_does_not_change_locked_balance() {
     // available and locked balances remain unchanged.
     client.withdraw(&user, &201);
 }
+
+#[test]
+fn test_partial_withdraw_reduces_available_balance_and_preserves_locked_balance() {
+    let (env, contract_id, client) = setup();
+    let (env, _admin, client, token_client, token_admin) = test_token(env, contract_id, client);
+    let user = Address::generate(&env);
+
+    set_ledger_timestamp(&env, 1_000);
+    token_admin.mint(&user, &1_000);
+
+    // Initial deposit of 1000
+    client.deposit(&user, &1_000);
+    assert_eq!(client.get_balance(&user), 1_000);
+    assert_eq!(client.get_locked_balance(&user), 0);
+
+    // Lock 400 funds until T=2000
+    let lock_id = client.lock_funds(&user, &400, &2_000);
+    assert_eq!(lock_id, 1);
+
+    // Mixed state check: available balance is 600, locked balance is 400
+    assert_eq!(client.get_balance(&user), 600);
+    assert_eq!(client.get_locked_balance(&user), 400);
+
+    // 1. Partial withdrawal of 250 from available balance
+    client.withdraw(&user, &250);
+
+    // Acceptance criteria 1: Available balance reduces correctly to 350
+    assert_eq!(client.get_balance(&user), 350);
+    // Acceptance criteria 2: Locked balance remains unchanged at 400
+    assert_eq!(client.get_locked_balance(&user), 400);
+    // Acceptance criteria 3: Total internal accounting remains consistent
+    assert_eq!(token_client.balance(&user), 250);
+
+    // Acceptance criteria 4: A second withdrawal behaves correctly after the first
+    client.withdraw(&user, &150);
+
+    assert_eq!(client.get_balance(&user), 200);
+    assert_eq!(client.get_locked_balance(&user), 400);
+    assert_eq!(token_client.balance(&user), 400);
+}
+
+#[test]
+fn test_sequential_partial_withdrawals_with_multiple_locks() {
+    let (env, contract_id, client) = setup();
+    let (env, _admin, client, token_client, token_admin) = test_token(env, contract_id, client);
+    let user = Address::generate(&env);
+
+    set_ledger_timestamp(&env, 1_000);
+    token_admin.mint(&user, &2_000);
+
+    // Deposit 2000
+    client.deposit(&user, &2_000);
+
+    // Create two locks
+    client.lock_funds(&user, &500, &3_000);
+    client.lock_funds(&user, &300, &5_000);
+
+    // Mixed state: available 1200, locked 800
+    assert_eq!(client.get_balance(&user), 1_200);
+    assert_eq!(client.get_locked_balance(&user), 800);
+
+    // First partial withdrawal
+    client.withdraw(&user, &400);
+    assert_eq!(client.get_balance(&user), 800);
+    assert_eq!(client.get_locked_balance(&user), 800);
+
+    // Second partial withdrawal
+    client.withdraw(&user, &500);
+    assert_eq!(client.get_balance(&user), 300);
+    assert_eq!(client.get_locked_balance(&user), 800);
+
+    // Advance time so first lock matures at T=3000
+    set_ledger_timestamp(&env, 3_000);
+    // Available balance is now 300 + 500 = 800, locked balance is 300
+    assert_eq!(client.get_balance(&user), 800);
+    assert_eq!(client.get_locked_balance(&user), 300);
+
+    // Third withdrawal consuming part of matured lock
+    client.withdraw(&user, &600);
+    assert_eq!(client.get_balance(&user), 200);
+    assert_eq!(client.get_locked_balance(&user), 300);
+    assert_eq!(token_client.balance(&user), 1_500);
+}
+
 
 // =========================================================================
 // Balance Query Tests

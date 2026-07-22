@@ -18,16 +18,20 @@ See the [Admin Role](docs/admin-role.md) document for details on what the `initi
 ## Features
 
 | Function | Description |
-|---|---|
-| `initialize(admin)` | One-time setup; records the admin address |
+| --- | --- |
+| `initialize(admin, token)` | One-time setup; records the admin and token addresses |
 | `deposit(user, amount)` | Add funds to a user's vault |
 | `withdraw(user, amount)` | Remove funds from a user's vault |
+| `withdraw_lock(user, lock_id)` | Withdraw a specific matured lock entry |
 | `get_balance(user)` | Query available (unlocked) balance |
 | `lock_funds(user, amount, unlock_time)` | Lock funds until a Unix timestamp |
 | `get_locked_balance(user)` | Query locked balance |
 | `get_lock(user, lock_id)` | Read one lock record by ID |
 | `list_locks(user, offset, limit)` | Page through a user's lock records |
 | `can_withdraw(user)` | Check if locked funds are withdrawable |
+| `pause(admin, duration_secs)` | Activate emergency pause (blocks deposits/locks; withdrawals remain open) |
+| `unpause(admin)` | Deactivate an active pause |
+| `is_paused()` | Check whether the contract is currently paused |
 | `get_version()` | Query the deployed contract version |
 
 ### Deposit and custody
@@ -210,6 +214,7 @@ stellar-pocketpay-contracts/
     ├── deployment-environments.md      # Deployment environment config
     ├── error-codes.md                  # Error code reference
     ├── events.md                       # Event schema documentation
+    ├── state-machine.md                # Vault state machine documentation
     ├── pause-design.md                 # Pause / emergency stop research
     ├── storage-migration.md            # Storage versioning and migration guide
     ├── storage-ttl.md                  # Storage TTL guide
@@ -222,9 +227,11 @@ stellar-pocketpay-contracts/
 
 - [Audit Preparation Checklist](docs/audit-preparation.md) — Checklist of documentation, tests, threat model, and deployment details required before any external security review or audit.
 - [Storage Audit](docs/storage-audit.md) — Comprehensive details on the contract's storage layout, keys, mutating functions, and security invariants.
+- [Storage Migration Guide](docs/storage-migration.md) — Safe storage versioning and migration strategy for future contract upgrades.
 - [Deployment Environments](docs/deployment-environments.md) — Network configuration for local, testnet, and future mainnet, including RPC URLs, identities, environment variables, and deployment commands.
 - [Contract Error Reference](docs/error-codes.md) - Current savings vault failure conditions and guidance for SDK and mobile callers.
 - [SDK Error Mapping Guide](docs/sdk-error-mapping-guide.md) — Maps contract errors to SDK handling expectations with user-facing and developer-facing examples.
+- [State Machine Documentation](docs/state-machine.md) — Contract lifecycle, user account states, valid and invalid transitions, and error states.
 - [Architecture Documentation](docs/architecture.md) – Overview of project structure, state management, storage, SDK integration, and future extension points.
 - [SDK ↔ Contract Sequence Diagrams](docs/sdk-contract-sequence.md) – Mermaid sequence diagrams for balance query, deposit, withdraw, and error paths across mobile, SDK, Soroban RPC, and the vault contract.
 - [Event Schema Documentation](docs/events.md) – Overview of event names, topics, payload schemas, and JSON examples for vault actions.
@@ -236,6 +243,7 @@ stellar-pocketpay-contracts/
 - [Version Metadata](docs/version-metadata.md) — How the `get_version` read-only function works, how SDKs and deployment scripts should use it, and how to bump the version.
 - [Lock Read Helpers](docs/lock-read-helpers.md) — Response shapes and pagination for `get_lock` and `list_locks`.
 - [Test Coverage Summary](docs/test-coverage.md) — Maps initialization, deposit, withdrawal, and locking behaviours to the tests that cover them, plus known test gaps.
+- [Failure Mode Catalogue](docs/failure-mode-catalogue.md) — Comprehensive list of all contract failure modes with expected behavior and test coverage.
 
 ---
 
@@ -252,9 +260,16 @@ stellar-pocketpay-contracts/
 - Withdrawals exceeding the available balance are rejected.
 - Lock amounts exceeding the available balance are rejected.
 - Unlock times in the past are rejected.
+- Pause duration of zero is rejected.
 
 ### Re-initialization Protection
 - `initialize()` can only be called once; subsequent calls panic.
+
+### Emergency Pause
+- The admin can activate a time-bounded pause via `pause(admin, duration_secs)`.
+- During a pause, `deposit` and `lock_funds` are blocked; `withdraw` and `withdraw_lock` remain available.
+- The pause auto-expires after `duration_secs` seconds (auto-unpause).
+- Only the admin can pause or unpause (single admin key; multi-sig recommended for mainnet).
 
 ### Storage Design
 - User balances are stored in **persistent** storage (survives ledger expiry longer).
@@ -264,8 +279,6 @@ stellar-pocketpay-contracts/
 - **No admin recovery**: There is no mechanism for the admin to recover or migrate funds.
 - **No upgrade mechanism**: The contract does not implement `upgrade()`. See
   [docs/upgrade-strategy.md](docs/upgrade-strategy.md) for research into possible upgrade paths.
-- **No pause / emergency stop**: There is no mechanism to halt operations in an emergency.
-  See [docs/pause-design.md](docs/pause-design.md) for research and trade-offs.
 - **No on-chain events**: No events are emitted for state changes (deposit, withdraw, lock, unlock). See [docs/events.md](docs/events.md) for planned event schemas.
 - **No custom error enum**: Contract uses panic strings instead of a structured error enum for off-chain callers.
 
