@@ -177,6 +177,22 @@ impl SavingsVault {
             .unwrap_or_else(|| Vec::new(env))
     }
 
+    fn assert_supported_storage_version(env: &Env) {
+        let stored_version: u64 = env
+            .storage()
+            .instance()
+            .get(&DataKey::StorageVersion)
+            .unwrap_or(0);
+        if stored_version != STORAGE_VERSION {
+            panic!("Unsupported storage version");
+        }
+    }
+
+    fn try_migrate(env: &Env) {
+        // Placeholder for future migration logic
+        // When STORAGE_VERSION is incremented, implement migration here
+    }
+
     // -----------------------------------------------------------------------
     // Initialization
     // -----------------------------------------------------------------------
@@ -229,6 +245,9 @@ impl SavingsVault {
             panic!("Contract is already initialized");
         }
 
+        // Try migration before initializing
+        Self::try_migrate(&env);
+
         // Require the admin to have signed this transaction
         admin.require_auth();
 
@@ -237,10 +256,6 @@ impl SavingsVault {
         env.storage().instance().set(&DataKey::Initialized, &true);
         env.storage().instance().set(&DataKey::Token, &token);
         env.storage().instance().set(&DataKey::StorageVersion, &1_u64);
-
-        // Emit initialize event
-        let topics = (symbol_short!("initialize"), admin.clone());
-        env.events().publish(topics, token.clone());
 
         // Emit initialize event
         let topics = (symbol_short!("initialize"), admin.clone());
@@ -281,7 +296,43 @@ impl SavingsVault {
     /// assert_eq!(version, "0.1.0");
     /// ```
     pub fn get_version(env: Env) -> soroban_sdk::String {
+        // No need to be initialized for version check, but check storage version if possible
+        if env.storage().instance().has(&DataKey::Initialized) {
+            Self::try_migrate(&env);
+            Self::assert_supported_storage_version(&env);
+        }
         soroban_sdk::String::from_str(&env, "0.1.0")
+    }
+
+    // -----------------------------------------------------------------------
+    // Token Configuration
+    // -----------------------------------------------------------------------
+
+    /// Get the configured token address.
+    ///
+    /// Returns the address of the Stellar Asset Contract (SAC) that the vault
+    /// uses for deposits and withdrawals.
+    ///
+    /// # Arguments
+    ///
+    /// * `env` - The Soroban environment
+    ///
+    /// # Returns
+    ///
+    /// The token address as an `Address`.
+    ///
+    /// # Authorization
+    ///
+    /// No authorization required (read-only operation).
+    ///
+    /// # Panics
+    ///
+    /// - If the contract has not been initialized.
+    pub fn get_token(env: Env) -> Address {
+        Self::assert_initialized(&env);
+        Self::try_migrate(&env);
+        Self::assert_supported_storage_version(&env);
+        env.storage().instance().get(&DataKey::Token).unwrap()
     }
 
     // -----------------------------------------------------------------------
@@ -314,6 +365,7 @@ impl SavingsVault {
     /// - If `amount` is zero or negative.
     pub fn deposit(env: Env, user: Address, amount: i128) {
         Self::assert_initialized(&env);
+        Self::try_migrate(&env);
         Self::assert_supported_storage_version(&env);
 
         // Authorization: only the user can deposit on their own behalf
@@ -394,6 +446,7 @@ impl SavingsVault {
     /// - If `amount` exceeds the user's available balance.
     pub fn withdraw(env: Env, user: Address, amount: i128) {
         Self::assert_initialized(&env);
+        Self::try_migrate(&env);
         Self::assert_supported_storage_version(&env);
 
         // Authorization
@@ -518,9 +571,9 @@ impl SavingsVault {
     /// - If the lock with the given `lock_id` does not exist for the `user`.
     /// - If the lock has not yet matured (current_time < unlock_time).
     pub fn withdraw_lock(env: Env, user: Address, lock_id: u64) {
-        if !env.storage().instance().has(&DataKey::Initialized) {
-            panic!("Contract not initialized");
-        }
+        Self::assert_initialized(&env);
+        Self::try_migrate(&env);
+        Self::assert_supported_storage_version(&env);
 
         // Authorization
         user.require_auth();
@@ -610,6 +663,8 @@ impl SavingsVault {
     /// ```
     pub fn get_balance(env: Env, user: Address) -> i128 {
         Self::assert_initialized(&env);
+        Self::try_migrate(&env);
+        Self::assert_supported_storage_version(&env);
         let deposited_balance: i128 = env
             .storage()
             .persistent()
@@ -670,6 +725,7 @@ impl SavingsVault {
     /// - If `unlock_time` is in the past.
     pub fn lock_funds(env: Env, user: Address, amount: i128, unlock_time: u64) -> u64 {
         Self::assert_initialized(&env);
+        Self::try_migrate(&env);
         Self::assert_supported_storage_version(&env);
 
         // Authorization
@@ -787,6 +843,8 @@ impl SavingsVault {
     /// ```
     pub fn get_locked_balance(env: Env, user: Address) -> i128 {
         Self::assert_initialized(&env);
+        Self::try_migrate(&env);
+        Self::assert_supported_storage_version(&env);
         let locks = Self::load_locks(&env, user);
 
         let current_time = env.ledger().timestamp();
@@ -844,6 +902,8 @@ impl SavingsVault {
     /// ```
     pub fn can_withdraw(env: Env, user: Address) -> bool {
         Self::assert_initialized(&env);
+        Self::try_migrate(&env);
+        Self::assert_supported_storage_version(&env);
         let locks = Self::load_locks(&env, user);
 
         let current_time = env.ledger().timestamp();
@@ -876,6 +936,8 @@ impl SavingsVault {
     /// No authorization required (read-only operation).
     pub fn get_lock(env: Env, user: Address, lock_id: u64) -> Option<LockEntry> {
         Self::assert_initialized(&env);
+        Self::try_migrate(&env);
+        Self::assert_supported_storage_version(&env);
         let locks = Self::load_locks(&env, user);
         locks.iter().find(|lock| lock.id == lock_id)
     }
@@ -902,6 +964,8 @@ impl SavingsVault {
     /// No authorization required (read-only operation).
     pub fn list_locks(env: Env, user: Address, offset: u32, limit: u32) -> Vec<LockEntry> {
         Self::assert_initialized(&env);
+        Self::try_migrate(&env);
+        Self::assert_supported_storage_version(&env);
         if limit == 0 {
             return Vec::new(&env);
         }
