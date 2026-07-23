@@ -39,7 +39,7 @@ The state model is deliberately simple:
 | Key                | Type   | Description |
 |--------------------|--------|-------------|
 | `balance:{user}`   | `i128` | Unlocked funds available to a user.
-| `locks:{user}`     | `Vec<LockEntry>` | List of active and matured lock entries for a user.
+| `lock:{user}:{id}` | `LockEntry`| An individual active or matured lock entry for a user.
 | `next_lock_id:{user}` | `u64`| Monotonically increasing next lock ID for a user.
 | `admin`            | `Address` | Contract admin (set during `initialize`).
 | `initialized`      | `bool`   | Guard to ensure `initialize` runs only once.
@@ -94,6 +94,7 @@ These boundaries maintain a clean separation between **on‑chain logic** (this 
 - The **README.md** provides quick‑start guides for building, testing, and deploying the contract.
 - This **architecture.md** offers a deeper dive into internal design.
 - [**sdk-contract-sequence.md**](sdk-contract-sequence.md) shows the end‑to‑end request flow (mobile → SDK → Soroban RPC → vault contract) for balance queries, deposits, withdrawals, and error paths.
+- [**api-reference.md**](api-reference.md) documents the naming convention followed by `SavingsVault`'s public functions.
 - Additional module‑level docs (e.g., `admin-role.md`) cover specific responsibilities.
 
 Refer to the **Documentation** section of the README for links to all docs.
