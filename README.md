@@ -221,6 +221,7 @@ stellar-pocketpay-contracts/
     ├── admin-pause-threat-model.md    # Emergency pause and admin misuse threat model
     ├── storage-migration.md            # Storage versioning and migration guide
     ├── storage-ttl.md                  # Storage TTL guide
+    ├── testing.md                      # Test naming conventions
     ├── troubleshooting.md              # Troubleshooting guide
     └── upgrade-strategy.md             # Upgrade strategy research
 ```
@@ -249,6 +250,7 @@ stellar-pocketpay-contracts/
 - [Lock Read Helpers](docs/lock-read-helpers.md) — Response shapes and pagination for `get_lock` and `list_locks`.
 - [Test Coverage Summary](docs/test-coverage.md) — Maps initialization, deposit, withdrawal, and locking behaviours to the tests that cover them, plus known test gaps.
 - [Failure Mode Catalogue](docs/failure-mode-catalogue.md) — Comprehensive list of all contract failure modes with expected behavior and test coverage.
+- [Test Naming Conventions](docs/testing.md) — Naming pattern for unit tests under `contracts/savings_vault/src/test/`, with good/bad examples and coverage guidance.
 
 ---
 
