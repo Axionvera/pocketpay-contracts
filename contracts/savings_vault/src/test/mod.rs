@@ -4,6 +4,7 @@
 //! on-chain interactions in an isolated environment.
 mod balance_conservation;
 mod initialization;
+mod independent_lock_creation;
 mod lock_read_helpers;
 mod maximum_amount_boundary;
 mod event_compatibility;
