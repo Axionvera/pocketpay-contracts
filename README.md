@@ -211,6 +211,7 @@ stellar-pocketpay-contracts/
             └── test.rs                 # Unit tests
 └── docs/
     ├── admin-role.md                   # Admin role documentation
+    ├── api-reference.md                # Function naming conventions
     ├── architecture.md                 # Architecture overview
     ├── contract-id-handoff.md          # Contract ID handoff guide
     ├── deployment-environments.md      # Deployment environment config
@@ -239,6 +240,7 @@ stellar-pocketpay-contracts/
 - [SDK Error Mapping Guide](docs/sdk-error-mapping-guide.md) — Maps contract errors to SDK handling expectations with user-facing and developer-facing examples.
 - [State Machine Documentation](docs/state-machine.md) — Contract lifecycle, user account states, valid and invalid transitions, and error states.
 - [Architecture Documentation](docs/architecture.md) – Overview of project structure, state management, storage, SDK integration, and future extension points.
+- [API Reference: Function Naming Conventions](docs/api-reference.md) — Naming convention for `SavingsVault`'s public functions (commands, single-value queries, collection queries, capability and state queries), with the full function list and category for each.
 - [SDK ↔ Contract Sequence Diagrams](docs/sdk-contract-sequence.md) – Mermaid sequence diagrams for balance query, deposit, withdraw, and error paths across mobile, SDK, Soroban RPC, and the vault contract.
 - [Event Schema Documentation](docs/events.md) – Overview of event names, topics, payload schemas, and JSON examples for vault actions.
 - [Vault Contract ID Handoff](docs/contract-id-handoff.md) - How to pass a deployed vault contract ID safely to SDK configuration and the mobile app.
