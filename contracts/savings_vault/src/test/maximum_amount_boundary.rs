@@ -197,10 +197,7 @@ fn test_lock_over_large_balance_does_not_mutate() {
 
     let result = client.try_lock_funds(&user, &I128_MAX, &unlock_time);
 
-    assert!(
-        result.is_err(),
-        "expected lock exceeding balance to fail"
-    );
+    assert!(result.is_err(), "expected lock exceeding balance to fail");
     assert_eq!(
         client.get_balance(&user),
         available_before,
