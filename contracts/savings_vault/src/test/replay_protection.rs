@@ -101,9 +101,10 @@ fn test_repeated_withdraw_spanning_matured_locks_fails() {
 // =========================================================================
 
 /// Verifies that calling `withdraw_lock` twice with the same matured `lock_id`
-/// fails on the second attempt with "Lock not found" because the lock was removed.
+/// fails on the second attempt with "Lock already withdrawn" because the lock's
+/// withdrawn status is persistent in storage.
 #[test]
-#[should_panic(expected = "Lock not found")]
+#[should_panic(expected = "Lock already withdrawn")]
 fn test_repeated_matured_lock_withdraw_fails() {
     let (env, contract_id, client) = setup();
     let (env, _admin, client, token_client, token_admin) = test_token(env, contract_id, client);
@@ -124,14 +125,14 @@ fn test_repeated_matured_lock_withdraw_fails() {
     assert_eq!(client.get_locked_balance(&user), 0);
     assert_eq!(token_client.balance(&user), 400);
 
-    // Replay attempt to withdraw the same lock_id must fail
+    // Replay attempt to withdraw the same lock_id must fail with Lock already withdrawn
     client.withdraw_lock(&user, &lock_id);
 }
 
 /// Verifies that if a matured lock is consumed by a standard `withdraw`, a subsequent
-/// call to `withdraw_lock` for that lock ID panics with "Lock not found".
+/// call to `withdraw_lock` for that lock ID panics with "Lock already withdrawn".
 #[test]
-#[should_panic(expected = "Lock not found")]
+#[should_panic(expected = "Lock already withdrawn")]
 fn test_withdraw_lock_after_standard_withdraw_consumed_lock_fails() {
     let (env, contract_id, client) = setup();
     let (env, _admin, client, _token_client, token_admin) = test_token(env, contract_id, client);
@@ -149,7 +150,7 @@ fn test_withdraw_lock_after_standard_withdraw_consumed_lock_fails() {
     // Standard withdrawal consumes the available balance AND the matured lock
     client.withdraw(&user, &1000);
 
-    // Attempting withdraw_lock for the consumed lock ID must panic
+    // Attempting withdraw_lock for the consumed lock ID must panic with Lock already withdrawn
     client.withdraw_lock(&user, &lock_id);
 }
 
@@ -327,4 +328,52 @@ fn test_state_consistency_after_rejected_withdraw_lock_replay() {
     assert_eq!(client.get_balance(&user), bal_after);
     assert_eq!(client.get_locked_balance(&user), locked_after);
     assert_eq!(token_client.balance(&user), token_after);
+}
+
+/// Verifies the lifecycle and transitions of the withdrawn flag on a LockEntry.
+/// It asserts that a newly created lock has withdrawn set to false and the correct amount,
+/// and after withdrawal (either via withdraw_lock or standard withdraw), the flag becomes
+/// true, the amount becomes 0, and subsequent withdraw_lock calls panic with the expected
+/// "Lock already withdrawn" message.
+#[test]
+fn test_lock_withdrawn_flag_and_state_lifecycle() {
+    let (env, contract_id, client) = setup();
+    let (env, _admin, client, token_client, token_admin) = test_token(env, contract_id, client);
+    let user = new_user(&env);
+
+    set_ledger_timestamp(&env, 1000);
+    token_admin.mint(&user, &2000);
+    client.deposit(&user, &2000);
+
+    // Create two locks
+    let lock_id_1 = client.lock_funds(&user, &400, &2000);
+    let lock_id_2 = client.lock_funds(&user, &600, &2000);
+
+    // Verify initial withdrawn flag behaviour
+    let lock_1 = client.get_lock(&user, &lock_id_1).expect("Lock 1 should exist");
+    assert!(!lock_1.withdrawn, "New lock must not be marked as withdrawn");
+    assert_eq!(lock_1.amount, 400, "New lock must have the correct amount");
+
+    let lock_2 = client.get_lock(&user, &lock_id_2).expect("Lock 2 should exist");
+    assert!(!lock_2.withdrawn, "New lock must not be marked as withdrawn");
+    assert_eq!(lock_2.amount, 600, "New lock must have the correct amount");
+
+    // Advance time to maturity
+    set_ledger_timestamp(&env, 2000);
+
+    // Withdraw lock 1 via withdraw_lock
+    client.withdraw_lock(&user, &lock_id_1);
+
+    // Verify withdrawn flag and amount state after withdraw_lock
+    let lock_1_after = client.get_lock(&user, &lock_id_1).expect("Lock 1 should still exist");
+    assert!(lock_1_after.withdrawn, "Withdrawn lock must have withdrawn set to true");
+    assert_eq!(lock_1_after.amount, 0, "Withdrawn lock must have amount set to 0");
+
+    // Withdraw lock 2 via standard withdraw (which consumes the lock)
+    client.withdraw(&user, &1000); // Consumes remaining 1000 deposited + lock 2 (600)
+
+    // Verify withdrawn flag and amount state after standard withdraw consumption
+    let lock_2_after = client.get_lock(&user, &lock_id_2).expect("Lock 2 should still exist");
+    assert!(lock_2_after.withdrawn, "Consumed lock must have withdrawn set to true");
+    assert_eq!(lock_2_after.amount, 0, "Consumed lock must have amount set to 0");
 }
