@@ -106,6 +106,21 @@ balance or locked balance.
   action. The current contract has no operation to release or withdraw locked
   funds; `can_withdraw` is only a query.
 
+### `Cannot withdraw: funds are locked until maturity`
+
+- **Current failure:** Panic message from `withdraw`.
+- **Meaning:** The withdrawal amount exceeds the available balance and would
+  require withdrawing from immature (unmatured) locked funds. This is a specific
+  error that occurs when the user has locked funds that have not yet reached
+  their unlock time.
+- **Likely cause:** The user attempted to withdraw more than their available
+  (unlocked) balance, and the shortfall would need to come from locked funds
+  that are still immature (current_time < unlock_time).
+- **Caller/developer action:** Check `get_balance(user)` to see available funds
+  and `get_locked_balance(user)` to see locked funds. Only withdraw up to the
+  available balance. Wait for locks to mature (check with `can_withdraw(user)`)
+  before attempting to withdraw locked funds.
+
 ## Unauthorised access errors
 
 ### Missing required authorization

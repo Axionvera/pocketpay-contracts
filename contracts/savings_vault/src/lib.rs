@@ -366,14 +366,21 @@ impl SavingsVault {
 
         let current_time = env.ledger().timestamp();
         let mut total_matured: i128 = 0;
+        let mut total_locked: i128 = 0;
         for lock in locks.iter() {
             if current_time >= lock.unlock_time {
                 total_matured += lock.amount;
+            } else {
+                total_locked += lock.amount;
             }
         }
 
         // Ensure sufficient funds across available balance and matured locks
         if amount > current_balance + total_matured {
+            // Provide specific error if immature locks exist
+            if total_locked > 0 {
+                panic!("Cannot withdraw: funds are locked until maturity");
+            }
             panic!("Insufficient balance");
         }
 
