@@ -1,211 +1,93 @@
-# Storage TTL — Savings Vault
+# Storage TTL Review
 
-This document explains how Soroban storage TTL (time-to-live) works, how the
-vault contract uses persistent and instance storage, why TTL matters for
-on-chain data survival, and how to extend storage when needed.
+## Overview
 
----
+This document summarizes the storage TTL assumptions for the savings vault contract based on the implementation in [contracts/savings_vault/src/lib.rs](../contracts/savings_vault/src/lib.rs). The goal is to document what the repository currently uses and what maintainers should expect, without changing contract behavior.
 
-## What is storage TTL?
+## Soroban storage TTL and this repository
 
-Every entry written to the Stellar ledger has a **TTL (time-to-live)**: a
-ledger sequence number after which the entry is considered expired. Soroban
-tracks TTL at the level of individual storage entries.
+Soroban storage entries have a TTL that governs how long they remain accessible. The current contract uses two storage categories:
 
-- An entry whose TTL has **not** expired is **live**: it can be read and
-  written normally.
-- An entry whose TTL **has** expired is no longer accessible. Attempting to
-  read it returns nothing (as if it never existed).
+- Instance storage for contract-level configuration and operational state.
+- Persistent storage for user balances and lock records.
 
-TTL is counted in **ledger sequences**, not wall-clock time. On testnet, a new
-ledger closes roughly every 5–6 seconds.
+The contract source does not contain any explicit TTL renewal logic such as `extend_ttl` or `bump` calls. In other words, the repository does not implement application-level renewal for storage entries; any retention behavior is determined by the runtime or deployment environment.
 
-> **Important:** Expired storage does not mean the ledger entry is immediately
-> deleted. It means contract code can no longer access it. Restoration is
-> possible (see [Restoring expired entries](#restoring-expired-entries)), but
-> prevention through regular TTL extension is simpler.
+## Current storage entries
 
----
+| Entry | Storage type | Purpose | TTL sensitivity | Renewal expectation in this repo |
+| --- | --- | --- | --- | --- |
+| `Admin` | Instance | Stores the contract admin address. | High | No explicit renewal logic in source. |
+| `Initialized` | Instance | Tracks whether initialization has completed. | High | No explicit renewal logic in source. |
+| `Token` | Instance | Stores the token contract address used for transfers. | High | No explicit renewal logic in source. |
+| `StorageVersion` | Instance | Tracks the contract storage layout version. | Medium | No explicit renewal logic in source. |
+| `Paused` | Instance | Stores the global pause flag. | Medium | No explicit renewal logic in source. |
+| `PauseExpiry` | Instance | Stores the pause expiry timestamp. | Medium | No explicit renewal logic in source. |
+| `Balance(Address)` | Persistent | Stores the available balance for a user. | High | No explicit renewal logic in source. |
+| `NextLockId(Address)` | Persistent | Stores the next lock ID to assign per user. | Medium | No explicit renewal logic in source. |
+| `Lock(Address, u64)` | Persistent | Stores a lock record for a specific user and lock ID. | High | No explicit renewal logic in source. |
+| `Locks(Address)` | Persistent key variant | Present in the storage enum, but not exercised by the current public implementation. | Low/unclear | No current read or write path in the contract source. |
 
-## The two storage types used by this contract
+## Storage inventory
 
-The vault contract uses two Soroban storage types with different TTL behaviour.
+The storage keys are defined in the `DataKey` enum in [contracts/savings_vault/src/lib.rs](../contracts/savings_vault/src/lib.rs). The persistent entries are used by the balance and lock flows:
 
-### Persistent storage
+- `Balance(Address)` is written on deposit, withdrawal, and lock creation.
+- `NextLockId(Address)` is written when a new lock is created.
+- `Lock(Address, u64)` is written when a lock is created and updated when that lock is withdrawn.
 
-Used for all **user-owned data**:
+The instance entries are used by contract initialization, pause handling, admin management, and token configuration.
 
-| DataKey               | What it holds                        |
-|-----------------------|--------------------------------------|
-| `Balance(user)`       | Available (unlocked) balance         |
-| `LockedBalance(user)` | Locked balance                       |
-| `UnlockTime(user)`    | Unix timestamp when locked funds unlock |
+## TTL considerations
 
-Persistent entries have the **longest default TTL** on the Stellar network. On
-mainnet the default is set by the network as a protocol constant; on testnet it
-is shorter to make expiry easier to observe. Persistent entries also benefit
-from **automatic TTL bumping** by the network fee system when a transaction
-reads or writes them — but that bump is incremental and may not be enough for
-long-lived data.
+### Persistent balance and lock state
 
-Because user balances represent real value, they must remain readable for as
-long as users need them. If a `Balance` entry expires, the contract will see a
-balance of `0` (the `unwrap_or(0)` default) and a user attempting to withdraw
-will be told they have no funds. **This is the primary TTL risk for this
-contract.**
+The most important TTL-sensitive state in the repository is the persistent user-state data:
 
-### Instance storage
+- `Balance(Address)` is read in balance queries and used to compute withdrawal eligibility.
+- `Lock(Address, u64)` is read to resolve lock history, paginated lock lists, and lock withdrawal operations.
+- `NextLockId(Address)` is used to discover existing locks and assign new lock IDs.
 
-Used for **contract-level data** shared across all users:
+If these persistent entries are no longer accessible, the contract can no longer reconstruct the user’s vault state accurately. In the current implementation, missing persistent values typically fall back to defaults such as `0` or `1`, which can cause incorrect balance or lock behavior.
 
-| DataKey       | What it holds                             |
-|---------------|-------------------------------------------|
-| `Admin`       | Admin address recorded during `initialize`|
-| `Initialized` | Guard flag preventing re-initialization   |
-| `Token`       | Token contract address                    |
+### Instance configuration and control state
 
-Instance storage TTL is tied to the **contract instance itself**. The instance
-entry has its own TTL, and all instance storage keys expire together when the
-instance TTL lapses. Extending the instance TTL keeps all instance keys alive.
+The instance entries are also important because they support core contract operations:
 
-Instance storage has a **shorter default TTL** than persistent storage.
-Because `Initialized`, `Admin`, and `Token` must be readable for every
-transaction, the instance TTL should be monitored and extended regularly —
-especially on testnet where defaults are lower.
+- If `Initialized` is missing or unreadable, the contract may behave as if it has not been initialized.
+- If `Admin` or `Token` is missing, administrative checks and token transfer flows can fail.
+- If `Paused` or `PauseExpiry` is unavailable, pause handling can no longer be reasoned about reliably.
 
----
+## Renewal expectations
 
-## Why TTL matters for this contract
+The current repository does not define a renewal policy for storage entries.
 
-| Scenario | Consequence if TTL expires |
-|---|---|
-| `Balance(user)` expires | `get_balance` returns `0`; withdrawals fail with "Insufficient balance" |
-| `LockedBalance(user)` expires | `get_locked_balance` returns `0`; `can_withdraw` returns `false` |
-| `UnlockTime(user)` expires | `can_withdraw` may return `false`; locked funds appear inaccessible |
-| Instance storage expires | `deposit`, `withdraw`, `lock_funds` all panic — contract is non-functional until restored |
+For maintainers, the practical expectation is:
 
-On testnet, storage expires faster than on mainnet. Always extend TTL after
-deploying to testnet if you plan to keep the contract active for more than a
-short session.
+- Instance storage should remain available for as long as the contract instance is expected to remain operational.
+- Persistent balances and lock records should remain available for as long as users are expected to access them.
+- No application-level TTL renewal is currently performed by the contract source.
 
----
+## Operational recommendations
 
-## Checking current TTL
+These recommendations are operational guidance only; they do not change contract behavior.
 
-Use the Soroban CLI to inspect the TTL of the contract instance:
+1. Treat persistent balances and lock records as the highest-priority TTL-sensitive state.
+2. If the contract is deployed in an environment with strict retention limits, verify that balances and lock entries remain readable over long idle periods.
+3. If a user reports a missing balance or missing lock, confirm whether storage retention is the cause before investigating contract logic.
+4. Keep deployment and runtime retention policy aligned with the expected lifetime of vault state.
 
-```bash
-soroban contract invoke \
-  --id YOUR_CONTRACT_ID \
-  --source deployer \
-  --network testnet \
-  -- \
-  get_balance \
-  --user deployer
-```
+## Maintenance notes
 
-That command will fail with a read error if instance storage has expired. A
-cleaner way to inspect expiry information is via the RPC directly, but the
-`extend` command described below is the practical remedy regardless.
+- The current implementation uses `persistent()` for balances and lock data, and `instance()` for contract configuration and pause state.
+- `Locks(Address)` exists in the storage enum but is not used by the current public implementation, so it should not be treated as an active storage path without confirming later code changes.
+- This document is intentionally limited to what is directly evidenced by the repository.
 
----
+## Future considerations
 
-## Extending storage TTL
+If future maintainers need stronger guarantees for long-lived vault state, that policy should be added explicitly and documented in a follow-up change. Any such change should be a deliberate storage-management decision rather than an implicit assumption in the contract logic.
 
-### Extend the contract instance
+## References
 
-The contract instance holds the `Admin`, `Initialized`, and `Token` keys.
-Extend it with:
-
-```bash
-soroban contract extend \
-  --id YOUR_CONTRACT_ID \
-  --source deployer \
-  --network testnet \
-  --ledgers-to-extend 500000
-```
-
-`--ledgers-to-extend` sets how many additional ledgers the TTL should cover
-from the current ledger. At ~5 seconds per ledger, `500000` ledgers is roughly
-29 days. Adjust to suit your usage window.
-
-### Extend persistent storage entries
-
-Persistent storage entries (user balances) can be extended per key:
-
-```bash
-soroban contract extend \
-  --id YOUR_CONTRACT_ID \
-  --source deployer \
-  --network testnet \
-  --ledgers-to-extend 500000 \
-  --key-xdr <BASE64_XDR_OF_KEY>
-```
-
-Encoding a `DataKey` as XDR requires tooling outside the scope of this guide.
-In practice, the simplest approach is:
-
-1. Extend the **instance** TTL (see above) to keep contract-level data alive.
-2. Interact with the contract regularly — each read/write transaction
-   **bumps the TTL** of the touched persistent entries automatically.
-3. For long-running testnet sessions where no transactions are expected,
-   schedule periodic invocations or extend keys manually using the XDR method.
-
----
-
-## Restoring expired entries
-
-If a persistent entry has already expired, it can be restored before being
-written again. Use the `soroban contract restore` command:
-
-```bash
-soroban contract restore \
-  --id YOUR_CONTRACT_ID \
-  --source deployer \
-  --network testnet \
-  --key-xdr <BASE64_XDR_OF_KEY>
-```
-
-Restoration makes the entry live again and resets its TTL to the minimum
-persistent TTL. After restoring, extend the TTL immediately.
-
-> **Testnet note:** Testnet state is periodically reset by the Stellar
-> Development Foundation. After a testnet reset, all contract data is wiped
-> regardless of TTL — redeploy and reinitialize from scratch.
-
----
-
-## Practical checklist for testnet deployments
-
-After deploying and initializing the contract:
-
-- [ ] Extend the instance TTL with `soroban contract extend` for your intended
-  session length.
-- [ ] Make at least one deposit call so user balance entries are created with
-  an initial TTL.
-- [ ] If leaving the contract idle for days, schedule a periodic extension or
-  a lightweight read transaction to bump persistent entry TTLs.
-- [ ] Before reporting a "missing balance" bug, check whether instance or
-  persistent storage has expired first.
-
----
-
-## Summary
-
-| Storage type | Keys | Default TTL | Primary risk |
-|---|---|---|---|
-| Persistent | `Balance`, `LockedBalance`, `UnlockTime` | Longest | Balance data becomes invisible if not bumped |
-| Instance | `Admin`, `Initialized`, `Token` | Shorter | Contract becomes non-functional until restored |
-
-Extend both types proactively. The instance must be extended explicitly; user
-balance entries are bumped automatically on each read/write but benefit from
-manual extension during idle periods.
-
----
-
-## Further reading
-
-- [Soroban State Archival — Stellar Docs](https://developers.stellar.org/docs/learn/encyclopedia/storage/state-archival)
-- [soroban contract extend — CLI reference](https://developers.stellar.org/docs/tools/developer-tools/cli/stellar-cli)
-- [docs/architecture.md](architecture.md) — storage design overview
-- [docs/troubleshooting.md](troubleshooting.md) — common deployment issues
+- [contracts/savings_vault/src/lib.rs](../contracts/savings_vault/src/lib.rs)
+- [README.md](../README.md)
