@@ -11,6 +11,7 @@ use super::*;
 use soroban_sdk::{testutils::Address as _, Address};
 
 use test_helpers::*;
+use ContractError;
 
 
 // =========================================================================
@@ -36,21 +37,21 @@ fn test_multiple_deposits() {
 }
 
 #[test]
-#[should_panic(expected = "Deposit amount must be greater than zero")]
 fn test_deposit_zero_panics() {
     let env = test_env();
     let (_id, client) = init_contract(&env);
     let user = new_user(&env);
-    client.deposit(&user, &0);
+    let result = client.try_deposit(&user, &0);
+    assert_eq!(result, Err(ContractError::InvalidDepositAmount));
 }
 
 #[test]
-#[should_panic(expected = "Deposit amount must be greater than zero")]
 fn test_deposit_negative_panics() {
     let env = test_env();
     let (_id, client) = init_contract(&env);
     let user = new_user(&env);
-    client.deposit(&user, &-50);
+    let result = client.try_deposit(&user, &-50);
+    assert_eq!(result, Err(ContractError::InvalidDepositAmount));
 }
 
 #[test]
@@ -133,17 +134,16 @@ fn test_withdraw_more_than_balance_panics() {
 }
 
 #[test]
-#[should_panic(expected = "Withdrawal amount must be greater than zero")]
 fn test_withdraw_zero_panics() {
     let env = test_env();
     let (_id, client) = init_contract(&env);
     let user = new_user(&env);
     deposit_balance(&client, &user, 100);
-    client.withdraw(&user, &0);
+    let result = client.try_withdraw(&user, &0);
+    assert_eq!(result, Err(ContractError::InvalidWithdrawAmount));
 }
 
 #[test]
-#[should_panic(expected = "Withdrawal amount must be greater than zero")]
 fn test_withdraw_negative_panics() {
     let (env, current_contract_address, client) = setup();
     let (env, _admin, client, token_client, token_admin) = test_token(env, client);
@@ -155,22 +155,22 @@ fn test_withdraw_negative_panics() {
 
     token_client.transfer(&user, &current_contract_address, &100); // This should be removed when deposit function implements SAC
 
-    client.withdraw(&user, &-10);
+    let result = client.try_withdraw(&user, &-10);
+    assert_eq!(result, Err(ContractError::InvalidWithdrawAmount));
 }
 
 #[test]
-#[should_panic(expected = "Insufficient balance")]
 fn test_withdraw_from_empty_balance_panics() {
     // AC: Withdrawing from an empty balance fails.
     let (env, _id, client) = setup();
     let user = Address::generate(&env);
 
     // User never deposited — balance is implicitly 0
-    client.withdraw(&user, &1);
+    let result = client.try_withdraw(&user, &1);
+    assert_eq!(result, Err(ContractError::InsufficientBalance));
 }
 
 #[test]
-#[should_panic(expected = "Insufficient balance")]
 fn test_withdraw_exceeds_available_after_deposit_panics() {
     // AC: Withdrawing more than available balance fails.
     let (env, _id, client) = setup();
@@ -178,7 +178,8 @@ fn test_withdraw_exceeds_available_after_deposit_panics() {
 
     client.deposit(&user, &100);
     // Attempt to withdraw more than deposited
-    client.withdraw(&user, &101);
+    let result = client.try_withdraw(&user, &101);
+    assert_eq!(result, Err(ContractError::InsufficientBalance));
 }
 
 /// Verify that a successful withdraw leaves the remaining balance correct,
@@ -213,23 +214,23 @@ fn test_failed_withdraw_does_not_change_available_balance() {
 }
 
 #[test]
-#[should_panic(expected = "Insufficient balance")]
 fn test_failed_withdraw_does_not_change_available_balance_panics() {
     // Confirms that attempting to withdraw 1 unit more than deposited
-    // is rejected (panics) — i.e. the balance is never decremented.
+    // is rejected (returns error) — i.e. the balance is never decremented.
     let (env, _id, client) = setup();
     let user = Address::generate(&env);
 
     client.deposit(&user, &100);
-    client.withdraw(&user, &101); // must panic — balance stays at 100
+    let result = client.try_withdraw(&user, &101);
+    assert_eq!(result, Err(ContractError::InsufficientBalance));
+    assert_eq!(client.get_balance(&user), 100);
 }
 
 #[test]
-#[should_panic(expected = "Insufficient balance")]
 fn test_failed_withdraw_does_not_change_locked_balance() {
     // AC: Failed withdrawal does not change locked balance if applicable.
     // Depositing 500 and locking 300 leaves 200 available.
-    // Attempting to withdraw 201 must panic, leaving both balances intact.
+    // Attempting to withdraw 201 must fail, leaving both balances intact.
     let (env, _id, client) = setup();
     let user = Address::generate(&env);
 
@@ -242,14 +243,16 @@ fn test_failed_withdraw_does_not_change_locked_balance() {
     assert_eq!(client.get_balance(&user), 200);
     assert_eq!(client.get_locked_balance(&user), 300);
 
-    // Attempt to withdraw more than the available 200 — must panic.
-    // Because the panic is raised before any storage write, both the
+    // Attempt to withdraw more than the available 200 — must fail.
+    // Because the error is returned before any storage write, both the
     // available and locked balances remain unchanged.
-    client.withdraw(&user, &201);
+    let result = client.try_withdraw(&user, &201);
+    assert_eq!(result, Err(ContractError::FundsLockedUntilMaturity));
+    assert_eq!(client.get_balance(&user), 200);
+    assert_eq!(client.get_locked_balance(&user), 300);
 }
 
 #[test]
-#[should_panic(expected = "Cannot withdraw: funds are locked until maturity")]
 fn test_withdraw_from_immature_lock_fails() {
     // AC: Early withdrawal is rejected with specific error message.
     // User deposits 500, locks 400 until T=10_000, leaving 100 available.
@@ -266,11 +269,11 @@ fn test_withdraw_from_immature_lock_fails() {
     assert_eq!(client.get_locked_balance(&user), 400);
 
     // Attempt to withdraw more than available (100) - should fail with specific error
-    client.withdraw(&user, &101);
+    let result = client.try_withdraw(&user, &101);
+    assert_eq!(result, Err(ContractError::FundsLockedUntilMaturity));
 }
 
 #[test]
-#[should_panic(expected = "Cannot withdraw: funds are locked until maturity")]
 fn test_withdraw_only_from_locked_funds_fails() {
     // AC: Attempting to withdraw when all funds are locked fails.
     // User deposits 500, locks all 500 until T=10_000.
@@ -287,7 +290,8 @@ fn test_withdraw_only_from_locked_funds_fails() {
     assert_eq!(client.get_locked_balance(&user), 500);
 
     // Attempt to withdraw any amount when all funds are locked
-    client.withdraw(&user, &1);
+    let result = client.try_withdraw(&user, &1);
+    assert_eq!(result, Err(ContractError::FundsLockedUntilMaturity));
 }
 
 #[test]
@@ -476,51 +480,50 @@ fn test_repeated_lock_three_times_accumulates_and_keeps_last_unlock_time() {
 }
 
 #[test]
-#[should_panic(expected = "Lock amount must be greater than zero")]
 fn test_lock_zero_panics() {
     let env = test_env();
     let (_id, client) = init_contract(&env);
     let user = new_user(&env);
     set_ledger_timestamp(&env, 1_000);
     deposit_balance(&client, &user, 100);
-    client.lock_funds(&user, &0, &2_000);
+    let result = client.try_lock_funds(&user, &0, &2_000);
+    assert_eq!(result, Err(ContractError::InvalidLockAmount));
 }
 
 #[test]
-#[should_panic(expected = "Insufficient balance to lock")]
 fn test_lock_more_than_balance_panics() {
     let env = test_env();
     let (_id, client) = init_contract(&env);
     let user = new_user(&env);
     set_ledger_timestamp(&env, 1_000);
     deposit_balance(&client, &user, 100);
-    client.lock_funds(&user, &500, &2_000);
+    let result = client.try_lock_funds(&user, &500, &2_000);
+    assert_eq!(result, Err(ContractError::InsufficientBalanceToLock));
 }
 
 #[test]
-#[should_panic(expected = "Unlock time must be in the future")]
 fn test_lock_past_time_panics() {
     let env = test_env();
     let (_id, client) = init_contract(&env);
     let user = new_user(&env);
     set_ledger_timestamp(&env, 5_000);
     deposit_balance(&client, &user, 100);
-    client.lock_funds(&user, &50, &3_000);
+    let result = client.try_lock_funds(&user, &50, &3_000);
+    assert_eq!(result, Err(ContractError::InvalidUnlockTime));
 }
 
 #[test]
-#[should_panic(expected = "Insufficient balance to lock")]
 fn test_lock_from_empty_balance_panics() {
     let env = test_env();
     let (_id, client) = init_contract(&env);
     let user = new_user(&env);
     set_ledger_timestamp(&env, 1_000);
     // User has 0 balance, attempt to lock 100
-    client.lock_funds(&user, &100, &2_000);
+    let result = client.try_lock_funds(&user, &100, &2_000);
+    assert_eq!(result, Err(ContractError::InsufficientBalanceToLock));
 }
 
 #[test]
-#[should_panic(expected = "Insufficient balance to lock")]
 fn test_lock_more_than_available_balance_panics() {
     let env = test_env();
     let (_id, client) = init_contract(&env);
@@ -528,7 +531,8 @@ fn test_lock_more_than_available_balance_panics() {
     set_ledger_timestamp(&env, 1_000);
     deposit_balance(&client, &user, 100);
     // Attempt to lock more than available (100)
-    client.lock_funds(&user, &101, &2_000);
+    let result = client.try_lock_funds(&user, &101, &2_000);
+    assert_eq!(result, Err(ContractError::InsufficientBalanceToLock));
 }
 
 #[test]
@@ -554,9 +558,8 @@ fn test_failed_lock_does_not_change_available_balance() {
 }
 
 #[test]
-#[should_panic(expected = "Insufficient balance to lock")]
 fn test_failed_lock_does_not_change_available_balance_panics() {
-    // Confirms that attempting to lock more than available balance is rejected (panics)
+    // Confirms that attempting to lock more than available balance is rejected (returns error)
     // and available balance is not mutated.
     let env = test_env();
     let (_id, client) = init_contract(&env);
@@ -564,12 +567,13 @@ fn test_failed_lock_does_not_change_available_balance_panics() {
     set_ledger_timestamp(&env, 1_000);
     deposit_balance(&client, &user, 100);
 
-    // Attempting to lock 101 must panic, leaving available balance at 100
-    client.lock_funds(&user, &101, &2_000);
+    // Attempting to lock 101 must fail, leaving available balance at 100
+    let result = client.try_lock_funds(&user, &101, &2_000);
+    assert_eq!(result, Err(ContractError::InsufficientBalanceToLock));
+    assert_eq!(client.get_balance(&user), 100);
 }
 
 #[test]
-#[should_panic(expected = "Insufficient balance to lock")]
 fn test_failed_lock_does_not_change_locked_balance() {
     let env = test_env();
     let (_id, client) = init_contract(&env);
@@ -583,8 +587,10 @@ fn test_failed_lock_does_not_change_locked_balance() {
     assert_eq!(client.get_locked_balance(&user), 200);
 
     // Attempt to lock 301, which is more than available 300.
-    // This must panic, leaving locked balance at 200.
-    client.lock_funds(&user, &301, &3_000);
+    // This must fail, leaving locked balance at 200.
+    let result = client.try_lock_funds(&user, &301, &3_000);
+    assert_eq!(result, Err(ContractError::InsufficientBalanceToLock));
+    assert_eq!(client.get_locked_balance(&user), 200);
 }
 
 // =========================================================================
@@ -802,7 +808,6 @@ fn test_withdraw_requires_user_authorization() {
 // =========================================================================
 
 #[test]
-#[should_panic(expected = "Cannot withdraw: funds are locked until maturity")]
 fn test_repeated_early_withdrawal_attempts_all_fail() {
     // AC: Repeated early withdrawal attempts all fail with no state change.
     // User locks funds and attempts multiple withdrawals before maturity.
@@ -819,32 +824,25 @@ fn test_repeated_early_withdrawal_attempts_all_fail() {
     let initial_locked = client.get_locked_balance(&user);
 
     // First attempt - should fail
-    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        client.withdraw(&user, &101);
-    }));
-    assert!(result.is_err());
+    let result = client.try_withdraw(&user, &101);
+    assert_eq!(result, Err(ContractError::FundsLockedUntilMaturity));
     assert_eq!(client.get_balance(&user), initial_available);
     assert_eq!(client.get_locked_balance(&user), initial_locked);
 
     // Second attempt - should still fail with no state change
-    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        client.withdraw(&user, &101);
-    }));
-    assert!(result.is_err());
+    let result = client.try_withdraw(&user, &101);
+    assert_eq!(result, Err(ContractError::FundsLockedUntilMaturity));
     assert_eq!(client.get_balance(&user), initial_available);
     assert_eq!(client.get_locked_balance(&user), initial_locked);
 
     // Third attempt with different amount - should still fail
-    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        client.withdraw(&user, &200);
-    }));
-    assert!(result.is_err());
+    let result = client.try_withdraw(&user, &200);
+    assert_eq!(result, Err(ContractError::FundsLockedUntilMaturity));
     assert_eq!(client.get_balance(&user), initial_available);
     assert_eq!(client.get_locked_balance(&user), initial_locked);
 }
 
 #[test]
-#[should_panic(expected = "Insufficient balance")]
 fn test_repeated_insufficient_balance_attempts_all_fail() {
     // AC: Repeated insufficient balance attempts all fail with no state change.
     // User has insufficient funds and attempts multiple withdrawals.
@@ -856,24 +854,18 @@ fn test_repeated_insufficient_balance_attempts_all_fail() {
     let initial_balance = client.get_balance(&user);
 
     // First attempt - should fail
-    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        client.withdraw(&user, &101);
-    }));
-    assert!(result.is_err());
+    let result = client.try_withdraw(&user, &101);
+    assert_eq!(result, Err(ContractError::InsufficientBalance));
     assert_eq!(client.get_balance(&user), initial_balance);
 
     // Second attempt - should still fail with no state change
-    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        client.withdraw(&user, &101);
-    }));
-    assert!(result.is_err());
+    let result = client.try_withdraw(&user, &101);
+    assert_eq!(result, Err(ContractError::InsufficientBalance));
     assert_eq!(client.get_balance(&user), initial_balance);
 
     // Third attempt with different amount - should still fail
-    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        client.withdraw(&user, &200);
-    }));
-    assert!(result.is_err());
+    let result = client.try_withdraw(&user, &200);
+    assert_eq!(result, Err(ContractError::InsufficientBalance));
     assert_eq!(client.get_balance(&user), initial_balance);
 }
 

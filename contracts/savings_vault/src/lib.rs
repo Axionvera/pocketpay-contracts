@@ -63,7 +63,55 @@
 
 #![no_std]
 
-use soroban_sdk::{contract, contractimpl, contracttype, log, token, Address, Env, Vec};
+use soroban_sdk::{contract, contracterror, contractimpl, contracttype, log, token, Address, Env, Vec};
+
+// ---------------------------------------------------------------------------
+// Error Codes
+// ---------------------------------------------------------------------------
+
+/// Contract error codes with stable numeric values for SDK mapping.
+///
+/// Error codes are organized by category:
+/// - 1000-1999: Configuration errors
+/// - 2000-2999: Validation errors
+/// - 3000-3999: Authorization errors
+/// - 4000-4999: Balance errors
+/// - 5000-5999: Lock errors
+#[contracterror]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum ContractError {
+    // Configuration errors (1000-1999)
+    #[error("Contract is already initialized")]
+    AlreadyInitialized = 1001,
+    #[error("Contract not initialized")]
+    NotInitialized = 1002,
+
+    // Validation errors (2000-2999)
+    #[error("Deposit amount must be greater than zero")]
+    InvalidDepositAmount = 2001,
+    #[error("Withdrawal amount must be greater than zero")]
+    InvalidWithdrawAmount = 2002,
+    #[error("Lock amount must be greater than zero")]
+    InvalidLockAmount = 2003,
+    #[error("Unlock time must be in the future")]
+    InvalidUnlockTime = 2004,
+
+    // Authorization errors (3000-3999)
+    #[error("Missing required authorization")]
+    Unauthorized = 3001,
+
+    // Balance errors (4000-4999)
+    #[error("Insufficient balance")]
+    InsufficientBalance = 4001,
+    #[error("Insufficient balance to lock")]
+    InsufficientBalanceToLock = 4002,
+    #[error("Cannot withdraw: funds are locked until maturity")]
+    FundsLockedUntilMaturity = 4003,
+
+    // Lock errors (5000-5999)
+    #[error("No lock found")]
+    LockNotFound = 5001,
+}
 
 // ---------------------------------------------------------------------------
 // Structs
@@ -194,10 +242,10 @@ impl SavingsVault {
     ///
     /// The token address parameter is reserved for future SAC (Stellar Asset Contract)
     /// integration to support real token transfers and custody-backed balances.
-    pub fn initialize(env: Env, admin: Address, token: Address) {
+    pub fn initialize(env: Env, admin: Address, token: Address) -> Result<(), ContractError> {
         // Ensure we haven't already initialized
         if env.storage().instance().has(&DataKey::Initialized) {
-            panic!("Contract is already initialized");
+            return Err(ContractError::AlreadyInitialized);
         }
 
         // Require the admin to have signed this transaction
@@ -209,6 +257,7 @@ impl SavingsVault {
         env.storage().instance().set(&DataKey::Token, &token);
 
         log!(&env, "Savings Vault initialized with admin: {}", admin);
+        Ok(())
     }
 
     // -----------------------------------------------------------------------
@@ -253,13 +302,13 @@ impl SavingsVault {
     /// let user = Address::from_account_id(&env, &user_account_id);
     /// SavingsVault::deposit(&env, user, 1000);
     /// ```
-    pub fn deposit(env: Env, user: Address, amount: i128) {
+    pub fn deposit(env: Env, user: Address, amount: i128) -> Result<(), ContractError> {
         // Authorization: only the user can deposit on their own behalf
         user.require_auth();
 
         // Validate amount
         if amount <= 0 {
-            panic!("Deposit amount must be greater than zero");
+            return Err(ContractError::InvalidDepositAmount);
         }
 
         // Read current balance (default to 0 if none exists)
@@ -282,6 +331,7 @@ impl SavingsVault {
             amount,
             new_balance
         );
+        Ok(())
     }
 
     // -----------------------------------------------------------------------
@@ -342,13 +392,13 @@ impl SavingsVault {
     /// let user = Address::from_account_id(&env, &user_account_id);
     /// SavingsVault::withdraw(&env, user, 500);
     /// ```
-    pub fn withdraw(env: Env, user: Address, amount: i128) {
+    pub fn withdraw(env: Env, user: Address, amount: i128) -> Result<(), ContractError> {
         // Authorization
         user.require_auth();
 
         // Validate amount
         if amount <= 0 {
-            panic!("Withdrawal amount must be greater than zero");
+            return Err(ContractError::InvalidWithdrawAmount);
         }
 
         // Read current deposited balance
@@ -379,9 +429,9 @@ impl SavingsVault {
         if amount > current_balance + total_matured {
             // Provide specific error if immature locks exist
             if total_locked > 0 {
-                panic!("Cannot withdraw: funds are locked until maturity");
+                return Err(ContractError::FundsLockedUntilMaturity);
             }
-            panic!("Insufficient balance");
+            return Err(ContractError::InsufficientBalance);
         }
 
         let token = env.storage().instance().get(&DataKey::Token).unwrap();
@@ -437,6 +487,7 @@ impl SavingsVault {
             amount,
             current_balance
         );
+        Ok(())
     }
 
     // -----------------------------------------------------------------------
@@ -557,19 +608,19 @@ impl SavingsVault {
     /// let lock_id = SavingsVault::lock_funds(&env, user, 500, unlock_time);
     /// println!("Created lock with ID: {}", lock_id);
     /// ```
-    pub fn lock_funds(env: Env, user: Address, amount: i128, unlock_time: u64) -> u64 {
+    pub fn lock_funds(env: Env, user: Address, amount: i128, unlock_time: u64) -> Result<u64, ContractError> {
         // Authorization
         user.require_auth();
 
         // Validate amount
         if amount <= 0 {
-            panic!("Lock amount must be greater than zero");
+            return Err(ContractError::InvalidLockAmount);
         }
 
         // Validate unlock time is in the future
         let current_time = env.ledger().timestamp();
         if unlock_time <= current_time {
-            panic!("Unlock time must be in the future");
+            return Err(ContractError::InvalidUnlockTime);
         }
 
         // Read available balance
@@ -580,7 +631,7 @@ impl SavingsVault {
             .unwrap_or(0);
 
         if amount > current_balance {
-            panic!("Insufficient balance to lock");
+            return Err(ContractError::InsufficientBalanceToLock);
         }
 
         // Assign a new lock ID
@@ -630,7 +681,7 @@ impl SavingsVault {
             next_id
         );
 
-        next_id
+        Ok(next_id)
     }
 
     /// Get the locked balance for a user.
