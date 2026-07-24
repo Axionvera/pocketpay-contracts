@@ -121,6 +121,35 @@ call `require_auth()`.
 
 ## Lock and unlock time behavior
 
+**Zero-duration locks:** Passing `unlock_time == current ledger timestamp`
+(a zero-second duration) is rejected with this same panic, because the check
+is `unlock_time <= current_time`, not `<`. There is no way to create a lock
+that is already matured at creation time; the smallest valid duration is one
+second (`unlock_time == current_time + 1`), and funds locked that way remain
+locked until the ledger timestamp advances to that value — `can_withdraw`
+and `get_balance` still treat it as locked at the moment of creation.
+
+### `Contract is paused`
+
+- **Current failure:** Panic message from `deposit` and `lock_funds`.
+- **Meaning:** The contract is in an emergency pause state. Deposits and lock
+  operations are blocked. Withdrawals (`withdraw`, `withdraw_lock`) and
+  read-only queries remain available.
+- **Likely cause:** The admin activated a pause for an incident response.
+- **Caller/developer action:** Check `is_paused()` to confirm. If the pause
+  has an expiry, wait for it to expire. Otherwise, the admin must call
+  `unpause()` to restore normal operations. Users can still withdraw funds
+  during a pause.
+
+### `Pause duration must be greater than zero`
+
+- **Current failure:** Panic message from `pause`.
+- **Meaning:** The `duration_secs` argument to `pause()` was zero. A pause
+  must have a non-zero duration to ensure it auto-expires.
+- **Likely cause:** Invalid input or an accidental zero value.
+- **Caller/developer action:** Pass a positive duration in seconds (e.g.,
+  604800 for 7 days).
+
 ### Locked funds are not yet withdrawable
 
 - **Current condition:** `can_withdraw(user)` returns `false`; it does not fail.
@@ -131,7 +160,22 @@ call `require_auth()`.
   action. The current contract has no operation to release or withdraw locked
   funds; `can_withdraw` is only a query.
 
-## Lock errors (5000-5999)
+### `Cannot withdraw: funds are locked until maturity`
+
+- **Current failure:** Panic message from `withdraw`.
+- **Meaning:** The withdrawal amount exceeds the available balance and would
+  require withdrawing from immature (unmatured) locked funds. This is a specific
+  error that occurs when the user has locked funds that have not yet reached
+  their unlock time.
+- **Likely cause:** The user attempted to withdraw more than their available
+  (unlocked) balance, and the shortfall would need to come from locked funds
+  that are still immature (current_time < unlock_time).
+- **Caller/developer action:** Check `get_balance(user)` to see available funds
+  and `get_locked_balance(user)` to see locked funds. Only withdraw up to the
+  available balance. Wait for locks to mature (check with `can_withdraw(user)`)
+  before attempting to withdraw locked funds.
+
+## Unauthorised access errors
 
 ### `LockNotFound` (Code: 5001)
 
@@ -140,7 +184,10 @@ call `require_auth()`.
 - **Likely cause:** Invalid lock ID or lock has been consumed.
 - **Caller/developer action:** Verify lock ID and check lock status.
 
-## Other failure conditions
+Read-only calls (`get_balance`, `get_locked_balance`, `get_lock`, `list_locks`,
+and `can_withdraw`) do not call `require_auth()`.
+
+## Other existing failure conditions
 
 ### Token transfer failure during withdrawal
 
@@ -165,5 +212,4 @@ All error codes defined in the `ContractError` enum are stable and backward comp
 
 ## SDK Integration
 
-For SDK mapping guidance and mobile UX recommendations, see
-[error-code-standard.md](./error-code-standard.md).
+Until then, callers should not invent numeric mappings for panic messages.

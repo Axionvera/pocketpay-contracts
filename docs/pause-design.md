@@ -1,10 +1,10 @@
 # Pause / Emergency Stop Design
 
-> **Status:** Research & Design (not implemented)
+> **Status:** Implemented (withdraw-only model with time-bounded expiry)
 >
 > **Scope:** Savings Vault contract (`contracts/savings_vault`)
 >
-> This document explores whether a pause (emergency stop) mechanism should be added to the Savings Vault contract in a future release. It is a research artifact — **no pause logic is being implemented as part of this document**.
+> This document describes the pause mechanism that is now part of the Savings Vault contract. The implementation follows the "withdraw-only" safety net model: during a pause, deposits and locks are blocked, but withdrawals remain open so users can always exit.
 
 ---
 
@@ -16,7 +16,7 @@
 4. [Abuse Risks](#abuse-risks)
 5. [Recovery Process](#recovery-process)
 6. [Alternatives to a Pause](#alternatives-to-a-pause)
-7. [Design Sketch (Reference)](#design-sketch-reference)
+7. [Implementation Reference](#implementation-reference)
 8. [Open Questions](#open-questions)
 9. [Recommendation](#recommendation)
 
@@ -24,7 +24,7 @@
 
 ## Motivation
 
-The Savings Vault currently has **no emergency stop capability**. If a critical bug is discovered, there is no way for the admin to halt contract operations while the issue is investigated and resolved. This is common in early-stage DeFi contracts but becomes a liability as real value accumulates.
+The Savings Vault now has an emergency pause capability. If a critical bug is discovered, the admin can halt inbound contract operations while the issue is investigated and resolved. The design follows a "withdraw-only" safety model: users can always exit, but no new funds or locks can enter a potentially compromised contract.
 
 ### Scenarios where a pause could be useful
 
@@ -210,9 +210,11 @@ Rely on off-chain communication: if a bug is found, ask users to stop interactin
 
 ---
 
-## Design Sketch (Reference)
+## Implementation Reference
 
-If a pause mechanism were implemented, it might look like this in the Soroban SDK:
+The model below is live in the Savings Vault contract. See
+`contracts/savings_vault/src/lib.rs` for the full source and
+`contracts/savings_vault/src/test/pause.rs` for the test suite.
 
 ```rust
 // Storage keys
@@ -222,11 +224,7 @@ enum DataKey {
     PauseExpiry,       // u64  — timestamp when pause auto-expires
 }
 
-// Events
-fn pause_event(env: &Env, reason: Symbol, paused_by: Address);
-fn unpause_event(env: &Env, unpaused_by: Address);
-
-// Modifier-style check (Soroban has no macros, so inline it)
+// Helper: called at the top of deposit() and lock_funds()
 fn require_not_paused(env: &Env) {
     let paused: bool = env.storage()
         .instance()
@@ -234,30 +232,31 @@ fn require_not_paused(env: &Env) {
         .unwrap_or(false);
 
     if paused {
-        // Check auto-expiry
         let expiry: u64 = env.storage()
             .instance()
             .get(&DataKey::PauseExpiry)
             .unwrap_or(0);
 
-        if env.ledger().timestamp() >= expiry && expiry != 0 {
-            // Auto-unpause
+        if expiry != 0 && env.ledger().timestamp() >= expiry {
+            // Auto-unpause on expiry
             env.storage().instance().set(&DataKey::Paused, &false);
+            env.storage().instance().set(&DataKey::PauseExpiry, &0);
             return;
         }
         panic!("Contract is paused");
     }
 }
 
-pub fn pause(env: Env, admin: Address, reason: Symbol, duration_secs: u64) {
+pub fn pause(env: Env, admin: Address, duration_secs: u64) {
     admin.require_auth();
-    require_admin(&env, &admin); // helper to check admin == stored admin
+    require_admin(&env, &admin);
+    // duration_secs must be > 0
 
     let expiry = env.ledger().timestamp() + duration_secs;
     env.storage().instance().set(&DataKey::Paused, &true);
     env.storage().instance().set(&DataKey::PauseExpiry, &expiry);
 
-    pause_event(&env, reason, admin);
+    // Emits (pause, admin) topic with expiry payload
 }
 
 pub fn unpause(env: Env, admin: Address) {
@@ -267,46 +266,62 @@ pub fn unpause(env: Env, admin: Address) {
     env.storage().instance().set(&DataKey::Paused, &false);
     env.storage().instance().set(&DataKey::PauseExpiry, &0);
 
-    unpause_event(&env, admin);
+    // Emits (unpause, admin) topic with () payload
 }
 ```
 
-> **Note:** This is a sketch only. A real implementation would need thorough testing, event definitions, and integration with the Soroban event system.
+### Function coverage
+
+| Function | Paused? | Rationale |
+|---|---|---|
+| `deposit` | **Yes** — blocked by `require_not_paused` | Prevents new funds entering a compromised vault |
+| `lock_funds` | **Yes** — blocked by `require_not_paused` | Lock operations touch time-sensitive logic |
+| `withdraw` | **No** — withdrawals remain open | Users can always exit; this is the core safety guarantee |
+| `withdraw_lock` | **No** — matured lock withdrawals remain open | Users can always exit matured locked funds |
+| `get_balance` | **No** | Read-only; no risk |
+| `get_locked_balance` | **No** | Read-only; no risk |
+| `can_withdraw` | **No** | Read-only; no risk |
+| `get_lock` | **No** | Read-only; no risk |
+| `list_locks` | **No** | Read-only; no risk |
+| `is_paused` | **No** | Read-only; always returns current state |
+| `get_version` | **No** | Read-only; no risk |
+| `get_admin` | **No** | Read-only; no risk |
 
 ---
 
 ## Open Questions
 
-1. **Should withdrawals be pauseable?** The strongest argument against pausing withdrawals is that it traps user funds and breaks trust. A "withdraw-only" emergency mode is preferred by many DeFi protocols. Should we implement this from day one?
+1. **Should withdrawals be pauseable?** Resolved: **No.** Withdrawals remain open during a pause. This is the "withdraw-only" safety net that preserves user trust.
 
-2. **Who are the guardians?** For a mobile wallet targeting end-users, is a multi-sig of PocketPay team members sufficient? Should there be an external security council?
+2. **Who are the guardians?** Resolved for testnet: Single admin key. Multi-sig recommended before mainnet.
 
-3. **What is the maximum pause duration?** 7 days? 30 days? Should this be configurable at initialization or hard-coded?
+3. **What is the maximum pause duration?** Resolved: No hard-coded maximum. The admin specifies the duration per pause. A double-pause refreshes the expiry. The recommendation is to use short durations (e.g., 7 days) and renew only when needed.
 
-4. **Should pause be per-function or global?** Granular pauses (deposit-only, lock-only) give more flexibility but add complexity and testing surface.
+4. **Should pause be per-function or global?** Resolved: **Global.** A single pause flag blocks all mutating state-changing operations (deposit, lock). Withdrawals are never blocked.
 
-5. **How does pause interact with locked funds?** If funds are locked with an unlock time, and a pause extends beyond that unlock time, should the funds auto-unlock or remain frozen? Current thinking: locked funds should still become available at their unlock time regardless of pause, since the lock is a user-initiated commitment.
+5. **How does pause interact with locked funds?** Resolved: Lock maturity is time-based and unaffected by pause. Locked funds become available at their unlock time regardless of pause state. `withdraw_lock` for matured locks works during pause.
 
-6. **Should there be a pause fee or bond?** To prevent frivolous pauses, should guardians stake tokens that are slashed if a pause is deemed unnecessary? This adds significant complexity.
+6. **Should there be a pause fee or bond?** Deferred. Not implemented for the current testnet phase.
 
-7. **Event indexing:** Soroban events are not as mature as Ethereum events. Will pause/unpause events be reliably indexed by the PocketPay backend and third-party explorers?
+7. **Event indexing:** Pause/unpause events are emitted. Soroban event maturity is still evolving; the PocketPay backend and third-party explorers should index these events.
 
-8. **Testnet vs. mainnet posture:** Should the pause mechanism be present on testnet (for integration testing) even if it is not yet activated on mainnet?
+8. **Testnet vs. mainnet posture:** The pause mechanism is present on testnet for integration testing. Single admin key is acceptable for testnet; multi-sig recommended for mainnet.
 
 ---
 
 ## Recommendation
 
-**For the current testnet phase:** No pause mechanism is needed. The contract is simple, the value at risk is zero, and the complexity cost is not justified.
+**Implemented: time-bounded, withdraw-only pause.** The contract now includes
+the following characteristics:
 
-**Before mainnet:** Implement a **time-bounded, withdraw-only pause** with the following characteristics:
-
-- Admin (multi-sig) can trigger a pause with a mandatory reason string.
-- Pause automatically expires after a configurable duration (suggested default: 7 days).
-- During a pause, deposits and locks are blocked, but **withdrawals remain open**.
-- If a pause exceeds the maximum duration without renewal, the contract auto-unpauses.
+- Admin can trigger a pause with a mandatory duration (`pause(admin, duration_secs)`).
+- Pause automatically expires after `duration_secs` seconds (auto-unpause via `require_not_paused`).
+- During a pause, `deposit` and `lock_funds` are blocked, but **withdrawals remain open**.
+- The admin can also unpause early via `unpause(admin)`.
+- A double-pause (calling `pause` while already paused) refreshes the expiry.
+- `is_paused()` returns the current pause state (respecting expiry).
 - Pause/unpause events are emitted for off-chain monitoring.
-- A separate `emergency_shutdown` (irreversible, full pause) can be considered as a nuclear option for an extreme scenario, requiring a higher threshold (e.g., all guardians).
+- Only the admin can pause or unpause (single admin key; multi-sig recommended for mainnet).
 
 This balances safety with user trust: users can always exit, but new funds cannot enter a potentially compromised contract.
 
