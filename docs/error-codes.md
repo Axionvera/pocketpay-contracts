@@ -1,73 +1,76 @@
 # Savings Vault Error Reference
 
-This reference describes current behavior in `contracts/savings_vault/src/lib.rs`.
-The contract does **not** define a custom error enum or stable numeric error
-codes. Validation failures use Rust panic messages; authorization and token
-failures come from the Soroban host or configured token contract.
+This reference describes error behavior in `contracts/savings_vault/src/lib.rs`.
+The contract defines a custom error enum with stable numeric error codes via
+the `#[contracterror]` attribute. See [error-code-standard.md](./error-code-standard.md)
+for the complete error code standard and SDK mapping guidance.
 
-SDK and mobile callers should treat the text below as diagnostic information,
-not a stable machine-readable API. A failed invocation does not commit that
-invocation's state changes. Show users a friendly message, retain the complete
-simulation or transaction diagnostic, and avoid branching on panic text.
+SDK and mobile callers should use the numeric error codes for reliable error
+handling and display user-friendly messages based on the error category.
 
-## Initialisation errors
+## Configuration errors (1000-1999)
 
-### `Contract is already initialized`
+### `AlreadyInitialized` (Code: 1001)
 
-- **Current failure:** Panic message from `initialize`.
+- **Current failure:** Returns `ContractError::AlreadyInitialized` from `initialize`.
 - **Meaning:** The one-time initialization flag already exists.
 - **Likely cause:** A repeated initialization, a retry after success, or the
   wrong contract ID.
 - **Caller/developer action:** Do not retry. Confirm the contract ID and use the
   existing deployment; this is not a transient network failure.
 
-### Missing initialization data during withdrawal
+### `NotInitialized` (Code: 1002)
 
-- **Current failure:** Storage unwrap/trap with no custom message or code.
-- **Meaning:** `withdraw` cannot load the token address stored by `initialize`.
-- **Likely cause:** Initialization did not occur, or instance storage is
-  unavailable or expired. Because `deposit` does not check initialization, it
-  can create an internal balance before this failure is encountered.
+- **Current failure:** Returns `ContractError::NotInitialized` when attempting operations
+  that require initialization.
+- **Meaning:** The contract has not been initialized.
+- **Likely cause:** Operations called before initialization or instance storage unavailable.
 - **Caller/developer action:** Ensure initialization succeeded before enabling
-  vault operations and verify instance storage is live. Surface "vault is not
-  initialized or unavailable" and retain the diagnostic.
+  vault operations.
 
-Initialization also requires authorization from `admin`; see
-[Unauthorised access errors](#unauthorised-access-errors).
+## Validation errors (2000-2999)
 
-## Invalid amount errors
+### `InvalidDepositAmount` (Code: 2001)
 
-### `Deposit amount must be greater than zero`
-
-- **Current failure:** Panic message from `deposit`.
+- **Current failure:** Returns `ContractError::InvalidDepositAmount` from `deposit`.
 - **Meaning:** The deposit amount is zero or negative.
 - **Likely cause:** Invalid input, unit conversion, sign handling, or an empty
   field converted to zero.
 - **Caller/developer action:** Require a positive `i128` amount in the token's
   smallest unit before invoking the contract.
 
-### `Withdrawal amount must be greater than zero`
+### `InvalidWithdrawAmount` (Code: 2002)
 
-- **Current failure:** Panic message from `withdraw`.
+- **Current failure:** Returns `ContractError::InvalidWithdrawAmount` from `withdraw`.
 - **Meaning:** The withdrawal amount is zero or negative.
 - **Likely cause:** Invalid input or an amount-conversion bug.
 - **Caller/developer action:** Reject non-positive amounts before submission.
 
-### `Lock amount must be greater than zero`
+### `InvalidLockAmount` (Code: 2003)
 
-- **Current failure:** Panic message from `lock_funds`.
+- **Current failure:** Returns `ContractError::InvalidLockAmount` from `lock_funds`.
 - **Meaning:** The lock amount is zero or negative.
 - **Likely cause:** Invalid input or an amount-conversion bug.
 - **Caller/developer action:** Require a positive amount before submission.
 
-## Insufficient balance errors
+### `InvalidUnlockTime` (Code: 2004)
+
+- **Current failure:** Returns `ContractError::InvalidUnlockTime` from `lock_funds`.
+- **Meaning:** `unlock_time` is less than or equal to the current ledger
+  timestamp; it must be strictly later when executed.
+- **Likely cause:** A past timestamp, seconds/milliseconds confusion, clock skew,
+  or submission too close to the selected time.
+- **Caller/developer action:** Send Unix time in **seconds** and leave a safety
+  margin beyond the latest ledger time.
+
+## Balance errors (4000-4999)
 
 These checks use the vault's **available internal balance**, not the wallet
 balance or locked balance.
 
-### `Insufficient balance`
+### `InsufficientBalance` (Code: 4001)
 
-- **Current failure:** Panic message from `withdraw`.
+- **Current failure:** Returns `ContractError::InsufficientBalance` from `withdraw`.
 - **Meaning:** The withdrawal exceeds the available internal balance; a missing
   balance is treated as zero.
 - **Likely cause:** The request is too large, no deposit is recorded, or some
@@ -75,26 +78,48 @@ balance or locked balance.
 - **Caller/developer action:** Refresh `get_balance(user)`, cap the request to
   that value, and explain that locked funds are unavailable.
 
-### `Insufficient balance to lock`
+### `InsufficientBalanceToLock` (Code: 4002)
 
-- **Current failure:** Panic message from `lock_funds`.
+- **Current failure:** Returns `ContractError::InsufficientBalanceToLock` from `lock_funds`.
 - **Meaning:** The lock amount exceeds the available internal balance.
 - **Likely cause:** A stale displayed balance, an excessive request, or funds
   already moved to the locked bucket.
 - **Caller/developer action:** Refresh `get_balance(user)` and allow no more than
   the returned available amount.
 
-## Lock and unlock time errors
+### `FundsLockedUntilMaturity` (Code: 4003)
 
-### `Unlock time must be in the future`
+- **Current failure:** Returns `ContractError::FundsLockedUntilMaturity` from `withdraw`.
+- **Meaning:** The withdrawal amount exceeds the available balance and would
+  require withdrawing from immature (unmatured) locked funds. This is a specific
+  error that occurs when the user has locked funds that have not yet reached
+  their unlock time.
+- **Likely cause:** The user attempted to withdraw more than their available
+  (unlocked) balance, and the shortfall would need to come from locked funds
+  that are still immature (current_time < unlock_time).
+- **Caller/developer action:** Check `get_balance(user)` to see available funds
+  and `get_locked_balance(user)` to see locked funds. Only withdraw up to the
+  available balance. Wait for locks to mature (check with `can_withdraw(user)`)
+  before attempting to withdraw locked funds.
 
-- **Current failure:** Panic message from `lock_funds`.
-- **Meaning:** `unlock_time` is less than or equal to the current ledger
-  timestamp; it must be strictly later when executed.
-- **Likely cause:** A past timestamp, seconds/milliseconds confusion, clock skew,
-  or submission too close to the selected time.
-- **Caller/developer action:** Send Unix time in **seconds** and leave a safety
-  margin beyond the latest ledger time.
+## Authorization errors (3000-3999)
+
+### `Unauthorized` (Code: 3001)
+
+- **Current failure:** Soroban host authorization failure from `require_auth()`;
+  the contract defines this error for documentation purposes, but the actual
+  failure comes from the Soroban host.
+- **Meaning:** Valid authorization for the required address is absent.
+- **Likely cause:** `initialize` lacks `admin` authorization, or `deposit`,
+  `withdraw`, or `lock_funds` lacks `user` authorization. The app may be trying
+  to act for another address.
+- **Caller/developer action:** Build and sign with the required address. Do not
+  retry unchanged; request the correct wallet signature.
+
+Read-only calls (`get_balance`, `get_locked_balance`, and `can_withdraw`) do not
+call `require_auth()`.
+
+## Lock and unlock time behavior
 
 **Zero-duration locks:** Passing `unlock_time == current ledger timestamp`
 (a zero-second duration) is rejected with this same panic, because the check
@@ -135,18 +160,29 @@ and `get_balance` still treat it as locked at the moment of creation.
   action. The current contract has no operation to release or withdraw locked
   funds; `can_withdraw` is only a query.
 
+### `Cannot withdraw: funds are locked until maturity`
+
+- **Current failure:** Panic message from `withdraw`.
+- **Meaning:** The withdrawal amount exceeds the available balance and would
+  require withdrawing from immature (unmatured) locked funds. This is a specific
+  error that occurs when the user has locked funds that have not yet reached
+  their unlock time.
+- **Likely cause:** The user attempted to withdraw more than their available
+  (unlocked) balance, and the shortfall would need to come from locked funds
+  that are still immature (current_time < unlock_time).
+- **Caller/developer action:** Check `get_balance(user)` to see available funds
+  and `get_locked_balance(user)` to see locked funds. Only withdraw up to the
+  available balance. Wait for locks to mature (check with `can_withdraw(user)`)
+  before attempting to withdraw locked funds.
+
 ## Unauthorised access errors
 
-### Missing required authorization
+### `LockNotFound` (Code: 5001)
 
-- **Current failure:** Soroban host authorization failure from `require_auth()`;
-  no contract-defined message or numeric code exists.
-- **Meaning:** Valid authorization for the required address is absent.
-- **Likely cause:** `initialize` lacks `admin` authorization, or `deposit`,
-  `withdraw`, or `lock_funds` lacks `user` authorization. The app may be trying
-  to act for another address.
-- **Caller/developer action:** Build and sign with the required address. Do not
-  retry unchanged; request the correct wallet signature.
+- **Current failure:** Reserved for future use.
+- **Meaning:** No lock found for the specified lock ID.
+- **Likely cause:** Invalid lock ID or lock has been consumed.
+- **Caller/developer action:** Verify lock ID and check lock status.
 
 Read-only calls (`get_balance`, `get_locked_balance`, `get_lock`, `list_locks`,
 and `can_withdraw`) do not call `require_auth()`.
@@ -165,22 +201,16 @@ and `can_withdraw`) do not call `require_auth()`.
   configured token and vault token balance; do not label this only as an
   internal-balance error.
 
-## Existing custom errors
+## Error Code Stability
 
-There are no custom savings-vault error variants or numeric codes. The quoted
-panic messages above are all explicit application-level validation messages in
-the current contract.
+All error codes defined in the `ContractError` enum are stable and backward compatible:
 
-## Planned or recommended future errors
+- Existing error codes will never change
+- New error codes will be added within their category ranges
+- Deprecated error codes will be marked in documentation but remain functional
+- See [error-code-standard.md](./error-code-standard.md) for the complete standard
 
-These recommendations are **not implemented**:
+## SDK Integration
 
-- Add a `#[contracterror]` enum with stable numeric variants for already
-  initialized, invalid amount, insufficient balance, invalid unlock time, and
-  not initialized.
-- Add an explicit locked-funds-not-mature error if a locked-fund withdrawal
-  operation is introduced.
-- Distinguish token-transfer failures from vault accounting failures while
-  preserving their underlying diagnostics.
-
-Until then, callers should not invent numeric mappings for panic messages.
+For SDK mapping guidance and mobile UX recommendations, see
+[error-code-standard.md](./error-code-standard.md).

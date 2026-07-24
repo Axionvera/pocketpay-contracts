@@ -9,6 +9,11 @@ This project is currently intended for development, learning, and Stellar testne
 The savings vault now uses internal balance tracking and real token transfers: `deposit` transfers tokens from the user to the contract, `withdraw` transfers tokens from the contract to the user, and locking operations manage which tokens are available to withdraw.
 
 See [Known Limitations](#known-limitations) for other current constraints.
+
+## Documentation
+
+- [Storage TTL Review](docs/storage-ttl.md) — notes on the current instance and persistent storage usage, TTL-sensitive entries, and renewal expectations for the vault contract.
+
 ## Security Considerations
 
 > **This contract is for educational and testnet use.** Review the following before any mainnet deployment.
@@ -228,14 +233,15 @@ stellar-pocketpay-contracts/
     ├── storage-ttl.md                  # Storage TTL guide
     ├── testing.md                      # Test naming conventions
     ├── troubleshooting.md              # Troubleshooting guide
-    └── upgrade-strategy.md             # Upgrade strategy research
+    ├── upgrade-strategy.md             # Upgrade strategy research
+    └── withdrawal-queue-design.md      # Withdrawal queue design note
 ```
 
 ---
 ## Documentation
 
-- [Audit Readiness Review](docs/audit-readiness.md) — Structured pre-audit assessment: blockers, high-risk areas, missing tests, risky assumptions, and unresolved design questions. **Not a claim of production readiness.**
-- [Audit Preparation Checklist](docs/audit-preparation.md) — Supplementary checklist of documentation, tests, threat model, and deployment details. Verify against the audit readiness review for current accuracy.
+- [Contract Upgradeability](docs/upgradeability.md) — Current upgrade posture (non-upgradeable), trust model, storage migration impact, and future options.
+- [Audit Preparation Checklist](docs/audit-preparation.md) — Checklist of documentation, tests, threat model, and deployment details required before any external security review or audit.
 - [Emergency Pause and Admin Misuse Threat Model](docs/admin-pause-threat-model.md) — Threat scenarios, withdrawal impact, recovery assumptions, mitigations, limitations, and residual risks for admin-controlled pause mechanisms.
 - [Vault Fee Model](docs/vault-fee-model.md) — Clarification of no-fee assumptions, accounting implications, user transparency requirements, design rationale, and framework for potential future fee support.
 - [Storage Audit](docs/storage-audit.md) — Comprehensive details on the contract's storage layout, keys, mutating functions, and security invariants.
@@ -258,6 +264,7 @@ stellar-pocketpay-contracts/
 - [Test Coverage Summary](docs/test-coverage.md) — Maps initialization, deposit, withdrawal, and locking behaviours to the tests that cover them, plus known test gaps.
 - [Failure Mode Catalogue](docs/failure-mode-catalogue.md) — Comprehensive list of all contract failure modes with expected behavior and test coverage.
 - [Test Naming Conventions](docs/testing.md) — Naming pattern for unit tests under `contracts/savings_vault/src/test/`, with good/bad examples and coverage guidance.
+- [Withdrawal Queue Design Note](docs/withdrawal-queue-design.md) — Design covering pending withdrawal state, queue identifiers, cancellation, maturity, storage and accounting implications, and scope decision.
 
 ---
 
