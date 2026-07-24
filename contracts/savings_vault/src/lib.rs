@@ -141,10 +141,23 @@ impl SavingsVault {
     }
 
     fn load_locks(env: &Env, user: Address) -> Vec<LockEntry> {
-        env.storage()
+        let next_lock_id: u64 = env
+            .storage()
             .persistent()
-            .get(&DataKey::Locks(user))
-            .unwrap_or_else(|| Vec::new(env))
+            .get(&DataKey::NextLockId(user.clone()))
+            .unwrap_or(1);
+
+        let mut locks = Vec::new(env);
+        for i in 1..next_lock_id {
+            if let Some(lock) = env
+                .storage()
+                .persistent()
+                .get::<_, LockEntry>(&DataKey::Lock(user.clone(), i))
+            {
+                locks.push_back(lock);
+            }
+        }
+        locks
     }
 
     /// Assert the contract is not paused (or that the pause has expired).
