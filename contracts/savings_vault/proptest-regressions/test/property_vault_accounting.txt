@@ -1,0 +1,9 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc b368886d5f13e9d1c22951f8c0d5c5a6b18f7ce2819b5670ecf32ab7cd83fc43 # shrinks to ops = [UserOp(0, Deposit(42535295865117307932921825928971026431))]
+cc d8e45f47e9370bb397d147d65e2fe0f084d2b75140e4bd014a39727c2c92cc30 # shrinks to ops = [Deposit(42535295865117307932921825928971026431)]
+cc 69b1dfc118d8695d08c4802acb898a2fe6195a779e158a0849dc911f1a589ea2 # shrinks to ops = [UserOp(0, Deposit(1))]

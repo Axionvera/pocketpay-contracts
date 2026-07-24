@@ -39,7 +39,7 @@ The state model is deliberately simple:
 | Key                | Type   | Description |
 |--------------------|--------|-------------|
 | `balance:{user}`   | `i128` | Unlocked funds available to a user.
-| `locks:{user}`     | `Vec<LockEntry>` | List of active and matured lock entries for a user.
+| `lock:{user}:{id}` | `LockEntry`| An individual active or matured lock entry for a user.
 | `next_lock_id:{user}` | `u64`| Monotonically increasing next lock ID for a user.
 | `admin`            | `Address` | Contract admin (set during `initialize`).
 | `initialized`      | `bool`   | Guard to ensure `initialize` runs only once.
@@ -48,13 +48,14 @@ All operations validate inputs (non‑negative amounts, sufficient balances, fut
 
 ---
 
-## Internal Balance Tracking and Asset Custody
+## Token-Backed Accounting and Asset Custody
 
-The current deposit flow performs **internal accounting only**. Calling `deposit` updates the user's balance in contract storage; it does not transfer real XLM, a Stellar Asset Contract (SAC) asset, or any other token into contract custody.
+The contract integrates with the **Stellar Asset Contract (SAC)** interface to manage real token custody:
 
-Internal balance tracking records values that the contract uses for its deposit, withdrawal, and locking rules. Real token custody is different: it requires an on-chain asset transfer between addresses so that recorded balances are backed by assets actually held for users. Because that transfer layer is not implemented, the current stored balances must not be interpreted as proof of deposited or custodied assets.
+- Calling `deposit` transfers the specified token amount from the user's wallet to the contract's address via `token_client.transfer` before updating internal persistent storage balances.
+- Calling `withdraw` or `withdraw_lock` transfers the specified token amount from contract custody back to the user's wallet before updating internal balances or lock states.
 
-Future SAC integration is planned to provide real asset transfer support and enable custody-backed balances.
+Internal accounting (`Balance(user)` and `Lock(user, lock_id)`) reconciles 1:1 with real SAC token balances held at the contract address. If a token transfer reverts or fails (e.g., due to insufficient balance or allowance), the entire Soroban transaction rolls back with zero state changes.
 
 ---
 
@@ -93,6 +94,8 @@ These boundaries maintain a clean separation between **on‑chain logic** (this 
 
 - The **README.md** provides quick‑start guides for building, testing, and deploying the contract.
 - This **architecture.md** offers a deeper dive into internal design.
+- [**sdk-contract-sequence.md**](sdk-contract-sequence.md) shows the end‑to‑end request flow (mobile → SDK → Soroban RPC → vault contract) for balance queries, deposits, withdrawals, and error paths.
+- [**api-reference.md**](api-reference.md) documents the naming convention followed by `SavingsVault`'s public functions.
 - Additional module‑level docs (e.g., `admin-role.md`) cover specific responsibilities.
 
 Refer to the **Documentation** section of the README for links to all docs.

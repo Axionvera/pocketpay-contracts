@@ -96,6 +96,35 @@ balance or locked balance.
 - **Caller/developer action:** Send Unix time in **seconds** and leave a safety
   margin beyond the latest ledger time.
 
+**Zero-duration locks:** Passing `unlock_time == current ledger timestamp`
+(a zero-second duration) is rejected with this same panic, because the check
+is `unlock_time <= current_time`, not `<`. There is no way to create a lock
+that is already matured at creation time; the smallest valid duration is one
+second (`unlock_time == current_time + 1`), and funds locked that way remain
+locked until the ledger timestamp advances to that value — `can_withdraw`
+and `get_balance` still treat it as locked at the moment of creation.
+
+### `Contract is paused`
+
+- **Current failure:** Panic message from `deposit` and `lock_funds`.
+- **Meaning:** The contract is in an emergency pause state. Deposits and lock
+  operations are blocked. Withdrawals (`withdraw`, `withdraw_lock`) and
+  read-only queries remain available.
+- **Likely cause:** The admin activated a pause for an incident response.
+- **Caller/developer action:** Check `is_paused()` to confirm. If the pause
+  has an expiry, wait for it to expire. Otherwise, the admin must call
+  `unpause()` to restore normal operations. Users can still withdraw funds
+  during a pause.
+
+### `Pause duration must be greater than zero`
+
+- **Current failure:** Panic message from `pause`.
+- **Meaning:** The `duration_secs` argument to `pause()` was zero. A pause
+  must have a non-zero duration to ensure it auto-expires.
+- **Likely cause:** Invalid input or an accidental zero value.
+- **Caller/developer action:** Pass a positive duration in seconds (e.g.,
+  604800 for 7 days).
+
 ### Locked funds are not yet withdrawable
 
 - **Current condition:** `can_withdraw(user)` returns `false`; it does not fail.
@@ -119,8 +148,8 @@ balance or locked balance.
 - **Caller/developer action:** Build and sign with the required address. Do not
   retry unchanged; request the correct wallet signature.
 
-Read-only calls (`get_balance`, `get_locked_balance`, and `can_withdraw`) do not
-call `require_auth()`.
+Read-only calls (`get_balance`, `get_locked_balance`, `get_lock`, `list_locks`,
+and `can_withdraw`) do not call `require_auth()`.
 
 ## Other existing failure conditions
 
