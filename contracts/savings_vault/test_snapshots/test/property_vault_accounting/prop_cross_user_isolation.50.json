@@ -119,55 +119,14 @@
     [],
     [],
     [],
-    [
-      [
-        "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMDR4",
-        {
-          "function": {
-            "contract_fn": {
-              "contract_address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
-              "function_name": "deposit",
-              "args": [
-                {
-                  "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMDR4"
-                },
-                {
-                  "i128": {
-                    "hi": 2305843009213693951,
-                    "lo": 18446744073709551615
-                  }
-                }
-              ]
-            }
-          },
-          "sub_invocations": [
-            {
-              "function": {
-                "contract_fn": {
-                  "contract_address": "CCABDO7UZXYE4W6GVSEGSNNZTKSLFQGKXXQTH6OX7M7GKZ4Z6CUJNGZN",
-                  "function_name": "transfer",
-                  "args": [
-                    {
-                      "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMDR4"
-                    },
-                    {
-                      "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM"
-                    },
-                    {
-                      "i128": {
-                        "hi": 2305843009213693951,
-                        "lo": 18446744073709551615
-                      }
-                    }
-                  ]
-                }
-              },
-              "sub_invocations": []
-            }
-          ]
-        }
-      ]
-    ],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
     [],
     [],
     [],
@@ -221,6 +180,48 @@
         }
       ]
     ],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [
+      [
+        "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMDR4",
+        {
+          "function": {
+            "contract_fn": {
+              "contract_address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD2KM",
+              "function_name": "withdraw",
+              "args": [
+                {
+                  "address": "CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMDR4"
+                },
+                {
+                  "i128": {
+                    "hi": 0,
+                    "lo": 507058
+                  }
+                }
+              ]
+            }
+          },
+          "sub_invocations": []
+        }
+      ]
+    ],
+    [],
+    [],
+    [],
+    [],
     [],
     [],
     [],
@@ -238,7 +239,7 @@
   "ledger": {
     "protocol_version": 22,
     "sequence_number": 0,
-    "timestamp": 1000,
+    "timestamp": 5000,
     "network_id": "0000000000000000000000000000000000000000000000000000000000000000",
     "base_reserve": 0,
     "min_persistent_entry_ttl": 4096,
@@ -343,8 +344,8 @@
                 "durability": "persistent",
                 "val": {
                   "i128": {
-                    "hi": 4611686018427387903,
-                    "lo": 18446744073709551614
+                    "hi": 2305843009213693951,
+                    "lo": 18446744073709044557
                   }
                 }
               }
@@ -643,8 +644,8 @@
                       },
                       "val": {
                         "i128": {
-                          "hi": 4611686018427387903,
-                          "lo": 18446744073709551614
+                          "hi": 2305843009213693951,
+                          "lo": 18446744073709044557
                         }
                       }
                     },
@@ -716,8 +717,8 @@
                       },
                       "val": {
                         "i128": {
-                          "hi": 4611686018427387904,
-                          "lo": 1
+                          "hi": 6917529027641081856,
+                          "lo": 507058
                         }
                       }
                     },

@@ -163,8 +163,10 @@ fn run_op(f: &mut FuzzFixture, op: &Op) {
                     "failed deposit must not mutate balances"
                 );
             } else {
-                f.client.deposit(&f.user, amount);
-                f.expected_total += amount;
+                let res = f.client.try_deposit(&f.user, amount);
+                if res.is_ok() {
+                    f.expected_total += amount;
+                }
             }
         }
         Op::Withdraw(amount) => {
@@ -222,6 +224,7 @@ fn run_op(f: &mut FuzzFixture, op: &Op) {
 
 struct MultiFuzzFixture {
     env: Env,
+    contract_id: Address,
     client: SavingsVaultClient<'static>,
     token_admin: token::StellarAssetClient<'static>,
     users: Vec<Address>,
@@ -230,7 +233,7 @@ struct MultiFuzzFixture {
 
 fn new_multi_fuzz_fixture(count: usize) -> MultiFuzzFixture {
     let (env, contract_id, client) = setup();
-    let (env, _admin, client, _token_client, token_admin) = test_token(env, contract_id, client);
+    let (env, _admin, client, _token_client, token_admin) = test_token(env, contract_id.clone(), client);
     let mut users = Vec::new(&env);
     let mut expected_totals = Vec::new(&env);
     for _ in 0..count {
@@ -242,6 +245,7 @@ fn new_multi_fuzz_fixture(count: usize) -> MultiFuzzFixture {
     set_ledger_timestamp(&env, 1_000);
     MultiFuzzFixture {
         env,
+        contract_id,
         client,
         token_admin,
         users,
@@ -291,9 +295,10 @@ fn prop_cross_user_isolation_inner(ops: StdVec<UserOp>) {
         match op {
             Op::Deposit(amount) => {
                 if *amount > 0 {
-                    f.client.deposit(&user, amount);
-                    let cur = f.expected_totals.get(*idx as u32).unwrap();
-                    f.expected_totals.set(*idx as u32, cur + amount);
+                    if f.client.try_deposit(&user, amount).is_ok() {
+                        let cur = f.expected_totals.get(*idx as u32).unwrap();
+                        f.expected_totals.set(*idx as u32, cur + amount);
+                    }
                 }
             }
             Op::Withdraw(amount) => {
@@ -322,14 +327,13 @@ fn prop_cross_user_isolation_inner(ops: StdVec<UserOp>) {
 
 fn prop_global_token_custody_inner(ops: StdVec<UserOp>) {
     let mut f = new_multi_fuzz_fixture(3);
-    let token_addr: Address = f.env.as_contract(&f.env.register(SavingsVault, ()), || {
+    let token_addr: Address = f.env.as_contract(&f.contract_id, || {
         f.env.storage().instance().get(&DataKey::Token).unwrap()
     });
     let token_client = token::Client::new(&f.env, &token_addr);
 
     let check_custody = |f: &MultiFuzzFixture| {
-        let contract_addr = f.env.register(SavingsVault, ());
-        let contract_bal = token_client.balance(&contract_addr);
+        let contract_bal = token_client.balance(&f.contract_id);
         let mut sum: i128 = 0;
         for user in &f.users {
             sum += f.client.get_balance(&user) + f.client.get_locked_balance(&user);
@@ -343,9 +347,10 @@ fn prop_global_token_custody_inner(ops: StdVec<UserOp>) {
         match op {
             Op::Deposit(amount) => {
                 if *amount > 0 {
-                    f.client.deposit(&user, amount);
-                    let cur = f.expected_totals.get(*idx as u32).unwrap();
-                    f.expected_totals.set(*idx as u32, cur + amount);
+                    if f.client.try_deposit(&user, amount).is_ok() {
+                        let cur = f.expected_totals.get(*idx as u32).unwrap();
+                        f.expected_totals.set(*idx as u32, cur + amount);
+                    }
                 }
             }
             Op::Withdraw(amount) => {

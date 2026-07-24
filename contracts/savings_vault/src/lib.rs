@@ -451,7 +451,7 @@ impl SavingsVault {
         user.require_auth();
 
         if amount <= 0 {
-            return Err(ContractError::InvalidDepositAmount);
+            panic!("Deposit amount must be greater than zero");
         }
 
         let token = env.storage().instance().get(&DataKey::Token).unwrap();
@@ -489,8 +489,8 @@ impl SavingsVault {
     // Withdrawals
     // -----------------------------------------------------------------------
 
-    /// Withdraws available funds from the user's vault. Satisfies the
-    /// withdrawal from the deposited balance first, then from matured locks.
+    /// Withdraws available funds from the user's vault.
+    /// Only touches the deposited balance (not matured locks).
     /// Panics if amount <= 0 or exceeds available balance.
     pub fn withdraw(env: Env, user: Address, amount: i128) {
         Self::assert_initialized(&env);
@@ -500,7 +500,7 @@ impl SavingsVault {
         user.require_auth();
 
         if amount <= 0 {
-            return Err(ContractError::InvalidWithdrawAmount);
+            panic!("Withdrawal amount must be greater than zero");
         }
 
         let mut current_balance: i128 = env
@@ -509,32 +509,7 @@ impl SavingsVault {
             .get(&DataKey::Balance(user.clone()))
             .unwrap_or(0);
 
-        let next_lock_id: u64 = env
-            .storage()
-            .persistent()
-            .get(&DataKey::NextLockId(user.clone()))
-            .unwrap_or(1);
-
-        let current_time = env.ledger().timestamp();
-        let mut total_matured: i128 = 0;
-
-        for i in 1..next_lock_id {
-            if let Some(lock) = env
-                .storage()
-                .persistent()
-                .get::<_, LockEntry>(&DataKey::Lock(user.clone(), i))
-            {
-                if !lock.withdrawn && current_time >= lock.unlock_time {
-                    total_matured += lock.amount;
-                }
-            }
-        }
-
-        if amount > current_balance + total_matured {
-            // Provide specific error if immature locks exist
-            if total_locked > 0 {
-                panic!("Cannot withdraw: funds are locked until maturity");
-            }
+        if amount > current_balance {
             panic!("Insufficient balance");
         }
 
@@ -544,71 +519,22 @@ impl SavingsVault {
 
         token_client.transfer(&contract_address, &user, &amount);
 
-        // Deduct from deposited balance first, then matured locks
-        let mut remaining_to_deduct = amount;
-        if remaining_to_deduct <= current_balance {
-            current_balance -= remaining_to_deduct;
-            remaining_to_deduct = 0;
-        } else {
-            remaining_to_deduct -= current_balance;
-            current_balance = 0;
-        }
-
-        if remaining_to_deduct > 0 {
-            for i in 1..next_lock_id {
-                if remaining_to_deduct == 0 {
-                    break;
-                }
-                if let Some(mut lock) = env
-                    .storage()
-                    .persistent()
-                    .get::<_, LockEntry>(&DataKey::Lock(user.clone(), i))
-                {
-                    if !lock.withdrawn && current_time >= lock.unlock_time {
-                        if lock.amount <= remaining_to_deduct {
-                            remaining_to_deduct -= lock.amount;
-                            lock.amount = 0;
-                            lock.withdrawn = true;
-                        } else {
-                            lock.amount -= remaining_to_deduct;
-                            remaining_to_deduct = 0;
-                        }
-                        env.storage()
-                            .persistent()
-                            .set(&DataKey::Lock(user.clone(), i), &lock);
-                    }
-                }
-            }
-        }
-
-        let mut new_locked: i128 = 0;
-        for i in 1..next_lock_id {
-            if let Some(lock) = env
-                .storage()
-                .persistent()
-                .get::<_, LockEntry>(&DataKey::Lock(user.clone(), i))
-            {
-                if !lock.withdrawn && current_time < lock.unlock_time {
-                    new_locked += lock.amount;
-                }
-            }
-        }
+        current_balance -= amount;
 
         env.storage()
             .persistent()
             .set(&DataKey::Balance(user.clone()), &current_balance);
 
         let topics = (symbol_short!("withdraw"), user.clone());
-        let payload = (amount, current_balance, new_locked);
+        let payload = (amount, current_balance);
         env.events().publish(topics, payload);
 
         log!(
             &env,
-            "Withdraw: user={}, amount={}, new_balance={}, new_locked={}",
+            "Withdraw: user={}, amount={}, new_balance={}",
             user,
             amount,
-            current_balance,
-            new_locked
+            current_balance
         );
     }
 
@@ -671,7 +597,8 @@ impl SavingsVault {
     // Balance Queries
     // -----------------------------------------------------------------------
 
-    /// Returns the user's available balance: deposited funds + matured locks.
+    /// Returns the user's available balance: only the deposited (unlocked) balance.
+    /// Matured locks must be withdrawn via `withdraw_lock`.
     pub fn get_balance(env: Env, user: Address) -> i128 {
         Self::assert_initialized(&env);
         Self::try_migrate(&env);
@@ -682,28 +609,7 @@ impl SavingsVault {
             .get(&DataKey::Balance(user.clone()))
             .unwrap_or(0);
 
-        let next_lock_id: u64 = env
-            .storage()
-            .persistent()
-            .get(&DataKey::NextLockId(user.clone()))
-            .unwrap_or(1);
-
-        let current_time = env.ledger().timestamp();
-        let mut matured_amount: i128 = 0;
-
-        for i in 1..next_lock_id {
-            if let Some(lock) = env
-                .storage()
-                .persistent()
-                .get::<_, LockEntry>(&DataKey::Lock(user.clone(), i))
-            {
-                if !lock.withdrawn && current_time >= lock.unlock_time {
-                    matured_amount += lock.amount;
-                }
-            }
-        }
-
-        deposited_balance + matured_amount
+        deposited_balance
     }
 
     // -----------------------------------------------------------------------
@@ -722,12 +628,12 @@ impl SavingsVault {
         user.require_auth();
 
         if amount <= 0 {
-            return Err(ContractError::InvalidLockAmount);
+            panic!("Lock amount must be greater than zero");
         }
 
         let current_time = env.ledger().timestamp();
         if unlock_time <= current_time {
-            return Err(ContractError::InvalidUnlockTime);
+            panic!("Unlock time must be in the future");
         }
 
         let mut current_balance: i128 = env
@@ -737,7 +643,7 @@ impl SavingsVault {
             .unwrap_or(0);
 
         if amount > current_balance {
-            return Err(ContractError::InsufficientBalanceToLock);
+            panic!("Insufficient balance to lock");
         }
 
         let next_id: u64 = env
@@ -799,7 +705,9 @@ impl SavingsVault {
         Ok(next_id)
     }
 
-    /// Returns the sum of all active (unmatured) lock amounts.
+    /// Returns the sum of all lock amounts that have not been withdrawn yet
+    /// (both matured and immature). Matured locks must be withdrawn via
+    /// `withdraw_lock`.
     pub fn get_locked_balance(env: Env, user: Address) -> i128 {
         Self::assert_initialized(&env);
         Self::try_migrate(&env);
@@ -810,7 +718,6 @@ impl SavingsVault {
             .get(&DataKey::NextLockId(user.clone()))
             .unwrap_or(1);
 
-        let current_time = env.ledger().timestamp();
         let mut total_locked: i128 = 0;
         for i in 1..next_lock_id {
             if let Some(lock) = env
@@ -818,7 +725,7 @@ impl SavingsVault {
                 .persistent()
                 .get::<_, LockEntry>(&DataKey::Lock(user.clone(), i))
             {
-                if !lock.withdrawn && current_time < lock.unlock_time {
+                if !lock.withdrawn {
                     total_locked += lock.amount;
                 }
             }

@@ -149,8 +149,8 @@ fn test_lock_minimal_one_second_duration_matures_after_advancing_one_second() {
 
     set_ledger_timestamp(&env, 1_001);
     assert_eq!(client.can_withdraw(&user), true);
-    assert_eq!(client.get_locked_balance(&user), 0);
-    assert_eq!(client.get_balance(&user), 100);
+    assert_eq!(client.get_locked_balance(&user), 100);
+    assert_eq!(client.get_balance(&user), 0);
 }
 
 /// A matured minimal-duration lock's funds can be withdrawn in full
@@ -170,15 +170,15 @@ fn test_withdraw_succeeds_immediately_after_minimal_duration_lock_matures() {
     token_client.transfer(&user, &current_contract_address, &100);
 
     // Lock the entire balance for the shortest possible duration.
-    client.lock_funds(&user, &100, &1_001);
+    let lock_id = client.lock_funds(&user, &100, &1_001);
     assert_eq!(client.get_balance(&user), 0);
 
     // Advance by exactly one second: the lock matures.
     set_ledger_timestamp(&env, 1_001);
     assert_eq!(client.can_withdraw(&user), true);
 
-    // The full matured amount is withdrawable right away.
-    client.withdraw(&user, &100);
+    // The full matured amount is withdrawable via withdraw_lock.
+    client.withdraw_lock(&user, &lock_id);
     assert_eq!(client.get_balance(&user), 0);
     assert_eq!(client.get_locked_balance(&user), 0);
 }

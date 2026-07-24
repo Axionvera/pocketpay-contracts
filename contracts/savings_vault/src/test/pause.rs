@@ -437,13 +437,13 @@ fn test_locked_funds_mature_normally_during_pause() {
     // Lock maturity is time-based, not pause-based
     set_ledger_timestamp(&env, 2_000);
 
-    // The lock has matured — get_balance includes it, can_withdraw returns true
-    assert_eq!(client.get_balance(&user), 500);
+    // The lock has matured — get_balance returns only deposited balance, can_withdraw returns true
+    assert_eq!(client.get_balance(&user), 300);
     assert!(client.can_withdraw(&user));
 
-    // Withdrawal of matured funds works during pause
+    // Withdrawal of available funds works during pause
     client.withdraw(&user, &200);
-    assert_eq!(client.get_balance(&user), 300);
+    assert_eq!(client.get_balance(&user), 100);
 }
 
 // =========================================================================
