@@ -224,7 +224,8 @@ stellar-pocketpay-contracts/
     ├── storage-ttl.md                  # Storage TTL guide
     ├── testing.md                      # Test naming conventions
     ├── troubleshooting.md              # Troubleshooting guide
-    └── upgrade-strategy.md             # Upgrade strategy research
+    ├── upgrade-strategy.md             # Upgrade strategy research
+    └── withdrawal-queue-design.md      # Withdrawal queue design note
 ```
 
 ---
@@ -253,6 +254,7 @@ stellar-pocketpay-contracts/
 - [Test Coverage Summary](docs/test-coverage.md) — Maps initialization, deposit, withdrawal, and locking behaviours to the tests that cover them, plus known test gaps.
 - [Failure Mode Catalogue](docs/failure-mode-catalogue.md) — Comprehensive list of all contract failure modes with expected behavior and test coverage.
 - [Test Naming Conventions](docs/testing.md) — Naming pattern for unit tests under `contracts/savings_vault/src/test/`, with good/bad examples and coverage guidance.
+- [Withdrawal Queue Design Note](docs/withdrawal-queue-design.md) — Design covering pending withdrawal state, queue identifiers, cancellation, maturity, storage and accounting implications, and scope decision.
 
 ---
 
