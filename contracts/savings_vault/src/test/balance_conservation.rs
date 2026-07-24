@@ -9,6 +9,7 @@
 //! - locked balance is never negative
 //! - failed (invalid) operations leave both balances unchanged
 
+use alloc::vec::Vec as StdVec;
 use super::test_helpers::*;
 use super::*;
 use soroban_sdk::{testutils::Address as _, Address, Env};
@@ -30,7 +31,8 @@ struct Fixture {
 
 fn new_fixture() -> Fixture {
     let (env, contract_id, client) = setup();
-    let (env, _admin, client, token_client, token_admin) = test_token(env, client);
+    let (env, _admin, client, token_client, token_admin) =
+        test_token(env, contract_id.clone(), client);
     let user = Address::generate(&env);
 
     // Large mint so sequences never run out of external token supply.
@@ -47,6 +49,51 @@ fn new_fixture() -> Fixture {
 }
 
 // ---------------------------------------------------------------------------
+// Multi-user fixture
+// ---------------------------------------------------------------------------
+
+/// Harness with multiple users, tracking expected totals per user for conservation checks.
+struct MultiUserFixture {
+    env: Env,
+    client: SavingsVaultClient<'static>,
+    token_admin: token::StellarAssetClient<'static>,
+    users: Vec<Address>,
+    expected_totals: Vec<i128>, // one per user
+}
+
+fn new_multi_user_fixture(user_count: usize) -> MultiUserFixture {
+    let (env, contract_id, client) = setup();
+    let (env, _admin, client, _token_client, token_admin) = test_token(env, contract_id, client);
+
+    let mut users = Vec::new(&env);
+    let mut expected_totals = Vec::new(&env);
+
+    for _ in 0..user_count {
+        let user = Address::generate(&env);
+        token_admin.mint(&user, &1_000_000_000);
+        users.push_back(user);
+        expected_totals.push_back(0);
+    }
+
+    set_ledger_timestamp(&env, 1_000);
+
+    MultiUserFixture {
+        env,
+        client,
+        token_admin,
+        users,
+        expected_totals,
+    }
+}
+
+/// Wraps an Op to target a specific user by index.
+#[derive(Clone, Copy, Debug)]
+enum UserOp {
+    Op(usize, Op), // (user index, operation)
+    SetTime(u64),
+}
+
+// ---------------------------------------------------------------------------
 // Operations
 // ---------------------------------------------------------------------------
 
@@ -55,10 +102,12 @@ fn new_fixture() -> Fixture {
 enum Op {
     /// Credit internal balance and back it with a real SAC transfer into the vault.
     Deposit(i128),
-    /// Withdraw from available balance (deposited + matured locks).
+    /// Withdraw from available balance (only deposited, not matured locks).
     Withdraw(i128),
     /// Lock `amount` until `unlock_time` (must be strictly after ledger time).
     Lock { amount: i128, unlock_time: u64 },
+    /// Withdraw a specific lock by creation index (0-based).
+    WithdrawLock(usize),
     /// Advance the ledger timestamp (matures locks without changing totals).
     SetTime(u64),
 }
@@ -104,6 +153,8 @@ fn snapshot(client: &SavingsVaultClient, user: &Address) -> (i128, i128) {
 fn run_sequence(ops: &[(Op, Expect)]) -> i128 {
     let f = new_fixture();
     let mut expected_total: i128 = 0;
+    let mut lock_ids: StdVec<u64> = StdVec::new();
+    let mut lock_amounts: StdVec<i128> = StdVec::new();
 
     assert_conserved(&f.client, &f.user, expected_total);
 
@@ -113,10 +164,6 @@ fn run_sequence(ops: &[(Op, Expect)]) -> i128 {
         match (op, expect) {
             (Op::Deposit(amount), Expect::Ok) => {
                 f.client.deposit(&f.user, amount);
-                // Mirror current contract: deposit only updates ledger balance;
-                // fund the vault so a later withdraw can transfer SAC out.
-                f.token_client
-                    .transfer(&f.user, &f.contract_id, amount);
                 expected_total += amount;
             }
             (Op::Deposit(amount), Expect::Err) => {
@@ -147,11 +194,25 @@ fn run_sequence(ops: &[(Op, Expect)]) -> i128 {
                     "step {step}: failed withdraw must not mutate balances"
                 );
             }
-            (Op::Lock { amount, unlock_time }, Expect::Ok) => {
-                f.client.lock_funds(&f.user, amount, unlock_time);
+            (
+                Op::Lock {
+                    amount,
+                    unlock_time,
+                },
+                Expect::Ok,
+            ) => {
+                let id = f.client.lock_funds(&f.user, amount, unlock_time);
+                lock_ids.push(id);
+                lock_amounts.push(*amount);
                 // Lock moves available → locked; total is unchanged.
             }
-            (Op::Lock { amount, unlock_time }, Expect::Err) => {
+            (
+                Op::Lock {
+                    amount,
+                    unlock_time,
+                },
+                Expect::Err,
+            ) => {
                 let res = f.client.try_lock_funds(&f.user, amount, unlock_time);
                 assert!(
                     res.is_err(),
@@ -162,6 +223,15 @@ fn run_sequence(ops: &[(Op, Expect)]) -> i128 {
                     before,
                     "step {step}: failed lock must not mutate balances"
                 );
+            }
+            (Op::WithdrawLock(idx), Expect::Ok) => {
+                let lock_id = lock_ids[*idx];
+                let lock_amt = lock_amounts[*idx];
+                f.client.withdraw_lock(&f.user, &lock_id);
+                expected_total -= lock_amt;
+            }
+            (Op::WithdrawLock(_), Expect::Err) => {
+                panic!("step {step}: WithdrawLock cannot fail for valid indices");
             }
             (Op::SetTime(ts), Expect::Ok) => {
                 set_ledger_timestamp(&f.env, *ts);
@@ -208,7 +278,7 @@ fn conservation_multiple_deposits_and_partial_withdrawals() {
     assert_eq!(total, 100);
 }
 
-/// Lock moves funds without changing total; unlock reclassifies without changing total.
+/// Lock moves funds without changing total; unlock via withdraw_lock.
 #[test]
 fn conservation_lock_and_time_advance() {
     let total = run_sequence(&[
@@ -229,10 +299,12 @@ fn conservation_lock_and_time_advance() {
         ),
         // Before any unlock: available 400, locked 600, total 1000.
         (Op::SetTime(5_000), Expect::Ok),
-        // First lock matures: available 800, locked 200, total still 1000.
+        // First lock matures.
         (Op::SetTime(8_000), Expect::Ok),
-        // Both mature: available 1000, locked 0.
-        (Op::Withdraw(1_000), Expect::Ok),
+        // Both mature: withdraw via withdraw_lock + available
+        (Op::WithdrawLock(0), Expect::Ok),
+        (Op::WithdrawLock(1), Expect::Ok),
+        (Op::Withdraw(400), Expect::Ok),
     ]);
     assert_eq!(total, 0);
 }
@@ -260,12 +332,14 @@ fn conservation_withdraw_after_partial_lock_maturity() {
         (Op::Withdraw(100), Expect::Ok),
         // available=200, locked=500, total=700
         (Op::SetTime(3_000), Expect::Ok),
-        // matured 300 → available=500, locked=200, total=700
-        (Op::Withdraw(400), Expect::Ok),
-        // available=100, locked=200, total=300
+        // Withdraw matured lock 0 via withdraw_lock
+        (Op::WithdrawLock(0), Expect::Ok),
+        // Then withdraw remaining available
+        (Op::Withdraw(200), Expect::Ok),
+        // total=200
         (Op::SetTime(9_000), Expect::Ok),
-        // all free: available=300, locked=0
-        (Op::Withdraw(300), Expect::Ok),
+        // all matured: withdraw lock 1
+        (Op::WithdrawLock(1), Expect::Ok),
     ]);
     assert_eq!(total, 0);
 }
@@ -286,7 +360,8 @@ fn conservation_deposit_while_funds_locked() {
         (Op::Withdraw(250), Expect::Ok),
         // Locked portion still held; total = 500.
         (Op::SetTime(10_000), Expect::Ok),
-        (Op::Withdraw(500), Expect::Ok),
+        // Withdraw matured lock via withdraw_lock
+        (Op::WithdrawLock(0), Expect::Ok),
     ]);
     assert_eq!(total, 0);
 }
@@ -320,16 +395,19 @@ fn conservation_long_mixed_sequence() {
         (Op::Withdraw(50), Expect::Ok),
         (Op::Deposit(150), Expect::Ok),
         (Op::SetTime(2_000), Expect::Ok),
-        (Op::Withdraw(200), Expect::Ok), // spends matured 100 + some available
+        (Op::Withdraw(200), Expect::Ok),
         (Op::SetTime(4_000), Expect::Ok),
         (Op::Withdraw(150), Expect::Ok),
         (Op::SetTime(6_000), Expect::Ok),
-        (Op::Withdraw(400), Expect::Ok),
+        // withdraw matured locks and remaining available
+        (Op::WithdrawLock(0), Expect::Ok),
+        (Op::WithdrawLock(1), Expect::Ok),
+        (Op::Withdraw(150), Expect::Ok),
         (Op::Deposit(25), Expect::Ok),
         (Op::Withdraw(25), Expect::Ok),
+        (Op::WithdrawLock(2), Expect::Ok),
     ]);
-    // Start 1000 -50 +150 -200 -150 -400 +25 -25 = 350
-    assert_eq!(total, 350);
+    assert_eq!(total, 0);
 }
 
 // =========================================================================
@@ -469,13 +547,204 @@ fn conservation_mixed_valid_and_invalid_sequence() {
             Expect::Ok,
         ),
         (Op::SetTime(5_000), Expect::Ok),
-        // matured 300 + free 100 = 400 available; locked 100
-        (Op::Withdraw(400), Expect::Ok),
-        (Op::SetTime(6_000), Expect::Ok),
+        // Withdraw matured lock 0 via withdraw_lock, then remaining available
+        (Op::WithdrawLock(0), Expect::Ok),
         (Op::Withdraw(100), Expect::Ok),
+        (Op::SetTime(6_000), Expect::Ok),
+        (Op::WithdrawLock(1), Expect::Ok),
     ]);
-    // 1000 - 700 + 200 - 400 - 100 = 0
+    // 1000 - 700 + 200 - 300 - 100 - 100 = 0
     assert_eq!(total, 0);
+}
+
+// ---------------------------------------------------------------------------
+// Multi-user invariant helpers
+// ---------------------------------------------------------------------------
+
+fn assert_all_conserved(f: &MultiUserFixture) {
+    for (i, user) in f.users.iter().enumerate() {
+        let expected = f.expected_totals.get(i as u32).unwrap();
+        assert_conserved(&f.client, &user, expected);
+    }
+}
+
+fn snapshot_all(f: &MultiUserFixture) -> Vec<(i128, i128)> {
+    let mut vec = Vec::new(&f.env);
+    for u in f.users.iter() {
+        vec.push_back(snapshot(&f.client, &u));
+    }
+    vec
+}
+
+fn run_multi_user_sequence(ops: &[(UserOp, Expect)]) {
+    let mut f = new_multi_user_fixture(2); // default 2 users for tests
+    let mut user_lock_ids: [StdVec<u64>; 2] = [alloc::vec![], alloc::vec![]];
+    let mut user_lock_amounts: [StdVec<i128>; 2] = [alloc::vec![], alloc::vec![]];
+    assert_all_conserved(&f);
+
+    for (step, (user_op, expect)) in ops.iter().enumerate() {
+        let before = snapshot_all(&f);
+
+        match (user_op, expect) {
+            (UserOp::Op(user_idx, op), Expect::Ok) => {
+                let user = f.users.get(*user_idx as u32).unwrap();
+                match op {
+                    Op::Deposit(amount) => {
+                        f.client.deposit(&user, amount);
+                        let cur = f.expected_totals.get(*user_idx as u32).unwrap();
+                        f.expected_totals.set(*user_idx as u32, cur + amount);
+                    }
+                    Op::Withdraw(amount) => {
+                        f.client.withdraw(&user, amount);
+                        let cur = f.expected_totals.get(*user_idx as u32).unwrap();
+                        f.expected_totals.set(*user_idx as u32, cur - amount);
+                    }
+                    Op::Lock {
+                        amount,
+                        unlock_time,
+                    } => {
+                        let id = f.client.lock_funds(&user, amount, unlock_time);
+                        user_lock_ids[*user_idx].push(id);
+                        user_lock_amounts[*user_idx].push(*amount);
+                    }
+                    Op::WithdrawLock(idx) => {
+                        let lock_id = user_lock_ids[*user_idx][*idx];
+                        let lock_amt = user_lock_amounts[*user_idx][*idx];
+                        f.client.withdraw_lock(&user, &lock_id);
+                        let cur = f.expected_totals.get(*user_idx as u32).unwrap();
+                        f.expected_totals.set(*user_idx as u32, cur - lock_amt);
+                    }
+                    Op::SetTime(_) => {
+                        // handled via UserOp::SetTime
+                    }
+                }
+            }
+            (UserOp::Op(user_idx, op), Expect::Err) => {
+                let user = f.users.get(*user_idx as u32).unwrap();
+                match op {
+                    Op::Deposit(amount) => {
+                        assert!(f.client.try_deposit(&user, amount).is_err());
+                    }
+                    Op::Withdraw(amount) => {
+                        assert!(f.client.try_withdraw(&user, amount).is_err());
+                    }
+                    Op::Lock {
+                        amount,
+                        unlock_time,
+                    } => {
+                        assert!(f.client.try_lock_funds(&user, amount, unlock_time).is_err());
+                    }
+                    Op::WithdrawLock(_) => {
+                        panic!("step {step}: WithdrawLock in Err branch is invalid");
+                    }
+                    Op::SetTime(_) => {
+                        panic!("step {step}: SetTime via UserOp::Op is invalid");
+                    }
+                }
+                assert_eq!(
+                    snapshot_all(&f),
+                    before,
+                    "step {step}: failed operation on user {user_idx} must not mutate balances"
+                );
+            }
+            (UserOp::SetTime(ts), Expect::Ok) => {
+                set_ledger_timestamp(&f.env, *ts);
+            }
+            (UserOp::SetTime(_), Expect::Err) => {
+                panic!("step {step}: SetTime cannot fail");
+            }
+        }
+
+        assert_all_conserved(&f);
+    }
+}
+
+// =========================================================================
+// Multi-user invariant tests
+// =========================================================================
+
+/// Verify that operations on user 0 never affect user 1's balances.
+#[test]
+fn conservation_cross_user_isolation() {
+    run_multi_user_sequence(&[
+        (UserOp::Op(0, Op::Deposit(500)), Expect::Ok),
+        (UserOp::Op(1, Op::Deposit(300)), Expect::Ok),
+        (
+            UserOp::Op(
+                0,
+                Op::Lock {
+                    amount: 200,
+                    unlock_time: 3000,
+                },
+            ),
+            Expect::Ok,
+        ),
+        (UserOp::Op(1, Op::Withdraw(100)), Expect::Ok),
+        (UserOp::Op(0, Op::Deposit(100)), Expect::Ok),
+        (
+            UserOp::Op(
+                1,
+                Op::Lock {
+                    amount: 150,
+                    unlock_time: 5000,
+                },
+            ),
+            Expect::Ok,
+        ),
+        (UserOp::SetTime(3000), Expect::Ok),
+        (UserOp::Op(0, Op::Withdraw(300)), Expect::Ok), // available (400) >= 300 → OK
+        (UserOp::SetTime(5000), Expect::Ok),
+        (UserOp::Op(1, Op::WithdrawLock(0)), Expect::Ok), // withdraw matured lock 0 (150)
+        (UserOp::Op(1, Op::Withdraw(50)), Expect::Ok), // remaining available
+    ]);
+}
+
+/// More complex cross-user sequence with valid and invalid operations.
+#[test]
+fn conservation_cross_user_mixed_valid_invalid() {
+    run_multi_user_sequence(&[
+        (UserOp::Op(0, Op::Deposit(1000)), Expect::Ok),
+        (UserOp::Op(1, Op::Deposit(500)), Expect::Ok),
+        // Invalid ops don't affect anyone
+        (UserOp::Op(0, Op::Withdraw(1001)), Expect::Err),
+        (
+            UserOp::Op(
+                1,
+                Op::Lock {
+                    amount: 0,
+                    unlock_time: 2000,
+                },
+            ),
+            Expect::Err,
+        ),
+        // Mixed valid ops
+        (
+            UserOp::Op(
+                0,
+                Op::Lock {
+                    amount: 400,
+                    unlock_time: 4000,
+                },
+            ),
+            Expect::Ok,
+        ),
+        (
+            UserOp::Op(
+                1,
+                Op::Lock {
+                    amount: 200,
+                    unlock_time: 6000,
+                },
+            ),
+            Expect::Ok,
+        ),
+        (UserOp::SetTime(4000), Expect::Ok),
+        (UserOp::Op(0, Op::Withdraw(500)), Expect::Ok), // 600 available + 400 matured → withdraw 500
+        (UserOp::Op(1, Op::Withdraw(100)), Expect::Ok),
+        (UserOp::SetTime(6000), Expect::Ok),
+        (UserOp::Op(1, Op::WithdrawLock(0)), Expect::Ok), // withdraw matured lock 0 (200)
+        (UserOp::Op(1, Op::Withdraw(200)), Expect::Ok),
+    ]);
 }
 
 // =========================================================================
@@ -488,16 +757,8 @@ fn conservation_mixed_valid_and_invalid_sequence() {
 fn conservation_table_driven_sequences() {
     // Each row: (label, ops, final expected total)
     let cases: &[(&str, &[(Op, Expect)], i128)] = &[
-        (
-            "empty",
-            &[],
-            0,
-        ),
-        (
-            "deposit only",
-            &[(Op::Deposit(42), Expect::Ok)],
-            42,
-        ),
+        ("empty", &[], 0),
+        ("deposit only", &[(Op::Deposit(42), Expect::Ok)], 42),
         (
             "deposit withdraw all",
             &[
@@ -507,7 +768,7 @@ fn conservation_table_driven_sequences() {
             0,
         ),
         (
-            "lock unlock withdraw",
+            "lock unlock withdraw lock",
             &[
                 (Op::Deposit(60), Expect::Ok),
                 (
@@ -518,7 +779,7 @@ fn conservation_table_driven_sequences() {
                     Expect::Ok,
                 ),
                 (Op::SetTime(2_500), Expect::Ok),
-                (Op::Withdraw(60), Expect::Ok),
+                (Op::WithdrawLock(0), Expect::Ok),
             ],
             0,
         ),
@@ -551,11 +812,47 @@ fn conservation_table_driven_sequences() {
                     Expect::Ok,
                 ),
                 (Op::SetTime(3_000), Expect::Ok),
-                (Op::Withdraw(250), Expect::Ok), // free 250 + matured 100 = 350 avail; take 250
+                (Op::Withdraw(250), Expect::Ok), // available 250 >= 250
                 (Op::SetTime(7_000), Expect::Ok),
-                (Op::Withdraw(250), Expect::Ok),
+                (Op::WithdrawLock(0), Expect::Ok), // withdraw matured lock 0 (100)
+                (Op::WithdrawLock(1), Expect::Ok), // withdraw matured lock 1 (150)
             ],
             0,
+        ),
+        (
+            "withdraw lock then available",
+            &[
+                (Op::Deposit(300), Expect::Ok),
+                (
+                    Op::Lock {
+                        amount: 100,
+                        unlock_time: 3000,
+                    },
+                    Expect::Ok,
+                ), // available: 200, locked: 100
+                (Op::SetTime(3000), Expect::Ok), // lock matured
+                (Op::WithdrawLock(0), Expect::Ok), // withdraw matured lock 0 (100)
+                (Op::Withdraw(200), Expect::Ok), // withdraw remaining available
+                (Op::Deposit(100), Expect::Ok),
+            ],
+            100, // 300 - 100 - 200 + 100 = 100
+        ),
+        (
+            "partial withdraw part of matured lock",
+            &[
+                (Op::Deposit(200), Expect::Ok),
+                (
+                    Op::Lock {
+                        amount: 150,
+                        unlock_time: 4000,
+                    },
+                    Expect::Ok,
+                ), // available 50, locked 150
+                (Op::SetTime(4000), Expect::Ok), // lock matured
+                (Op::WithdrawLock(0), Expect::Ok), // withdraw matured lock 0 (150)
+                (Op::Withdraw(25), Expect::Ok), // withdraw remaining available
+            ],
+            25,
         ),
     ];
 
@@ -566,4 +863,55 @@ fn conservation_table_driven_sequences() {
             "sequence '{label}' ended with total {total}, expected {expected}"
         );
     }
+}
+
+#[test]
+fn conservation_multi_lock_many_locks() {
+    run_sequence(&[
+        (Op::Deposit(1000), Expect::Ok),
+        (
+            Op::Lock {
+                amount: 100,
+                unlock_time: 2000,
+            },
+            Expect::Ok,
+        ),
+        (
+            Op::Lock {
+                amount: 100,
+                unlock_time: 3000,
+            },
+            Expect::Ok,
+        ),
+        (
+            Op::Lock {
+                amount: 100,
+                unlock_time: 4000,
+            },
+            Expect::Ok,
+        ),
+        (
+            Op::Lock {
+                amount: 100,
+                unlock_time: 5000,
+            },
+            Expect::Ok,
+        ),
+        (
+            Op::Lock {
+                amount: 100,
+                unlock_time: 6000,
+            },
+            Expect::Ok,
+        ),
+        (Op::SetTime(4000), Expect::Ok), // first 3 locks mature
+        (Op::WithdrawLock(0), Expect::Ok),
+        (Op::WithdrawLock(1), Expect::Ok),
+        (Op::WithdrawLock(2), Expect::Ok),
+        (Op::Withdraw(200), Expect::Ok), // withdraw remaining available
+        (Op::SetTime(6000), Expect::Ok), // all mature
+        (Op::WithdrawLock(3), Expect::Ok),
+        (Op::WithdrawLock(4), Expect::Ok),
+        (Op::Withdraw(300), Expect::Ok),
+    ]);
 }
