@@ -9,6 +9,11 @@ This project is currently intended for development, learning, and Stellar testne
 The savings vault now uses internal balance tracking and real token transfers: `deposit` transfers tokens from the user to the contract, `withdraw` transfers tokens from the contract to the user, and locking operations manage which tokens are available to withdraw.
 
 See [Known Limitations](#known-limitations) for other current constraints.
+
+## Documentation
+
+- [Storage TTL Review](docs/storage-ttl.md) — notes on the current instance and persistent storage usage, TTL-sensitive entries, and renewal expectations for the vault contract.
+
 ## Security Considerations
 
 > **This contract is for educational and testnet use.** Review the following before any mainnet deployment.
