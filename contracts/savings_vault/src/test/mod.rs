@@ -20,6 +20,7 @@ mod admin_invariant_guard;
 mod pause;
 mod token_transfer_rollback;
 mod storage_version;
+mod token_backed_withdrawals;
 
 use super::*;
 use soroban_sdk::{testutils::Address as _, testutils::Events, Address};
