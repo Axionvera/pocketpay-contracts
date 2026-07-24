@@ -123,8 +123,14 @@ impl SavingsVault {
                 // migrate them directly to v1!
                 // Since v0 and v1 have same storage layout (just added version marker),
                 // no changes needed except setting the version!
-                env.storage().instance().set(&DataKey::StorageVersion, &STORAGE_VERSION);
-                log!(&env, "Migrated storage from version 0 to version {}", STORAGE_VERSION);
+                env.storage()
+                    .instance()
+                    .set(&DataKey::StorageVersion, &STORAGE_VERSION);
+                log!(
+                    &env,
+                    "Migrated storage from version 0 to version {}",
+                    STORAGE_VERSION
+                );
             }
             _ => {
                 // If current version > STORAGE_VERSION, panic to prevent downgrades!
@@ -140,6 +146,7 @@ impl SavingsVault {
         }
     }
 
+    #[allow(dead_code)]
     fn load_locks(env: &Env, user: Address) -> Vec<LockEntry> {
         let next_lock_id: u64 = env
             .storage()
@@ -204,7 +211,6 @@ impl SavingsVault {
         }
     }
 
-
     // -----------------------------------------------------------------------
     // Initialization
     // Initialization
@@ -225,7 +231,9 @@ impl SavingsVault {
         env.storage().instance().set(&DataKey::Admin, &admin);
         env.storage().instance().set(&DataKey::Initialized, &true);
         env.storage().instance().set(&DataKey::Token, &token);
-        env.storage().instance().set(&DataKey::StorageVersion, &1_u64);
+        env.storage()
+            .instance()
+            .set(&DataKey::StorageVersion, &1_u64);
 
         // Emit a single initialize event. Topic tuple `(Symbol("initialize"), admin)`
         // with the token address as the data payload. The prior redundant
@@ -235,7 +243,12 @@ impl SavingsVault {
         let topics = (Symbol::new(&env, "initialize"), admin.clone());
         env.events().publish(topics, token.clone());
 
-        log!(&env, "Savings Vault initialized with admin: {}, storage version: {}", admin, STORAGE_VERSION);
+        log!(
+            &env,
+            "Savings Vault initialized with admin: {}, storage version: {}",
+            admin,
+            STORAGE_VERSION
+        );
     }
 
     // -----------------------------------------------------------------------
@@ -331,20 +344,12 @@ impl SavingsVault {
 
         let expiry = env.ledger().timestamp() + duration_secs;
         env.storage().instance().set(&DataKey::Paused, &true);
-        env
-            .storage()
-            .instance()
-            .set(&DataKey::PauseExpiry, &expiry);
+        env.storage().instance().set(&DataKey::PauseExpiry, &expiry);
 
         let topics = (symbol_short!("pause"), admin.clone());
         env.events().publish(topics, expiry);
 
-        log!(
-            &env,
-            "Pause: admin={}, expiry={}",
-            admin,
-            expiry
-        );
+        log!(&env, "Pause: admin={}, expiry={}", admin, expiry);
     }
 
     /// Deactivate an active pause.
@@ -511,9 +516,13 @@ impl SavingsVault {
 
         let current_time = env.ledger().timestamp();
         let mut total_matured: i128 = 0;
-        
+
         for i in 1..next_lock_id {
-            if let Some(lock) = env.storage().persistent().get::<_, LockEntry>(&DataKey::Lock(user.clone(), i)) {
+            if let Some(lock) = env
+                .storage()
+                .persistent()
+                .get::<_, LockEntry>(&DataKey::Lock(user.clone(), i))
+            {
                 if !lock.withdrawn && current_time >= lock.unlock_time {
                     total_matured += lock.amount;
                 }
@@ -545,7 +554,11 @@ impl SavingsVault {
                 if remaining_to_deduct == 0 {
                     break;
                 }
-                if let Some(mut lock) = env.storage().persistent().get::<_, LockEntry>(&DataKey::Lock(user.clone(), i)) {
+                if let Some(mut lock) = env
+                    .storage()
+                    .persistent()
+                    .get::<_, LockEntry>(&DataKey::Lock(user.clone(), i))
+                {
                     if !lock.withdrawn && current_time >= lock.unlock_time {
                         if lock.amount <= remaining_to_deduct {
                             remaining_to_deduct -= lock.amount;
@@ -555,7 +568,9 @@ impl SavingsVault {
                             lock.amount -= remaining_to_deduct;
                             remaining_to_deduct = 0;
                         }
-                        env.storage().persistent().set(&DataKey::Lock(user.clone(), i), &lock);
+                        env.storage()
+                            .persistent()
+                            .set(&DataKey::Lock(user.clone(), i), &lock);
                     }
                 }
             }
@@ -563,7 +578,11 @@ impl SavingsVault {
 
         let mut new_locked: i128 = 0;
         for i in 1..next_lock_id {
-            if let Some(lock) = env.storage().persistent().get::<_, LockEntry>(&DataKey::Lock(user.clone(), i)) {
+            if let Some(lock) = env
+                .storage()
+                .persistent()
+                .get::<_, LockEntry>(&DataKey::Lock(user.clone(), i))
+            {
                 if !lock.withdrawn && current_time < lock.unlock_time {
                     new_locked += lock.amount;
                 }
@@ -665,9 +684,13 @@ impl SavingsVault {
 
         let current_time = env.ledger().timestamp();
         let mut matured_amount: i128 = 0;
-        
+
         for i in 1..next_lock_id {
-            if let Some(lock) = env.storage().persistent().get::<_, LockEntry>(&DataKey::Lock(user.clone(), i)) {
+            if let Some(lock) = env
+                .storage()
+                .persistent()
+                .get::<_, LockEntry>(&DataKey::Lock(user.clone(), i))
+            {
                 if !lock.withdrawn && current_time >= lock.unlock_time {
                     matured_amount += lock.amount;
                 }
@@ -742,7 +765,11 @@ impl SavingsVault {
 
         let mut new_locked: i128 = 0;
         for i in 1..=next_id {
-            if let Some(l) = env.storage().persistent().get::<_, LockEntry>(&DataKey::Lock(user.clone(), i)) {
+            if let Some(l) = env
+                .storage()
+                .persistent()
+                .get::<_, LockEntry>(&DataKey::Lock(user.clone(), i))
+            {
                 if !l.withdrawn && current_time < l.unlock_time {
                     new_locked += l.amount;
                 }
@@ -780,7 +807,11 @@ impl SavingsVault {
         let current_time = env.ledger().timestamp();
         let mut total_locked: i128 = 0;
         for i in 1..next_lock_id {
-            if let Some(lock) = env.storage().persistent().get::<_, LockEntry>(&DataKey::Lock(user.clone(), i)) {
+            if let Some(lock) = env
+                .storage()
+                .persistent()
+                .get::<_, LockEntry>(&DataKey::Lock(user.clone(), i))
+            {
                 if !lock.withdrawn && current_time < lock.unlock_time {
                     total_locked += lock.amount;
                 }
@@ -802,7 +833,11 @@ impl SavingsVault {
 
         let current_time = env.ledger().timestamp();
         for i in 1..next_lock_id {
-            if let Some(lock) = env.storage().persistent().get::<_, LockEntry>(&DataKey::Lock(user.clone(), i)) {
+            if let Some(lock) = env
+                .storage()
+                .persistent()
+                .get::<_, LockEntry>(&DataKey::Lock(user.clone(), i))
+            {
                 if !lock.withdrawn && current_time >= lock.unlock_time {
                     return true;
                 }
@@ -817,7 +852,9 @@ impl SavingsVault {
         Self::assert_initialized(&env);
         Self::try_migrate(&env);
         Self::assert_supported_storage_version(&env);
-        env.storage().persistent().get(&DataKey::Lock(user.clone(), lock_id))
+        env.storage()
+            .persistent()
+            .get(&DataKey::Lock(user.clone(), lock_id))
     }
 
     /// Returns a paginated list of lock entries for a user (oldest first).
@@ -837,13 +874,19 @@ impl SavingsVault {
         }
 
         let page_limit = limit.min(MAX_LOCK_PAGE_SIZE);
-        let end = (offset as usize).saturating_add(page_limit as usize).min(total);
+        let end = (offset as usize)
+            .saturating_add(page_limit as usize)
+            .min(total);
         let mut page = Vec::new(&env);
 
         // Locks are 1-indexed (ids from 1 to next_lock_id - 1)
         // offset 0 means start at id 1
         for i in (offset as u64 + 1)..=(end as u64) {
-            if let Some(lock) = env.storage().persistent().get::<_, LockEntry>(&DataKey::Lock(user.clone(), i)) {
+            if let Some(lock) = env
+                .storage()
+                .persistent()
+                .get::<_, LockEntry>(&DataKey::Lock(user.clone(), i))
+            {
                 page.push_back(lock);
             }
         }
@@ -873,7 +916,12 @@ impl SavingsVault {
         let topics = (symbol_short!("xferadmin"), old_admin.clone());
         env.events().publish(topics, new_admin.clone());
 
-        log!(&env, "Admin transferred from {} to {}", old_admin, new_admin);
+        log!(
+            &env,
+            "Admin transferred from {} to {}",
+            old_admin,
+            new_admin
+        );
     }
 }
 
@@ -883,6 +931,3 @@ impl SavingsVault {
 
 #[cfg(test)]
 mod test;
-#[cfg(test)]
-#[path = "test/test_helpers.rs"]
-mod test_helpers;

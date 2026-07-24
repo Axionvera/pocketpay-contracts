@@ -9,7 +9,7 @@ fn test_initialize() {
     let (_id, client) = init_contract(&env);
     let admin = new_user(&env);
     let token = new_user(&env);
-    // Note: init_contract already initialized it, so calling again will test duplicate guard if desired, 
+    // Note: init_contract already initialized it, so calling again will test duplicate guard if desired,
     // or test a separate uninitialized instance.
 }
 

@@ -159,7 +159,10 @@ fn test_read_queries_work_during_pause() {
     assert_eq!(client.get_balance(&user), 300);
     assert_eq!(client.get_locked_balance(&user), 200);
     assert!(!client.can_withdraw(&user));
-    assert_eq!(client.get_version(), soroban_sdk::String::from_str(&env, "0.1.0"));
+    assert_eq!(
+        client.get_version(),
+        soroban_sdk::String::from_str(&env, "0.1.0")
+    );
 }
 
 // =========================================================================
@@ -224,7 +227,10 @@ fn test_auto_unpause_clears_storage() {
             .get(&super::DataKey::PauseExpiry)
             .unwrap_or(0)
     });
-    assert_eq!(expiry, 0, "PauseExpiry should be cleared after auto-unpause");
+    assert_eq!(
+        expiry, 0,
+        "PauseExpiry should be cleared after auto-unpause"
+    );
 }
 
 // =========================================================================

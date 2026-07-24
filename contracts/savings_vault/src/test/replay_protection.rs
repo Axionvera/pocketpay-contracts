@@ -350,12 +350,22 @@ fn test_lock_withdrawn_flag_and_state_lifecycle() {
     let lock_id_2 = client.lock_funds(&user, &600, &2000);
 
     // Verify initial withdrawn flag behaviour
-    let lock_1 = client.get_lock(&user, &lock_id_1).expect("Lock 1 should exist");
-    assert!(!lock_1.withdrawn, "New lock must not be marked as withdrawn");
+    let lock_1 = client
+        .get_lock(&user, &lock_id_1)
+        .expect("Lock 1 should exist");
+    assert!(
+        !lock_1.withdrawn,
+        "New lock must not be marked as withdrawn"
+    );
     assert_eq!(lock_1.amount, 400, "New lock must have the correct amount");
 
-    let lock_2 = client.get_lock(&user, &lock_id_2).expect("Lock 2 should exist");
-    assert!(!lock_2.withdrawn, "New lock must not be marked as withdrawn");
+    let lock_2 = client
+        .get_lock(&user, &lock_id_2)
+        .expect("Lock 2 should exist");
+    assert!(
+        !lock_2.withdrawn,
+        "New lock must not be marked as withdrawn"
+    );
     assert_eq!(lock_2.amount, 600, "New lock must have the correct amount");
 
     // Advance time to maturity
@@ -365,15 +375,31 @@ fn test_lock_withdrawn_flag_and_state_lifecycle() {
     client.withdraw_lock(&user, &lock_id_1);
 
     // Verify withdrawn flag and amount state after withdraw_lock
-    let lock_1_after = client.get_lock(&user, &lock_id_1).expect("Lock 1 should still exist");
-    assert!(lock_1_after.withdrawn, "Withdrawn lock must have withdrawn set to true");
-    assert_eq!(lock_1_after.amount, 0, "Withdrawn lock must have amount set to 0");
+    let lock_1_after = client
+        .get_lock(&user, &lock_id_1)
+        .expect("Lock 1 should still exist");
+    assert!(
+        lock_1_after.withdrawn,
+        "Withdrawn lock must have withdrawn set to true"
+    );
+    assert_eq!(
+        lock_1_after.amount, 0,
+        "Withdrawn lock must have amount set to 0"
+    );
 
-    // Withdraw lock 2 via standard withdraw (which consumes the lock)
-    client.withdraw(&user, &1000); // Consumes remaining 1000 deposited + lock 2 (600)
+    // Withdraw remaining deposited balance (1000) + lock 2 (600) via standard withdraw
+    client.withdraw(&user, &1600); // Consumes 1000 deposited + lock 2 (600)
 
     // Verify withdrawn flag and amount state after standard withdraw consumption
-    let lock_2_after = client.get_lock(&user, &lock_id_2).expect("Lock 2 should still exist");
-    assert!(lock_2_after.withdrawn, "Consumed lock must have withdrawn set to true");
-    assert_eq!(lock_2_after.amount, 0, "Consumed lock must have amount set to 0");
+    let lock_2_after = client
+        .get_lock(&user, &lock_id_2)
+        .expect("Lock 2 should still exist");
+    assert!(
+        lock_2_after.withdrawn,
+        "Consumed lock must have withdrawn set to true"
+    );
+    assert_eq!(
+        lock_2_after.amount, 0,
+        "Consumed lock must have amount set to 0"
+    );
 }

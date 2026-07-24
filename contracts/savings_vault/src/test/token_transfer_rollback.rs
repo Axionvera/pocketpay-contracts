@@ -42,7 +42,14 @@ fn sac_setup(env: &Env) -> (Address, token::Client, token::StellarAssetClient) {
 
 /// Deploy and init the vault with a SAC token, returning everything
 /// needed for deposit/withdraw tests.
-fn vault_with_sac(env: &Env) -> (Address, SavingsVaultClient, token::Client, token::StellarAssetClient) {
+fn vault_with_sac(
+    env: &Env,
+) -> (
+    Address,
+    SavingsVaultClient,
+    token::Client,
+    token::StellarAssetClient,
+) {
     let contract_id = env.register(SavingsVault, ());
     let client = SavingsVaultClient::new(env, &contract_id);
     let admin = Address::generate(env);
@@ -89,8 +96,14 @@ fn test_failed_deposit_insufficient_token_balance() {
 
     // State must be unchanged
     let (bal_after, locked_after, events_after) = snapshot(&env, &client, &user);
-    assert_eq!(bal_after, bal_before, "balance must not change on failed deposit");
-    assert_eq!(locked_after, locked_before, "locked balance must not change on failed deposit");
+    assert_eq!(
+        bal_after, bal_before,
+        "balance must not change on failed deposit"
+    );
+    assert_eq!(
+        locked_after, locked_before,
+        "locked balance must not change on failed deposit"
+    );
     assert_eq!(
         events_after, events_before,
         "no new events must be emitted on failed deposit"
@@ -109,7 +122,10 @@ fn test_failed_deposit_zero_token_balance() {
     let (bal_before, locked_before, events_before) = snapshot(&env, &client, &user);
 
     let result = client.try_deposit(&user, &100);
-    assert!(result.is_err(), "deposit must fail when user has zero token balance");
+    assert!(
+        result.is_err(),
+        "deposit must fail when user has zero token balance"
+    );
 
     let (bal_after, locked_after, events_after) = snapshot(&env, &client, &user);
     assert_eq!(bal_after, bal_before);
@@ -141,9 +157,18 @@ fn test_failed_deposit_state_rollback_with_existing_balance() {
     assert!(result.is_err(), "deposit exceeding SAC balance must fail");
 
     let (bal_after, locked_after, events_after) = snapshot(&env, &client, &user);
-    assert_eq!(bal_after, bal_before, "available balance unchanged after failed deposit");
-    assert_eq!(locked_after, locked_before, "locked balance unchanged after failed deposit");
-    assert_eq!(events_after, events_before, "no events emitted on failed deposit");
+    assert_eq!(
+        bal_after, bal_before,
+        "available balance unchanged after failed deposit"
+    );
+    assert_eq!(
+        locked_after, locked_before,
+        "locked balance unchanged after failed deposit"
+    );
+    assert_eq!(
+        events_after, events_before,
+        "no events emitted on failed deposit"
+    );
 }
 
 // ────────────────────────────────────────────────────────────
@@ -167,7 +192,10 @@ fn test_failed_withdraw_state_unchanged() {
     assert!(result.is_err(), "withdraw exceeding balance must fail");
 
     let (bal_after, locked_after, events_after) = snapshot(&env, &client, &user);
-    assert_eq!(bal_after, bal_before, "balance must not change on failed withdrawal");
+    assert_eq!(
+        bal_after, bal_before,
+        "balance must not change on failed withdrawal"
+    );
     assert_eq!(locked_after, locked_before);
     assert_eq!(events_after, events_before);
 }
@@ -228,7 +256,10 @@ fn test_failed_withdraw_exceeds_total_with_matured_locks() {
 
     // Attempt to withdraw more than total — must fail
     let result = client.try_withdraw(&user, &401);
-    assert!(result.is_err(), "withdraw exceeding total available must fail");
+    assert!(
+        result.is_err(),
+        "withdraw exceeding total available must fail"
+    );
 
     let (bal_after, locked_after, events_after) = snapshot(&env, &client, &user);
     assert_eq!(bal_after, bal_before);
@@ -253,10 +284,16 @@ fn test_failed_withdraw_lock_state_unchanged() {
 
     // Attempt to withdraw non-existent lock
     let result = client.try_withdraw_lock(&user, &999);
-    assert!(result.is_err(), "withdraw_lock on non-existent lock must fail");
+    assert!(
+        result.is_err(),
+        "withdraw_lock on non-existent lock must fail"
+    );
 
     let (bal_after, locked_after, events_after) = snapshot(&env, &client, &user);
-    assert_eq!(bal_after, bal_before, "state unchanged after failed withdraw_lock");
+    assert_eq!(
+        bal_after, bal_before,
+        "state unchanged after failed withdraw_lock"
+    );
     assert_eq!(locked_after, locked_before);
     assert_eq!(events_after, events_before);
 }
@@ -278,15 +315,21 @@ fn test_multiple_failed_operations_no_cumulative_drift() {
     let (bal_before, locked_before, _events_before) = snapshot(&env, &client, &user);
 
     // Run a series of operations that all must fail
-    let _r1 = client.try_deposit(&user, &999);   // not enough SAC balance
-    let _r2 = client.try_withdraw(&user, &200);   // exceeds balance
+    let _r1 = client.try_deposit(&user, &999); // not enough SAC balance
+    let _r2 = client.try_withdraw(&user, &200); // exceeds balance
     let _r3 = client.try_deposit(&user, &999);
     let _r4 = client.try_withdraw(&user, &999);
     let _r5 = client.try_withdraw_lock(&user, &42);
 
     let (bal_after, locked_after, _events_after) = snapshot(&env, &client, &user);
-    assert_eq!(bal_after, bal_before, "balance unchanged after 5 failed ops");
-    assert_eq!(locked_after, locked_before, "locks unchanged after 5 failed ops");
+    assert_eq!(
+        bal_after, bal_before,
+        "balance unchanged after 5 failed ops"
+    );
+    assert_eq!(
+        locked_after, locked_before,
+        "locks unchanged after 5 failed ops"
+    );
 }
 
 #[test]
