@@ -211,6 +211,7 @@ stellar-pocketpay-contracts/
 ---
 ## Documentation
 
+- [Contract Upgradeability](docs/upgradeability.md) — Current upgrade posture (non-upgradeable), trust model, storage migration impact, and future options.
 - [Audit Preparation Checklist](docs/audit-preparation.md) — Checklist of documentation, tests, threat model, and deployment details required before any external security review or audit.
 - [Deployment Environments](docs/deployment-environments.md) — Network configuration for local, testnet, and future mainnet, including RPC URLs, identities, environment variables, and deployment commands.
 - [Contract Error Reference](docs/error-codes.md) - Current savings vault failure conditions and guidance for SDK and mobile callers.
