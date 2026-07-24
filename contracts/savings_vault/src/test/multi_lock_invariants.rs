@@ -522,3 +522,174 @@ fn multi_lock_scenario_matrix() {
         assert_lock_ids_unique(&client, &user);
     }
 }
+
+#[derive(Clone, Copy)]
+enum Operation {
+    Deposit { user_idx: usize, amount: i128 },
+    Lock { user_idx: usize, amount: i128, unlock_time: u64 },
+    Withdraw { user_idx: usize, amount: i128 },
+    WithdrawLock { user_idx: usize, lock_idx: usize },
+    TimeJump { timestamp: u64 },
+    FailDeposit { user_idx: usize, amount: i128 },
+    FailLock { user_idx: usize, amount: i128, unlock_time: u64 },
+    FailWithdraw { user_idx: usize, amount: i128 },
+    FailWithdrawLock { user_idx: usize, lock_idx: usize },
+}
+
+#[test]
+fn multi_lock_deterministic_sequence_invariants() {
+    let (env, contract_id, client) = setup();
+    let (env, _admin, client, _tc, token_admin) =
+        test_token(env, contract_id, client);
+
+    let user_a = Address::generate(&env);
+    let user_b = Address::generate(&env);
+    let user_c = Address::generate(&env);
+    let users = [&user_a, &user_b, &user_c];
+
+    token_admin.mint(&user_a, &100_000);
+    token_admin.mint(&user_b, &100_000);
+    token_admin.mint(&user_c, &100_000);
+
+    set_ledger_timestamp(&env, 1_000);
+
+    let mut expected_net_deposited = [0i128; 3];
+    let mut user_lock_ids: [StdVec<u64>; 3] = [alloc::vec![], alloc::vec![], alloc::vec![]];
+
+    let ops = [
+        Operation::Deposit { user_idx: 0, amount: 10_000 },
+        Operation::Deposit { user_idx: 1, amount: 20_000 },
+        Operation::Deposit { user_idx: 2, amount: 30_000 },
+
+        Operation::Lock { user_idx: 0, amount: 2_000, unlock_time: 3_000 },
+        Operation::Lock { user_idx: 0, amount: 3_000, unlock_time: 5_000 },
+        Operation::Lock { user_idx: 1, amount: 5_000, unlock_time: 4_000 },
+        Operation::Lock { user_idx: 1, amount: 5_000, unlock_time: 6_000 },
+        Operation::Lock { user_idx: 2, amount: 10_000, unlock_time: 5_000 },
+
+        Operation::FailLock { user_idx: 0, amount: 6_000, unlock_time: 10_000 },
+        Operation::FailLock { user_idx: 1, amount: 0, unlock_time: 10_000 },
+        Operation::FailLock { user_idx: 2, amount: 1_000, unlock_time: 500 },
+
+        Operation::Withdraw { user_idx: 0, amount: 2_000 },
+        Operation::Withdraw { user_idx: 1, amount: 5_000 },
+
+        Operation::FailWithdraw { user_idx: 0, amount: 3_001 },
+        Operation::FailWithdraw { user_idx: 2, amount: 20_001 },
+
+        Operation::TimeJump { timestamp: 3_500 },
+
+        Operation::Withdraw { user_idx: 0, amount: 4_000 },
+
+        Operation::TimeJump { timestamp: 4_500 },
+
+        Operation::WithdrawLock { user_idx: 1, lock_idx: 0 },
+
+        Operation::FailWithdrawLock { user_idx: 1, lock_idx: 0 },
+        Operation::FailWithdrawLock { user_idx: 0, lock_idx: 1 },
+
+        Operation::TimeJump { timestamp: 7_000 },
+
+        Operation::Withdraw { user_idx: 0, amount: 1_000 },
+        Operation::Withdraw { user_idx: 0, amount: 3_000 },
+        Operation::Withdraw { user_idx: 1, amount: 10_000 },
+        Operation::Withdraw { user_idx: 2, amount: 30_000 },
+    ];
+
+    for op in ops {
+        let mut balances_before = [(0i128, 0i128); 3];
+        for u in 0..3 {
+            balances_before[u] = snapshot(&client, users[u]);
+        }
+
+        match op {
+            Operation::Deposit { user_idx, amount } => {
+                client.deposit(users[user_idx], &amount);
+                expected_net_deposited[user_idx] += amount;
+            }
+            Operation::Lock { user_idx, amount, unlock_time } => {
+                let id = client.lock_funds(users[user_idx], &amount, &unlock_time);
+                user_lock_ids[user_idx].push(id);
+            }
+            Operation::Withdraw { user_idx, amount } => {
+                client.withdraw(users[user_idx], &amount);
+                expected_net_deposited[user_idx] -= amount;
+            }
+            Operation::WithdrawLock { user_idx, lock_idx } => {
+                let lock_id = user_lock_ids[user_idx][lock_idx];
+                
+                let locks = client.list_locks(users[user_idx], &0u32, &100u32);
+                let mut lock_amount = 0i128;
+                for i in 0..locks.len() {
+                    let l = locks.get(i).unwrap();
+                    if l.id == lock_id {
+                        lock_amount = l.amount;
+                        break;
+                    }
+                }
+                
+                client.withdraw_lock(users[user_idx], &lock_id);
+                expected_net_deposited[user_idx] -= lock_amount;
+            }
+            Operation::TimeJump { timestamp } => {
+                set_ledger_timestamp(&env, timestamp);
+            }
+            Operation::FailDeposit { user_idx, amount } => {
+                let res = client.try_deposit(users[user_idx], &amount);
+                assert!(res.is_err());
+            }
+            Operation::FailLock { user_idx, amount, unlock_time } => {
+                let res = client.try_lock_funds(users[user_idx], &amount, &unlock_time);
+                assert!(res.is_err());
+            }
+            Operation::FailWithdraw { user_idx, amount } => {
+                let res = client.try_withdraw(users[user_idx], &amount);
+                assert!(res.is_err());
+            }
+            Operation::FailWithdrawLock { user_idx, lock_idx } => {
+                let lock_id = user_lock_ids[user_idx][lock_idx];
+                let res = client.try_withdraw_lock(users[user_idx], &lock_id);
+                assert!(res.is_err());
+            }
+        }
+
+        for u in 0..3 {
+            let user = users[u];
+
+            assert_conserved(&client, user, expected_net_deposited[u]);
+            assert_lock_sum_consistency(&env, &client, user);
+            assert_lock_ids_unique(&client, user);
+        }
+
+        match op {
+            Operation::Deposit { user_idx, .. } |
+            Operation::Lock { user_idx, .. } |
+            Operation::Withdraw { user_idx, .. } |
+            Operation::WithdrawLock { user_idx, .. } |
+            Operation::FailDeposit { user_idx, .. } |
+            Operation::FailLock { user_idx, .. } |
+            Operation::FailWithdraw { user_idx, .. } |
+            Operation::FailWithdrawLock { user_idx, .. } => {
+                for u in 0..3 {
+                    if u != user_idx {
+                        let current_bal = snapshot(&client, users[u]);
+                        assert_eq!(current_bal, balances_before[u], "Cross-user isolation violation: user {} mutated", u);
+                    }
+                }
+            }
+            Operation::TimeJump { .. } => {}
+        }
+
+        match op {
+            Operation::FailDeposit { user_idx, .. } |
+            Operation::FailLock { user_idx, .. } |
+            Operation::FailWithdraw { user_idx, .. } |
+            Operation::FailWithdrawLock { user_idx, .. } => {
+                let current_bal = snapshot(&client, users[user_idx]);
+                assert_eq!(current_bal, balances_before[user_idx], "Failed operation mutated state for user {}", user_idx);
+            }
+            _ => {}
+        }
+    }
+}
+

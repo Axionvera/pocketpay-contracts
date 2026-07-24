@@ -14,6 +14,8 @@ See [Known Limitations](#known-limitations) for other current constraints.
 > **This contract is for educational and testnet use.** Review the following before any mainnet deployment.
 
 See the [Admin Role](docs/admin-role.md) document for details on what the `initialize(admin)` value records, what the admin can and cannot do today, and future admin design considerations.
+See the [Emergency Pause and Admin Misuse Threat Model](docs/admin-pause-threat-model.md) for malicious or compromised admin scenarios, withdrawal impact, recovery assumptions, mitigations, and residual risks.
+See the [Vault Fee Model](docs/vault-fee-model.md) document for clarification on fee assumptions, accounting implications, and user transparency requirements.
 
 ## Features
 
@@ -209,6 +211,7 @@ stellar-pocketpay-contracts/
             └── test.rs                 # Unit tests
 └── docs/
     ├── admin-role.md                   # Admin role documentation
+    ├── api-reference.md                # Function naming conventions
     ├── architecture.md                 # Architecture overview
     ├── contract-id-handoff.md          # Contract ID handoff guide
     ├── deployment-environments.md      # Deployment environment config
@@ -216,8 +219,10 @@ stellar-pocketpay-contracts/
     ├── events.md                       # Event schema documentation
     ├── state-machine.md                # Vault state machine documentation
     ├── pause-design.md                 # Pause / emergency stop research
+    ├── admin-pause-threat-model.md    # Emergency pause and admin misuse threat model
     ├── storage-migration.md            # Storage versioning and migration guide
     ├── storage-ttl.md                  # Storage TTL guide
+    ├── testing.md                      # Test naming conventions
     ├── troubleshooting.md              # Troubleshooting guide
     └── upgrade-strategy.md             # Upgrade strategy research
 ```
@@ -226,6 +231,8 @@ stellar-pocketpay-contracts/
 ## Documentation
 
 - [Audit Preparation Checklist](docs/audit-preparation.md) — Checklist of documentation, tests, threat model, and deployment details required before any external security review or audit.
+- [Emergency Pause and Admin Misuse Threat Model](docs/admin-pause-threat-model.md) — Threat scenarios, withdrawal impact, recovery assumptions, mitigations, limitations, and residual risks for admin-controlled pause mechanisms.
+- [Vault Fee Model](docs/vault-fee-model.md) — Clarification of no-fee assumptions, accounting implications, user transparency requirements, design rationale, and framework for potential future fee support.
 - [Storage Audit](docs/storage-audit.md) — Comprehensive details on the contract's storage layout, keys, mutating functions, and security invariants.
 - [Storage Migration Guide](docs/storage-migration.md) — Safe storage versioning and migration strategy for future contract upgrades.
 - [Deployment Environments](docs/deployment-environments.md) — Network configuration for local, testnet, and future mainnet, including RPC URLs, identities, environment variables, and deployment commands.
@@ -233,6 +240,7 @@ stellar-pocketpay-contracts/
 - [SDK Error Mapping Guide](docs/sdk-error-mapping-guide.md) — Maps contract errors to SDK handling expectations with user-facing and developer-facing examples.
 - [State Machine Documentation](docs/state-machine.md) — Contract lifecycle, user account states, valid and invalid transitions, and error states.
 - [Architecture Documentation](docs/architecture.md) – Overview of project structure, state management, storage, SDK integration, and future extension points.
+- [API Reference: Function Naming Conventions](docs/api-reference.md) — Naming convention for `SavingsVault`'s public functions (commands, single-value queries, collection queries, capability and state queries), with the full function list and category for each.
 - [SDK ↔ Contract Sequence Diagrams](docs/sdk-contract-sequence.md) – Mermaid sequence diagrams for balance query, deposit, withdraw, and error paths across mobile, SDK, Soroban RPC, and the vault contract.
 - [Event Schema Documentation](docs/events.md) – Overview of event names, topics, payload schemas, and JSON examples for vault actions.
 - [Vault Contract ID Handoff](docs/contract-id-handoff.md) - How to pass a deployed vault contract ID safely to SDK configuration and the mobile app.
@@ -244,6 +252,7 @@ stellar-pocketpay-contracts/
 - [Lock Read Helpers](docs/lock-read-helpers.md) — Response shapes and pagination for `get_lock` and `list_locks`.
 - [Test Coverage Summary](docs/test-coverage.md) — Maps initialization, deposit, withdrawal, and locking behaviours to the tests that cover them, plus known test gaps.
 - [Failure Mode Catalogue](docs/failure-mode-catalogue.md) — Comprehensive list of all contract failure modes with expected behavior and test coverage.
+- [Test Naming Conventions](docs/testing.md) — Naming pattern for unit tests under `contracts/savings_vault/src/test/`, with good/bad examples and coverage guidance.
 
 ---
 

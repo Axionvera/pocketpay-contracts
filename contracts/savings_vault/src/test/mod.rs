@@ -4,6 +4,7 @@
 //! on-chain interactions in an isolated environment.
 mod balance_conservation;
 mod initialization;
+mod independent_lock_creation;
 mod lock_read_helpers;
 mod maximum_amount_boundary;
 mod event_compatibility;
@@ -18,6 +19,7 @@ mod replay_protection;
 mod admin_invariant_guard;
 mod pause;
 mod token_transfer_rollback;
+mod storage_version;
 
 use super::*;
 use soroban_sdk::{testutils::Address as _, testutils::Events, Address};
