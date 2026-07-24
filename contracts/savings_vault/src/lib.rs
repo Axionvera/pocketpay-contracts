@@ -530,6 +530,10 @@ impl SavingsVault {
         }
 
         if amount > current_balance + total_matured {
+            // Provide specific error if immature locks exist
+            if total_locked > 0 {
+                panic!("Cannot withdraw: funds are locked until maturity");
+            }
             panic!("Insufficient balance");
         }
 
