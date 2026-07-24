@@ -13,20 +13,14 @@ use test_helpers::*;
 /// Helper: read the real admin address from contract instance storage.
 fn read_admin(env: &Env, contract_id: &Address) -> Address {
     env.as_contract(contract_id, || {
-        env.storage()
-            .instance()
-            .get(&DataKey::Admin)
-            .unwrap()
+        env.storage().instance().get(&DataKey::Admin).unwrap()
     })
 }
 
 /// Helper: read the token address from contract instance storage.
 fn read_token(env: &Env, contract_id: &Address) -> Address {
     env.as_contract(contract_id, || {
-        env.storage()
-            .instance()
-            .get(&DataKey::Token)
-            .unwrap()
+        env.storage().instance().get(&DataKey::Token).unwrap()
     })
 }
 
@@ -54,7 +48,10 @@ fn test_admin_transfer_preserves_user_available_balance() {
     client.transfer_admin(&original_admin, &new_admin);
 
     let balance_after = client.get_balance(&user);
-    assert_eq!(balance_after, 500, "available balance must not change after admin transfer");
+    assert_eq!(
+        balance_after, 500,
+        "available balance must not change after admin transfer"
+    );
 }
 
 /// After `transfer_admin`, the user's locked balance is identical.
@@ -79,7 +76,10 @@ fn test_admin_transfer_preserves_user_locked_balance() {
     client.transfer_admin(&original_admin, &new_admin);
 
     let locked_after = client.get_locked_balance(&user);
-    assert_eq!(locked_after, 400, "locked balance must not change after admin transfer");
+    assert_eq!(
+        locked_after, 400,
+        "locked balance must not change after admin transfer"
+    );
 }
 
 /// After `transfer_admin`, the user's lock entries are identical.
@@ -106,7 +106,11 @@ fn test_admin_transfer_preserves_user_lock_entries() {
     client.transfer_admin(&original_admin, &new_admin);
 
     let locks_after = client.list_locks(&user, &0u32, &10u32);
-    assert_eq!(locks_after.len(), 2, "lock count must not change after admin transfer");
+    assert_eq!(
+        locks_after.len(),
+        2,
+        "lock count must not change after admin transfer"
+    );
     assert_eq!(
         locks_after.get(0).unwrap(),
         locks_before.get(0).unwrap(),
@@ -199,9 +203,20 @@ fn test_admin_transfer_preserves_multi_user_balance_isolation() {
     let new_admin = new_user(&env);
     client.transfer_admin(&original_admin, &new_admin);
 
-    assert_eq!(client.get_balance(&alice), alice_before, "alice balance unchanged");
-    assert_eq!(client.get_balance(&bob), bob_before, "bob balance unchanged");
-    assert_ne!(alice_before, bob_before, "users have different balances (isolation preserved)");
+    assert_eq!(
+        client.get_balance(&alice),
+        alice_before,
+        "alice balance unchanged"
+    );
+    assert_eq!(
+        client.get_balance(&bob),
+        bob_before,
+        "bob balance unchanged"
+    );
+    assert_ne!(
+        alice_before, bob_before,
+        "users have different balances (isolation preserved)"
+    );
 }
 
 /// Transfer admin while both users have active locks.
@@ -277,7 +292,9 @@ fn test_transfer_admin_requires_auth() {
     let client = SavingsVaultClient::new(&env, &contract_id);
 
     let admin = Address::generate(&env);
-    let token = env.register_stellar_asset_contract_v2(admin.clone()).address();
+    let token = env
+        .register_stellar_asset_contract_v2(admin.clone())
+        .address();
 
     client.mock_all_auths().initialize(&admin, &token);
 
@@ -631,7 +648,11 @@ fn test_user_can_withdraw_lock_after_admin_transfer() {
 
     assert_eq!(client.get_balance(&user), 500);
     assert_eq!(client.get_locked_balance(&user), 0);
-    assert_eq!(client.list_locks(&user, &0u32, &10u32).len(), 0);
+    // Lock remains in storage (audit trail) but is marked withdrawn with zero amount
+    let locks = client.list_locks(&user, &0u32, &10u32);
+    assert_eq!(locks.len(), 1);
+    assert_eq!(locks.get(0).unwrap().withdrawn, true);
+    assert_eq!(locks.get(0).unwrap().amount, 0);
 }
 
 // =========================================================================
@@ -695,8 +716,14 @@ fn test_admin_transfer_does_not_move_real_tokens() {
     let user_token_after = token_client.balance(&user);
     let vault_token_after = token_client.balance(&contract_id);
 
-    assert_eq!(user_token_before, user_token_after, "user token balance unchanged");
-    assert_eq!(vault_token_before, vault_token_after, "vault token balance unchanged");
+    assert_eq!(
+        user_token_before, user_token_after,
+        "user token balance unchanged"
+    );
+    assert_eq!(
+        vault_token_before, vault_token_after,
+        "vault token balance unchanged"
+    );
 }
 
 /// Admin transfer event is emitted correctly.
@@ -754,10 +781,21 @@ fn test_admin_role_does_not_bypass_lock_rules_for_user() {
     assert!(!client.can_withdraw(&user));
 
     let result = client.try_withdraw(&user, &3_000);
-    assert!(result.is_err(), "withdrawal of locked funds must still fail after admin transfer");
+    assert!(
+        result.is_err(),
+        "withdrawal of locked funds must still fail after admin transfer"
+    );
 
-    assert_eq!(client.get_balance(&user), 2_000, "available balance unchanged");
-    assert_eq!(client.get_locked_balance(&user), 3_000, "locked balance unchanged");
+    assert_eq!(
+        client.get_balance(&user),
+        2_000,
+        "available balance unchanged"
+    );
+    assert_eq!(
+        client.get_locked_balance(&user),
+        3_000,
+        "locked balance unchanged"
+    );
 }
 
 /// Admin transfer does not affect the user's NextLockId counter.
@@ -783,5 +821,8 @@ fn test_admin_transfer_preserves_lock_id_counter() {
     client.transfer_admin(&original_admin, &new_admin);
 
     let lock_id_3 = client.lock_funds(&user, &500, &5_000);
-    assert_eq!(lock_id_3, 3, "lock ID counter must not reset after admin transfer");
+    assert_eq!(
+        lock_id_3, 3,
+        "lock ID counter must not reset after admin transfer"
+    );
 }

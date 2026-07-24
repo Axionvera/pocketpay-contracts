@@ -2,25 +2,25 @@
 //!
 //! These tests use the Soroban SDK test utilities to simulate
 //! on-chain interactions in an isolated environment.
+mod admin_invariant_guard;
 mod balance_conservation;
-mod initialization;
+mod event_compatibility;
 mod independent_lock_creation;
+mod initialization;
 mod lock_read_helpers;
 mod maximum_amount_boundary;
-mod event_compatibility;
 mod multi_lock_invariants;
-mod property_vault_accounting;
-mod property_fee_invariants;
-mod test_helpers;
-mod unauthorized_access;
-mod zero_duration_lock;
-mod withdraw_lock;
-mod replay_protection;
-mod admin_invariant_guard;
 mod pause;
-mod token_transfer_rollback;
+mod property_fee_invariants;
+mod property_vault_accounting;
+mod replay_protection;
 mod storage_version;
+mod test_helpers;
 mod token_backed_withdrawals;
+mod token_transfer_rollback;
+mod unauthorized_access;
+mod withdraw_lock;
+mod zero_duration_lock;
 
 use super::*;
 use soroban_sdk::{testutils::Address as _, testutils::Events, Address};
@@ -538,7 +538,6 @@ fn test_sequential_partial_withdrawals_with_multiple_locks() {
     assert_eq!(client.get_locked_balance(&user), 300);
     assert_eq!(token_client.balance(&user), 1_500);
 }
-
 
 // =========================================================================
 // Balance Query Tests
@@ -1126,12 +1125,15 @@ fn balance_isolation_between_users_lock() {
 fn test_get_admin() {
     let env = test_env();
     let (contract_id, client) = init_contract(&env);
-    
+
     // Get admin from contract storage manually
     let admin = env.as_contract(&contract_id, || {
-        env.storage().instance().get(&super::DataKey::Admin).unwrap()
+        env.storage()
+            .instance()
+            .get(&super::DataKey::Admin)
+            .unwrap()
     });
-    
+
     assert_eq!(client.get_admin(), admin);
 }
 
@@ -1141,7 +1143,7 @@ fn test_get_admin_before_initialization_panics() {
     let env = Env::default();
     let contract_id = env.register(super::SavingsVault, ());
     let client = super::SavingsVaultClient::new(&env, &contract_id);
-    
+
     client.get_admin();
 }
 
@@ -1149,15 +1151,18 @@ fn test_get_admin_before_initialization_panics() {
 fn test_transfer_admin() {
     let env = test_env();
     let (contract_id, client) = init_contract(&env);
-    
+
     let original_admin = env.as_contract(&contract_id, || {
-        env.storage().instance().get(&super::DataKey::Admin).unwrap()
+        env.storage()
+            .instance()
+            .get(&super::DataKey::Admin)
+            .unwrap()
     });
-    
+
     let new_admin = new_user(&env);
-    
+
     client.transfer_admin(&original_admin, &new_admin);
-    
+
     assert_eq!(client.get_admin(), new_admin);
 }
 
@@ -1166,10 +1171,10 @@ fn test_transfer_admin() {
 fn test_transfer_admin_not_authorized_panics() {
     let env = test_env();
     let (contract_id, client) = init_contract(&env);
-    
+
     let random_user = new_user(&env);
     let new_admin = new_user(&env);
-    
+
     client.transfer_admin(&random_user, &new_admin);
 }
 
@@ -1179,10 +1184,10 @@ fn test_transfer_admin_before_initialization_panics() {
     let env = Env::default();
     let contract_id = env.register(super::SavingsVault, ());
     let client = super::SavingsVaultClient::new(&env, &contract_id);
-    
+
     let random_user = new_user(&env);
     let new_admin = new_user(&env);
-    
+
     client.transfer_admin(&random_user, &new_admin);
 }
 
@@ -1193,12 +1198,14 @@ fn test_transfer_admin_requires_auth() {
     let contract_id = env.register(super::SavingsVault, ());
     let client = super::SavingsVaultClient::new(&env, &contract_id);
     let admin = new_user(&env);
-    let token = env.register_stellar_asset_contract_v2(admin.clone()).address();
-    
+    let token = env
+        .register_stellar_asset_contract_v2(admin.clone())
+        .address();
+
     client.mock_all_auths().initialize(&admin, &token);
-    
+
     let new_admin = new_user(&env);
-    
+
     // Call without auth mocking
     client.transfer_admin(&admin, &new_admin);
 }
@@ -1271,7 +1278,10 @@ fn test_withdraw_emits_event() {
     let (amount, new_balance, new_locked): (i128, i128, i128) = data.try_into_val(&env).unwrap();
     assert_eq!(topic0, symbol_short!("withdraw"));
     assert_eq!(topic1, user);
-    assert_eq!((amount, new_balance, new_locked), (50_i128, 50_i128, 0_i128));
+    assert_eq!(
+        (amount, new_balance, new_locked),
+        (50_i128, 50_i128, 0_i128)
+    );
 }
 
 #[test]

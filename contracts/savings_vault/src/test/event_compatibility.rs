@@ -50,10 +50,7 @@ fn stored_admin(env: &Env, contract_id: &Address) -> Address {
 }
 
 /// Returns every event whose first topic equals the given symbol.
-fn events_with_topic0(
-    env: &Env,
-    expected: &Symbol,
-) -> std::vec::Vec<(Address, Vec<Val>, Val)> {
+fn events_with_topic0(env: &Env, expected: &Symbol) -> std::vec::Vec<(Address, Vec<Val>, Val)> {
     let all = env.events().all();
     let mut out = std::vec::Vec::new();
     for i in 0..all.len() {
@@ -173,8 +170,7 @@ fn test_withdraw_event_schema() {
     let topic1_user: Address = topics.get(1).unwrap().try_into_val(&env).unwrap();
     assert_eq!(topic1_user, user);
 
-    let (amount, new_balance, new_locked): (i128, i128, i128) =
-        data.try_into_val(&env).unwrap();
+    let (amount, new_balance, new_locked): (i128, i128, i128) = data.try_into_val(&env).unwrap();
     assert_eq!(amount, 200);
     assert_eq!(new_balance, 300);
     assert_eq!(new_locked, 0);
@@ -196,8 +192,7 @@ fn test_withdraw_event_carries_locked_balance() {
 
     let matches = events_with_topic0(&env, &symbol_short!("withdraw"));
     let (_c, _t, d) = matches.last().unwrap();
-    let (amount, new_balance, new_locked): (i128, i128, i128) =
-        d.try_into_val(&env).unwrap();
+    let (amount, new_balance, new_locked): (i128, i128, i128) = d.try_into_val(&env).unwrap();
     assert_eq!(amount, 100);
     assert_eq!(new_balance, 200);
     assert_eq!(new_locked, 200);
@@ -356,5 +351,8 @@ fn test_reverted_deposit_emits_no_event() {
     let before = events_with_topic0(&env, &symbol_short!("deposit")).len();
     let _ = client.try_deposit(&user, &100);
     let after = events_with_topic0(&env, &symbol_short!("deposit")).len();
-    assert_eq!(before, after, "failed deposit must not emit a deposit event");
+    assert_eq!(
+        before, after,
+        "failed deposit must not emit a deposit event"
+    );
 }

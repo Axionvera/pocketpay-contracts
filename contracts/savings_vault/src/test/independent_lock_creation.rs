@@ -13,7 +13,6 @@ use soroban_sdk::{testutils::Address as _, testutils::Ledger, Address};
 
 use super::test_helpers::*;
 
-
 // 1. Independent lock records are created
 
 #[test]

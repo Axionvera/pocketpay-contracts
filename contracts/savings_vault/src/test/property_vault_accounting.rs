@@ -90,7 +90,10 @@ fn op_sequence_strategy() -> impl Strategy<Value = StdVec<Op>> {
             deposit_strategy().prop_map(Op::Deposit),
             withdraw_strategy().prop_map(Op::Withdraw),
             (lock_amount_strategy(), unlock_time_strategy()).prop_map(|(amount, unlock_time)| {
-                Op::Lock { amount, unlock_time }
+                Op::Lock {
+                    amount,
+                    unlock_time,
+                }
             }),
             time_strategy().prop_map(Op::SetTime),
         ],
@@ -113,16 +116,27 @@ fn new_fuzz_fixture() -> FuzzFixture {
     let (env, contract_id, client) = setup();
     let (env, _admin, client, _token_client, token_admin) = test_token(env, contract_id, client);
     let user = Address::generate(&env);
-    token_admin.mint(&user, &1_000_000_000);
+    token_admin.mint(&user, &i128::MAX);
     set_ledger_timestamp(&env, 1_000);
-    FuzzFixture { env, client, user, expected_total: 0 }
+    FuzzFixture {
+        env,
+        client,
+        user,
+        expected_total: 0,
+    }
 }
 
 fn assert_conserved(client: &SavingsVaultClient, user: &Address, expected: i128) {
     let available = client.get_balance(user);
     let locked = client.get_locked_balance(user);
-    assert!(available >= 0, "available balance must never be negative (got {available})");
-    assert!(locked >= 0, "locked balance must never be negative (got {locked})");
+    assert!(
+        available >= 0,
+        "available balance must never be negative (got {available})"
+    );
+    assert!(
+        locked >= 0,
+        "locked balance must never be negative (got {locked})"
+    );
     assert_eq!(
         available + locked,
         expected,
@@ -131,14 +145,20 @@ fn assert_conserved(client: &SavingsVaultClient, user: &Address, expected: i128)
 }
 
 fn run_op(f: &mut FuzzFixture, op: &Op) {
-    let before = (f.client.get_balance(&f.user), f.client.get_locked_balance(&f.user));
+    let before = (
+        f.client.get_balance(&f.user),
+        f.client.get_locked_balance(&f.user),
+    );
     match op {
         Op::Deposit(amount) => {
             if *amount <= 0 {
                 let res = f.client.try_deposit(&f.user, amount);
                 assert!(res.is_err(), "deposit({amount}) should fail");
                 assert_eq!(
-                    (f.client.get_balance(&f.user), f.client.get_locked_balance(&f.user)),
+                    (
+                        f.client.get_balance(&f.user),
+                        f.client.get_locked_balance(&f.user)
+                    ),
                     before,
                     "failed deposit must not mutate balances"
                 );
@@ -153,7 +173,10 @@ fn run_op(f: &mut FuzzFixture, op: &Op) {
                 let res = f.client.try_withdraw(&f.user, amount);
                 assert!(res.is_err(), "withdraw({amount}) should fail");
                 assert_eq!(
-                    (f.client.get_balance(&f.user), f.client.get_locked_balance(&f.user)),
+                    (
+                        f.client.get_balance(&f.user),
+                        f.client.get_locked_balance(&f.user)
+                    ),
                     before,
                     "failed withdraw must not mutate balances"
                 );
@@ -162,14 +185,23 @@ fn run_op(f: &mut FuzzFixture, op: &Op) {
                 f.expected_total -= amount;
             }
         }
-        Op::Lock { amount, unlock_time } => {
+        Op::Lock {
+            amount,
+            unlock_time,
+        } => {
             let current_time = f.env.ledger().timestamp();
             let available = f.client.get_balance(&f.user);
             if *amount <= 0 || *amount > available || *unlock_time <= current_time {
                 let res = f.client.try_lock_funds(&f.user, amount, unlock_time);
-                assert!(res.is_err(), "lock({amount} until {unlock_time}) should fail");
+                assert!(
+                    res.is_err(),
+                    "lock({amount} until {unlock_time}) should fail"
+                );
                 assert_eq!(
-                    (f.client.get_balance(&f.user), f.client.get_locked_balance(&f.user)),
+                    (
+                        f.client.get_balance(&f.user),
+                        f.client.get_locked_balance(&f.user)
+                    ),
                     before,
                     "failed lock must not mutate balances"
                 );
@@ -203,12 +235,18 @@ fn new_multi_fuzz_fixture(count: usize) -> MultiFuzzFixture {
     let mut expected_totals = Vec::new(&env);
     for _ in 0..count {
         let user = Address::generate(&env);
-        token_admin.mint(&user, &1_000_000_000);
+        token_admin.mint(&user, &i128::MAX);
         users.push_back(user);
         expected_totals.push_back(0);
     }
     set_ledger_timestamp(&env, 1_000);
-    MultiFuzzFixture { env, client, token_admin, users, expected_totals }
+    MultiFuzzFixture {
+        env,
+        client,
+        token_admin,
+        users,
+        expected_totals,
+    }
 }
 
 fn assert_all_conserved(f: &MultiFuzzFixture) {
@@ -241,9 +279,8 @@ struct UserOp(usize, Op);
 fn multi_op_strategy(user_count: usize) -> impl Strategy<Value = StdVec<UserOp>> {
     // Generate individual (user_index, Op) pairs; the caller flattens them into a sequence
     let idx_strategy = 0..user_count;
-    (idx_strategy, op_sequence_strategy()).prop_map(|(idx, ops)| {
-        ops.into_iter().map(|op| UserOp(idx, op)).collect()
-    })
+    (idx_strategy, op_sequence_strategy())
+        .prop_map(|(idx, ops)| ops.into_iter().map(|op| UserOp(idx, op)).collect())
 }
 
 fn prop_cross_user_isolation_inner(ops: StdVec<UserOp>) {
@@ -267,7 +304,10 @@ fn prop_cross_user_isolation_inner(ops: StdVec<UserOp>) {
                     f.expected_totals.set(*idx as u32, cur - amount);
                 }
             }
-            Op::Lock { amount, unlock_time } => {
+            Op::Lock {
+                amount,
+                unlock_time,
+            } => {
                 let ct = f.env.ledger().timestamp();
                 let avail = f.client.get_balance(&user);
                 if *amount > 0 && *amount <= avail && *unlock_time > ct {
@@ -316,7 +356,10 @@ fn prop_global_token_custody_inner(ops: StdVec<UserOp>) {
                     f.expected_totals.set(*idx as u32, cur - amount);
                 }
             }
-            Op::Lock { amount, unlock_time } => {
+            Op::Lock {
+                amount,
+                unlock_time,
+            } => {
                 let ct = f.env.ledger().timestamp();
                 let avail = f.client.get_balance(&user);
                 if *amount > 0 && *amount <= avail && *unlock_time > ct {
