@@ -168,7 +168,11 @@ soroban contract invoke \
   --network testnet \
   -- \
   initialize \
-  --admin deployer
+  --admin deployer \
+  --token YOUR_SAC_TOKEN_ADDRESS
+```
+
+Replace `YOUR_SAC_TOKEN_ADDRESS` with the Stellar Asset Contract address the vault should custody.
 ```
 
 ### 5. Invoke Functions
@@ -230,7 +234,8 @@ stellar-pocketpay-contracts/
 ---
 ## Documentation
 
-- [Audit Preparation Checklist](docs/audit-preparation.md) — Checklist of documentation, tests, threat model, and deployment details required before any external security review or audit.
+- [Audit Readiness Review](docs/audit-readiness.md) — Structured pre-audit assessment: blockers, high-risk areas, missing tests, risky assumptions, and unresolved design questions. **Not a claim of production readiness.**
+- [Audit Preparation Checklist](docs/audit-preparation.md) — Supplementary checklist of documentation, tests, threat model, and deployment details. Verify against the audit readiness review for current accuracy.
 - [Emergency Pause and Admin Misuse Threat Model](docs/admin-pause-threat-model.md) — Threat scenarios, withdrawal impact, recovery assumptions, mitigations, limitations, and residual risks for admin-controlled pause mechanisms.
 - [Vault Fee Model](docs/vault-fee-model.md) — Clarification of no-fee assumptions, accounting implications, user transparency requirements, design rationale, and framework for potential future fee support.
 - [Storage Audit](docs/storage-audit.md) — Comprehensive details on the contract's storage layout, keys, mutating functions, and security invariants.
@@ -285,21 +290,13 @@ stellar-pocketpay-contracts/
 - Admin and initialization flags use **instance** storage (tied to contract lifetime).
 
 ### Known Limitations
-- **No admin recovery**: There is no mechanism for the admin to recover or migrate funds.
+- **No admin recovery**: There is no mechanism for the admin to recover or migrate user funds.
 - **No upgrade mechanism**: The contract does not implement `upgrade()`. See
   [docs/upgrade-strategy.md](docs/upgrade-strategy.md) for research into possible upgrade paths.
-- **No on-chain events**: No events are emitted for state changes (deposit, withdraw, lock, unlock). See [docs/events.md](docs/events.md) for planned event schemas.
-- **No custom error enum**: Contract uses panic strings instead of a structured error enum for off-chain callers.
-
-- **No custom error enum**: Contract uses panic strings instead of a structured error enum for off-chain callers.
-
-- **No custom error enum**: Contract uses panic strings instead of a structured error enum for off-chain callers.
-
-- **No custom error enum**: Contract uses panic strings instead of a structured error enum for off-chain callers.
-
-- **No custom error enum**: Contract uses panic strings instead of a structured error enum for off-chain callers.
-
-- **No custom error enum**: Contract uses panic strings instead of a structured error enum for off-chain callers.
+- **No custom error enum**: Contract uses panic strings instead of a structured `#[contracterror]` enum for off-chain callers. See [docs/error-codes.md](docs/error-codes.md).
+- **No external audit**: No third-party security audit report is published for this repository. See [docs/audit-readiness.md](docs/audit-readiness.md).
+- **Single-key admin**: Pause and admin transfer rely on one address; multi-sig is recommended before any mainnet use.
+- **Operational TTL dependency**: Persistent storage entries must be extended manually; see [docs/storage-ttl.md](docs/storage-ttl.md).
 
 ---
 

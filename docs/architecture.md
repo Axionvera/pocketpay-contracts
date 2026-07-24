@@ -74,7 +74,7 @@ The contract depends on the **Soroban SDK** (part of the Stellar ecosystem) for:
 - **Storage APIs** – `storage::set`, `storage::get`, and `storage::has` for deterministic on‑chain state.
 - **Testing utilities** – `testutils` to simulate ledger operations in unit tests.
 
-Future enhancements may integrate the **Stellar Asset Contract (SAC)** to enable real token transfers, moving beyond internal balance bookkeeping.
+The contract integrates with the **Stellar Asset Contract (SAC)** for real token custody on deposit, withdraw, and `withdraw_lock`. Internal persistent storage reconciles 1:1 with tokens held at the contract address.
 
 ---
 
@@ -82,8 +82,8 @@ Future enhancements may integrate the **Stellar Asset Contract (SAC)** to enable
 
 The current contract is a **stand‑alone savings vault**. To evolve into a full‑featured wallet SDK, consider the following extension points:
 
-1. **Token Transfer Layer** – Call the SAC `transfer` function to move XLM or custom assets on‑chain.
-2. **Admin Recovery & Upgrade** – Implement admin‑controlled migration or upgrade mechanisms using Soroban `upgrade` primitives.
+1. **Admin Recovery & Upgrade** – Implement admin‑controlled migration or upgrade mechanisms using Soroban `upgrade` primitives.
+2. **Structured Errors** – Replace panic strings with a `#[contracterror]` enum for SDK/mobile callers.
 3. **Off‑chain SDKs** – Provide JavaScript/TypeScript client libraries that abstract contract calls, handling address resolution, transaction building, and signing.
 
 These boundaries maintain a clean separation between **on‑chain logic** (this repository) and **off‑chain SDKs** that developers will consume.

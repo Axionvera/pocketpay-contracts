@@ -3,6 +3,8 @@
 This document provides a comprehensive security review and audit preparation checklist tailored specifically to the Savings Vault smart contract architecture. It identifies security goals, invariants, storage layouts, authorization boundaries, events, error handling, known limitations, and test coverage/gaps that must be addressed prior to any production-like use or external third-party audit.
 
 > [!IMPORTANT]
+> **Start with [Audit Readiness Review](audit-readiness.md)** for the current structured assessment (blockers, high-risk areas, missing tests, unresolved questions). Sections below may be stale relative to the token-backed implementation — verify against `contracts/savings_vault/src/lib.rs` and the readiness review before an external audit.
+>
 > This checklist documents the required state for audit readiness. Many items highlight discrepancies between the current implementation and production-grade security standards.
 
 ---
