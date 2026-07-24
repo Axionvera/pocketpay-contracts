@@ -46,7 +46,7 @@ pub struct LockEntry {
 /// # Variants
 /// * `Admin` - The address of the contract admin (set once during initialization)
 /// * `Balance(Address)` - Available (unlocked) balance for a specific user
-/// * `Locks(Address)` - Vector of lock entries for a specific user
+/// * `Lock(Address, u64)` - An individual time-lock entry record for a user and lock ID
 /// * `NextLockId(Address)` - Counter for generating unique lock IDs per user
 /// * `Initialized` - Boolean flag indicating contract initialization status
 /// * `Token` - The token contract address used for real token transfers
@@ -57,7 +57,7 @@ pub struct LockEntry {
 pub enum DataKey {
     Admin,
     Balance(Address),
-    Locks(Address),
+    Lock(Address, u64),
     NextLockId(Address),
     Initialized,
     Token,
@@ -125,10 +125,23 @@ impl SavingsVault {
     }
 
     fn load_locks(env: &Env, user: Address) -> Vec<LockEntry> {
-        env.storage()
+        let next_lock_id: u64 = env
+            .storage()
             .persistent()
-            .get(&DataKey::Locks(user))
-            .unwrap_or_else(|| Vec::new(env))
+            .get(&DataKey::NextLockId(user.clone()))
+            .unwrap_or(1);
+
+        let mut locks = Vec::new(env);
+        for i in 1..next_lock_id {
+            if let Some(lock) = env
+                .storage()
+                .persistent()
+                .get::<_, LockEntry>(&DataKey::Lock(user.clone(), i))
+            {
+                locks.push_back(lock);
+            }
+        }
+        locks
     }
 
     /// Assert the contract is not paused (or that the pause has expired).
@@ -532,15 +545,11 @@ impl SavingsVault {
             }
         }
 
-        let new_locked: i128 = locks
-            .iter()
-            .filter(|lock| current_time < lock.unlock_time)
-            .map(|lock| lock.amount)
-            .sum();
-
         env.storage()
             .persistent()
             .set(&DataKey::Balance(user.clone()), &current_balance);
+
+        let new_locked = Self::get_locked_balance(env.clone(), user.clone());
 
         let topics = (symbol_short!("withdraw"), user.clone());
         let payload = (amount, current_balance, new_locked);
@@ -565,12 +574,12 @@ impl SavingsVault {
 
         user.require_auth();
 
-        let mut locks = Self::load_locks(&env, user.clone());
-
-        let lock_index = locks.iter().position(|lock| lock.id == lock_id);
-
-        let index = match lock_index {
-            Some(i) => i,
+        let mut lock = match env
+            .storage()
+            .persistent()
+            .get::<_, LockEntry>(&DataKey::Lock(user.clone(), lock_id))
+        {
+            Some(l) => l,
             None => panic!("Lock not found"),
         };
 
@@ -589,7 +598,7 @@ impl SavingsVault {
 
         token_client.transfer(&contract_address, &user, &lock.amount);
 
-        locks.remove(index as u32);
+        lock.withdrawn = true;
 
         env.storage()
             .persistent()
@@ -687,12 +696,6 @@ impl SavingsVault {
             .persistent()
             .set(&DataKey::NextLockId(user.clone()), &(next_id + 1));
 
-        let mut locks: Vec<LockEntry> = env
-            .storage()
-            .persistent()
-            .get(&DataKey::Locks(user.clone()))
-            .unwrap_or_else(|| Vec::new(&env));
-
         let new_lock = LockEntry {
             id: next_id,
             owner: user.clone(),
@@ -712,7 +715,7 @@ impl SavingsVault {
             .persistent()
             .set(&DataKey::Balance(user.clone()), &current_balance);
 
-        let new_locked: i128 = locks.iter().map(|l| l.amount).sum();
+        let new_locked = Self::get_locked_balance(env.clone(), user.clone());
 
         let topics = (symbol_short!("lock"), user.clone());
         let payload = (amount, unlock_time, current_balance, new_locked);
