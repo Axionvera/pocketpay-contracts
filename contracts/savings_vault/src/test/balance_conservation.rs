@@ -13,6 +13,7 @@ use alloc::vec::Vec as StdVec;
 use super::test_helpers::*;
 use super::*;
 use soroban_sdk::{testutils::Address as _, Address, Env};
+use ContractError;
 
 // ---------------------------------------------------------------------------
 // Fixture

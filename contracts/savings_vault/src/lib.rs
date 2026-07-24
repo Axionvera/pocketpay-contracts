@@ -482,6 +482,7 @@ impl SavingsVault {
             amount,
             new_balance
         );
+        Ok(())
     }
 
     // -----------------------------------------------------------------------
@@ -589,6 +590,7 @@ impl SavingsVault {
             lock_id,
             withdrawn_amount
         );
+        Ok(())
     }
 
     // -----------------------------------------------------------------------
@@ -700,7 +702,7 @@ impl SavingsVault {
             next_id
         );
 
-        next_id
+        Ok(next_id)
     }
 
     /// Returns the sum of all lock amounts that have not been withdrawn yet
