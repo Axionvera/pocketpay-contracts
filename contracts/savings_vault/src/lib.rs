@@ -451,7 +451,7 @@ impl SavingsVault {
         user.require_auth();
 
         if amount <= 0 {
-            panic!("Deposit amount must be greater than zero");
+            return Err(ContractError::InvalidDepositAmount);
         }
 
         let token = env.storage().instance().get(&DataKey::Token).unwrap();
@@ -500,7 +500,7 @@ impl SavingsVault {
         user.require_auth();
 
         if amount <= 0 {
-            panic!("Withdrawal amount must be greater than zero");
+            return Err(ContractError::InvalidWithdrawAmount);
         }
 
         let mut current_balance: i128 = env
@@ -536,6 +536,7 @@ impl SavingsVault {
             amount,
             current_balance
         );
+        Ok(())
     }
 
     /// Withdraws a specific matured lock entry by its ID.
@@ -628,12 +629,12 @@ impl SavingsVault {
         user.require_auth();
 
         if amount <= 0 {
-            panic!("Lock amount must be greater than zero");
+            return Err(ContractError::InvalidLockAmount);
         }
 
         let current_time = env.ledger().timestamp();
         if unlock_time <= current_time {
-            panic!("Unlock time must be in the future");
+            return Err(ContractError::InvalidUnlockTime);
         }
 
         let mut current_balance: i128 = env
@@ -643,7 +644,7 @@ impl SavingsVault {
             .unwrap_or(0);
 
         if amount > current_balance {
-            panic!("Insufficient balance to lock");
+            return Err(ContractError::InsufficientBalanceToLock);
         }
 
         let next_id: u64 = env

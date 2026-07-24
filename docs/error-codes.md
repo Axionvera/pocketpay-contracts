@@ -212,4 +212,5 @@ All error codes defined in the `ContractError` enum are stable and backward comp
 
 ## SDK Integration
 
-Until then, callers should not invent numeric mappings for panic messages.
+For SDK mapping guidance and mobile UX recommendations, see
+[error-code-standard.md](./error-code-standard.md).

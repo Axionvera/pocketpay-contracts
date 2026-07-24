@@ -236,6 +236,7 @@ stellar-pocketpay-contracts/
 ---
 ## Documentation
 
+- [Contract Upgradeability](docs/upgradeability.md) — Current upgrade posture (non-upgradeable), trust model, storage migration impact, and future options.
 - [Audit Preparation Checklist](docs/audit-preparation.md) — Checklist of documentation, tests, threat model, and deployment details required before any external security review or audit.
 - [Emergency Pause and Admin Misuse Threat Model](docs/admin-pause-threat-model.md) — Threat scenarios, withdrawal impact, recovery assumptions, mitigations, limitations, and residual risks for admin-controlled pause mechanisms.
 - [Vault Fee Model](docs/vault-fee-model.md) — Clarification of no-fee assumptions, accounting implications, user transparency requirements, design rationale, and framework for potential future fee support.
