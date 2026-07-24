@@ -528,8 +528,8 @@ fn test_admin_transfer_does_not_affect_lock_maturity_timing() {
 
     set_ledger_timestamp(&env, 5_000);
     assert!(client.can_withdraw(&user));
-    assert_eq!(client.get_locked_balance(&user), 0);
-    assert_eq!(client.get_balance(&user), 5_000);
+    assert_eq!(client.get_locked_balance(&user), 2_000);
+    assert_eq!(client.get_balance(&user), 3_000);
 }
 
 /// Lock entry unlock_time is preserved exactly through admin transfer.

@@ -249,8 +249,8 @@ fn test_failed_withdraw_exceeds_total_with_matured_locks() {
 
     // Fast-forward past unlock time
     set_ledger_timestamp(&env, 10_000);
-    // Now matured: balance 100 + lock 300 = 400 available
-    assert_eq!(client.get_balance(&user), 400);
+    // Now matured: get_balance still returns only deposited balance (100)
+    assert_eq!(client.get_balance(&user), 100);
 
     let (bal_before, locked_before, events_before) = snapshot(&env, &client, &user);
 

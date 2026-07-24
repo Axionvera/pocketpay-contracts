@@ -509,8 +509,8 @@ fn test_sequential_partial_withdrawals_with_multiple_locks() {
     client.deposit(&user, &2_000);
 
     // Create two locks
-    client.lock_funds(&user, &500, &3_000);
-    client.lock_funds(&user, &300, &5_000);
+    let _lock_id_1 = client.lock_funds(&user, &500, &3_000);
+    let _lock_id_2 = client.lock_funds(&user, &300, &5_000);
 
     // Mixed state: available 1200, locked 800
     assert_eq!(client.get_balance(&user), 1_200);
@@ -528,15 +528,21 @@ fn test_sequential_partial_withdrawals_with_multiple_locks() {
 
     // Advance time so first lock matures at T=3000
     set_ledger_timestamp(&env, 3_000);
-    // Available balance is now 300 + 500 = 800, locked balance is 300
-    assert_eq!(client.get_balance(&user), 800);
-    assert_eq!(client.get_locked_balance(&user), 300);
+    // get_balance returns only deposited balance (300), not matured locks.
+    // get_locked_balance returns all non-withdrawn locks (matured + immature).
+    assert_eq!(client.get_balance(&user), 300);
+    assert_eq!(client.get_locked_balance(&user), 800);
 
-    // Third withdrawal consuming part of matured lock
-    client.withdraw(&user, &600);
-    assert_eq!(client.get_balance(&user), 200);
+    // Third withdrawal of the remaining deposited balance
+    client.withdraw(&user, &300);
+    assert_eq!(client.get_balance(&user), 0);
+    assert_eq!(client.get_locked_balance(&user), 800);
+
+    // Withdraw matured lock 1 via withdraw_lock
+    client.withdraw_lock(&user, &_lock_id_1);
+    assert_eq!(client.get_balance(&user), 0);
     assert_eq!(client.get_locked_balance(&user), 300);
-    assert_eq!(token_client.balance(&user), 1_500);
+    assert_eq!(token_client.balance(&user), 1_700);
 }
 
 // =========================================================================
@@ -626,17 +632,17 @@ fn test_repeated_lock_accumulates_balance_and_overwrites_unlock_time_later() {
     assert_eq!(client.get_balance(&user), 500);
     assert_eq!(client.get_locked_balance(&user), 500);
 
-    // At lock 1's unlock time: lock 1 matures (available), lock 2 still locked.
+    // At lock 1's unlock time: lock 1 matures but get_locked_balance includes it.
     set_ledger_timestamp(&env, 5_000);
     assert_eq!(client.can_withdraw(&user), true);
-    assert_eq!(client.get_locked_balance(&user), 200);
-    assert_eq!(client.get_balance(&user), 800); // 500 deposited + 300 matured
+    assert_eq!(client.get_locked_balance(&user), 500);
+    assert_eq!(client.get_balance(&user), 500);
 
-    // At lock 2's unlock time: both locks matured.
+    // At lock 2's unlock time: both locks matured but get_locked_balance includes them.
     set_ledger_timestamp(&env, 6_000);
     assert_eq!(client.can_withdraw(&user), true);
-    assert_eq!(client.get_locked_balance(&user), 0);
-    assert_eq!(client.get_balance(&user), 1_000);
+    assert_eq!(client.get_locked_balance(&user), 500);
+    assert_eq!(client.get_balance(&user), 500);
 }
 
 /// Two independent locks where the second unlock time is earlier.
@@ -665,14 +671,14 @@ fn test_repeated_lock_overwrites_unlock_time_with_earlier_value() {
     // Only the earlier lock (200) matures at T=5_000; 300 remains locked.
     set_ledger_timestamp(&env, 5_000);
     assert_eq!(client.can_withdraw(&user), true);
-    assert_eq!(client.get_locked_balance(&user), 300);
-    assert_eq!(client.get_balance(&user), 700); // 500 deposited + 200 matured
+    assert_eq!(client.get_locked_balance(&user), 500);
+    assert_eq!(client.get_balance(&user), 500);
 
     // Remaining lock matures at T=6_000.
     set_ledger_timestamp(&env, 6_000);
     assert_eq!(client.can_withdraw(&user), true);
-    assert_eq!(client.get_locked_balance(&user), 0);
-    assert_eq!(client.get_balance(&user), 1_000);
+    assert_eq!(client.get_locked_balance(&user), 500);
+    assert_eq!(client.get_balance(&user), 500);
 }
 
 /// Three independent locks: each matures on its own schedule.
@@ -696,14 +702,14 @@ fn test_repeated_lock_three_times_accumulates_and_keeps_last_unlock_time() {
     // At T=4_000 the first two locks have matured; the third is still locked.
     set_ledger_timestamp(&env, 4_000);
     assert_eq!(client.can_withdraw(&user), true);
-    assert_eq!(client.get_locked_balance(&user), 100);
-    assert_eq!(client.get_balance(&user), 900); // 700 deposited + 200 matured
+    assert_eq!(client.get_locked_balance(&user), 300);
+    assert_eq!(client.get_balance(&user), 700);
 
     // All three mature once the latest unlock time is reached.
     set_ledger_timestamp(&env, 7_000);
     assert_eq!(client.can_withdraw(&user), true);
-    assert_eq!(client.get_locked_balance(&user), 0);
-    assert_eq!(client.get_balance(&user), 1_000);
+    assert_eq!(client.get_locked_balance(&user), 300);
+    assert_eq!(client.get_balance(&user), 700);
 }
 
 #[test]
@@ -966,17 +972,17 @@ fn test_locked_balance_correct_before_at_and_after_unlock() {
     // Available balance still reflects deduction
     assert_eq!(client.get_balance(&user), 200);
 
-    // At unlock (T=5000): can withdraw, locked balance = 0
+    // At unlock (T=5000): can withdraw, locked balance still 300 (matured but not withdrawn)
     set_ledger_timestamp(&env, 5_000);
     assert_eq!(client.can_withdraw(&user), true);
-    assert_eq!(client.get_locked_balance(&user), 0);
-    assert_eq!(client.get_balance(&user), 500);
+    assert_eq!(client.get_locked_balance(&user), 300);
+    assert_eq!(client.get_balance(&user), 200);
 
-    // After unlock (T=5001): can withdraw, locked balance = 0
+    // After unlock (T=5001): can withdraw, locked balance still 300
     set_ledger_timestamp(&env, 5_001);
     assert_eq!(client.can_withdraw(&user), true);
-    assert_eq!(client.get_locked_balance(&user), 0);
-    assert_eq!(client.get_balance(&user), 500);
+    assert_eq!(client.get_locked_balance(&user), 300);
+    assert_eq!(client.get_balance(&user), 200);
 }
 
 // -------------------------------------------------------------------------
@@ -1275,12 +1281,12 @@ fn test_withdraw_emits_event() {
     let (_contract, topics, data) = events.get(events.len() - 1).unwrap();
     let topic0: soroban_sdk::Symbol = topics.get(0).unwrap().try_into_val(&env).unwrap();
     let topic1: Address = topics.get(1).unwrap().try_into_val(&env).unwrap();
-    let (amount, new_balance, new_locked): (i128, i128, i128) = data.try_into_val(&env).unwrap();
+    let (amount, new_balance): (i128, i128) = data.try_into_val(&env).unwrap();
     assert_eq!(topic0, symbol_short!("withdraw"));
     assert_eq!(topic1, user);
     assert_eq!(
-        (amount, new_balance, new_locked),
-        (50_i128, 50_i128, 0_i128)
+        (amount, new_balance),
+        (50_i128, 50_i128)
     );
 }
 

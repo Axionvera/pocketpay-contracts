@@ -149,7 +149,7 @@ fn test_deposit_event_reflects_running_balance() {
 
 // ---------------------------------------------------------------------------
 // withdraw — topics: (Symbol("withdraw"), user),
-//            data: (amount, new_balance, new_locked)
+//            data: (amount, new_balance)
 // ---------------------------------------------------------------------------
 
 #[test]
@@ -170,16 +170,14 @@ fn test_withdraw_event_schema() {
     let topic1_user: Address = topics.get(1).unwrap().try_into_val(&env).unwrap();
     assert_eq!(topic1_user, user);
 
-    let (amount, new_balance, new_locked): (i128, i128, i128) = data.try_into_val(&env).unwrap();
+    let (amount, new_balance): (i128, i128) = data.try_into_val(&env).unwrap();
     assert_eq!(amount, 200);
     assert_eq!(new_balance, 300);
-    assert_eq!(new_locked, 0);
 }
 
 #[test]
-fn test_withdraw_event_carries_locked_balance() {
-    // With an active lock in place, the third payload field must reflect the
-    // *unmatured* locked total, not just the deposited-balance delta.
+fn test_withdraw_event_carries_available_balance() {
+    // Withdraw only affects the available balance, not locked funds.
     let (env, cid, client) = setup();
     let (env, _a, client, _tc, ta) = test_token(env, cid, client);
     let user = Address::generate(&env);
@@ -192,10 +190,9 @@ fn test_withdraw_event_carries_locked_balance() {
 
     let matches = events_with_topic0(&env, &symbol_short!("withdraw"));
     let (_c, _t, d) = matches.last().unwrap();
-    let (amount, new_balance, new_locked): (i128, i128, i128) = d.try_into_val(&env).unwrap();
+    let (amount, new_balance): (i128, i128) = d.try_into_val(&env).unwrap();
     assert_eq!(amount, 100);
     assert_eq!(new_balance, 200);
-    assert_eq!(new_locked, 200);
 }
 
 // ---------------------------------------------------------------------------

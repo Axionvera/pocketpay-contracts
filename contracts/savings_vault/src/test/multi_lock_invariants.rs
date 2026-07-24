@@ -45,17 +45,16 @@ fn assert_conserved(client: &SvClient, user: &Address, expected_total: i128) {
 fn assert_lock_sum_consistency(env: &Env, client: &SvClient, user: &Address) {
     let locked = client.get_locked_balance(user);
     let locks = client.list_locks(user, &0u32, &50u32);
-    let now = env.ledger().timestamp();
     let mut sum: i128 = 0;
     for i in 0..locks.len() {
         let lock = locks.get(i).unwrap();
-        if now < lock.unlock_time {
+        if !lock.withdrawn {
             sum += lock.amount;
         }
     }
     assert_eq!(
         sum, locked,
-        "lock sum: unmatured entries sum {sum} != get_locked_balance {locked}"
+        "lock sum: non-withdrawn entries sum {sum} != get_locked_balance {locked}"
     );
 }
 
@@ -92,8 +91,10 @@ fn multi_lock_staggered_maturity_conservation() {
     let amounts: [i128; 5] = [100, 200, 150, 300, 50];
     let unlocks: [u64; 5] = [2_000, 3_000, 4_000, 5_000, 6_000];
 
+    let mut lock_ids = [0u64; 5];
     for i in 0..5 {
-        client.lock_funds(&user, &amounts[i], &unlocks[i]);
+        let id = client.lock_funds(&user, &amounts[i], &unlocks[i]);
+        lock_ids[i] = id;
         assert_conserved(&client, &user, expected);
         assert_lock_sum_consistency(&env, &client, &user);
         assert_lock_ids_unique(&client, &user);
@@ -105,12 +106,16 @@ fn multi_lock_staggered_maturity_conservation() {
     // Mature first 2 locks
     set_ledger_timestamp(&env, 3_000);
     assert_conserved(&client, &user, expected);
-    assert_eq!(client.get_balance(&user), 500);
-    assert_eq!(client.get_locked_balance(&user), 500);
+    assert_eq!(client.get_balance(&user), 200);
+    assert_eq!(client.get_locked_balance(&user), 800);
 
-    // Withdraw 400
-    client.withdraw(&user, &400);
-    expected -= 400;
+    // Withdraw matured locks via withdraw_lock then available
+    client.withdraw_lock(&user, &lock_ids[0]);
+    expected -= 100;
+    client.withdraw_lock(&user, &lock_ids[1]);
+    expected -= 200;
+    client.withdraw(&user, &200);
+    expected -= 200;
     assert_conserved(&client, &user, expected);
     assert_lock_sum_consistency(&env, &client, &user);
 
@@ -118,8 +123,13 @@ fn multi_lock_staggered_maturity_conservation() {
     set_ledger_timestamp(&env, 6_000);
     assert_conserved(&client, &user, expected);
 
-    // Withdraw remaining
-    client.withdraw(&user, &expected);
+    // Withdraw remaining locks and available
+    client.withdraw_lock(&user, &lock_ids[2]);
+    expected -= 150;
+    client.withdraw_lock(&user, &lock_ids[3]);
+    expected -= 300;
+    client.withdraw_lock(&user, &lock_ids[4]);
+    expected -= 50;
     assert_conserved(&client, &user, 0);
 }
 
@@ -152,10 +162,10 @@ fn multi_lock_cross_user_isolation() {
     client.deposit(&user_c, &300);
     tc += 300;
 
-    client.lock_funds(&user_a, &100, &3_000);
-    client.lock_funds(&user_a, &150, &6_000);
-    client.lock_funds(&user_b, &200, &4_000);
-    client.lock_funds(&user_c, &100, &5_000);
+    let id_a1 = client.lock_funds(&user_a, &100, &3_000);
+    let id_a2 = client.lock_funds(&user_a, &150, &6_000);
+    let id_b1 = client.lock_funds(&user_b, &200, &4_000);
+    let id_c1 = client.lock_funds(&user_c, &100, &5_000);
 
     assert_conserved(&client, &user_a, ta);
     assert_conserved(&client, &user_b, tb);
@@ -170,9 +180,9 @@ fn multi_lock_cross_user_isolation() {
     assert_conserved(&client, &user_b, tb);
     assert_conserved(&client, &user_c, tc);
 
-    // Mature A's first lock
+    // Mature A's first lock → withdraw_lock
     set_ledger_timestamp(&env, 3_000);
-    client.withdraw(&user_a, &100);
+    client.withdraw_lock(&user_a, &id_a1);
     ta -= 100;
     assert_conserved(&client, &user_a, ta);
     assert_conserved(&client, &user_b, tb);
@@ -180,9 +190,20 @@ fn multi_lock_cross_user_isolation() {
 
     // Mature all
     set_ledger_timestamp(&env, 6_000);
-    client.withdraw(&user_a, &ta);
-    client.withdraw(&user_b, &tb);
-    client.withdraw(&user_c, &tc);
+    // Withdraw matured locks then remaining available for each user
+    client.withdraw_lock(&user_a, &id_a2);
+    ta -= 150;
+    assert_conserved(&client, &user_a, ta);
+    client.withdraw_lock(&user_b, &id_b1);
+    tb -= 200;
+    client.withdraw(&user_b, &500);
+    tb -= 500;
+    assert_conserved(&client, &user_b, tb);
+    client.withdraw_lock(&user_c, &id_c1);
+    tc -= 100;
+    client.withdraw(&user_c, &200);
+    tc -= 200;
+    assert_conserved(&client, &user_c, tc);
     assert_conserved(&client, &user_a, 0);
     assert_conserved(&client, &user_b, 0);
     assert_conserved(&client, &user_c, 0);
@@ -297,20 +318,22 @@ fn multi_lock_partial_maturity_withdraw_keeps_unmatured_locked() {
     client.deposit(&user, &1_000);
     expected += 1_000;
 
-    client.lock_funds(&user, &300, &3_000);
-    client.lock_funds(&user, &200, &6_000);
-    client.lock_funds(&user, &100, &9_000);
+    let id1 = client.lock_funds(&user, &300, &3_000);
+    let id2 = client.lock_funds(&user, &200, &6_000);
+    let id3 = client.lock_funds(&user, &100, &9_000);
     // available=400, locked=600
 
     // Mature first lock only
     set_ledger_timestamp(&env, 3_000);
     assert_conserved(&client, &user, expected);
     assert_lock_sum_consistency(&env, &client, &user);
-    assert_eq!(client.get_locked_balance(&user), 300);
+    assert_eq!(client.get_locked_balance(&user), 600);
 
-    // Withdraw 500 (400 available + 100 from matured lock)
-    client.withdraw(&user, &500);
-    expected -= 500;
+    // Withdraw matured lock 1 via withdraw_lock, then remaining available
+    client.withdraw_lock(&user, &id1);
+    expected -= 300;
+    client.withdraw(&user, &400);
+    expected -= 400;
     assert_conserved(&client, &user, expected);
     assert_lock_sum_consistency(&env, &client, &user);
     assert_eq!(client.get_locked_balance(&user), 300);
@@ -318,9 +341,12 @@ fn multi_lock_partial_maturity_withdraw_keeps_unmatured_locked() {
     // Mature all remaining
     set_ledger_timestamp(&env, 9_000);
     assert_conserved(&client, &user, expected);
-    assert_eq!(client.get_locked_balance(&user), 0);
+    assert_eq!(client.get_locked_balance(&user), 300);
 
-    client.withdraw(&user, &expected);
+    client.withdraw_lock(&user, &id2);
+    expected -= 200;
+    client.withdraw_lock(&user, &id3);
+    expected -= 100;
     assert_conserved(&client, &user, 0);
 }
 
@@ -340,10 +366,10 @@ fn multi_lock_interleaved_deposit_lock_withdraw() {
 
     client.deposit(&user, &500);
     expected += 500;
-    client.lock_funds(&user, &200, &3_000);
+    let id1 = client.lock_funds(&user, &200, &3_000);
     client.deposit(&user, &300);
     expected += 300;
-    client.lock_funds(&user, &150, &5_000);
+    let id2 = client.lock_funds(&user, &150, &5_000);
 
     assert_conserved(&client, &user, expected);
     assert_lock_sum_consistency(&env, &client, &user);
@@ -352,23 +378,32 @@ fn multi_lock_interleaved_deposit_lock_withdraw() {
     expected -= 200;
     assert_conserved(&client, &user, expected);
 
-    client.lock_funds(&user, &100, &7_000);
+    let id3 = client.lock_funds(&user, &100, &7_000);
     assert_conserved(&client, &user, expected);
     assert_lock_sum_consistency(&env, &client, &user);
 
     // Mature first lock
     set_ledger_timestamp(&env, 3_000);
     assert_conserved(&client, &user, expected);
-    assert_eq!(client.get_balance(&user), 350);
-    assert_eq!(client.get_locked_balance(&user), 250);
+    assert_eq!(client.get_balance(&user), 150);
+    assert_eq!(client.get_locked_balance(&user), 450);
 
-    client.withdraw(&user, &350);
-    expected -= 350;
+    // Withdraw matured lock 1 via withdraw_lock, then available
+    client.withdraw_lock(&user, &id1);
+    expected -= 200;
+    client.withdraw(&user, &150);
+    expected -= 150;
     assert_conserved(&client, &user, expected);
 
     set_ledger_timestamp(&env, 7_000);
     assert_conserved(&client, &user, expected);
-    assert_eq!(client.get_locked_balance(&user), 0);
+    assert_eq!(client.get_locked_balance(&user), 250);
+    // Withdraw remaining locks
+    client.withdraw_lock(&user, &id2);
+    expected -= 150;
+    client.withdraw_lock(&user, &id3);
+    expected -= 100;
+    assert_conserved(&client, &user, 0);
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -394,7 +429,7 @@ fn multi_lock_withdraw_specific_lock_preserves_accounting() {
     // Mature lock1 and lock2
     set_ledger_timestamp(&env, 5_000);
 
-    assert_eq!(client.get_locked_balance(&user), 100);
+    assert_eq!(client.get_locked_balance(&user), 600);
     assert_lock_sum_consistency(&env, &client, &user);
     assert_conserved(&client, &user, expected);
 
@@ -447,23 +482,23 @@ fn multi_lock_scenario_matrix() {
             lock_specs: &[(200, 3_000)],
             jump_to: 3_000,
             withdraws: &[200],
-            final_locked: 0,
+            final_locked: 200, // matured lock stays in get_locked_balance
         },
         Case {
-            label: "two locks, withdraw partial after first maturity",
+            label: "two locks, withdraw available after first maturity",
             deposit: 1_000,
             lock_specs: &[(300, 3_000), (400, 5_000)],
             jump_to: 3_000,
-            withdraws: &[300, 200],
-            final_locked: 400,
+            withdraws: &[300],
+            final_locked: 700,
         },
         Case {
-            label: "three locks, all mature, full withdraw",
+            label: "three locks, all mature, withdraw available",
             deposit: 2_000,
             lock_specs: &[(500, 3_000), (500, 4_000), (500, 5_000)],
             jump_to: 5_000,
-            withdraws: &[500, 500, 500],
-            final_locked: 0,
+            withdraws: &[500],
+            final_locked: 1500,
         },
         Case {
             label: "deposit > lock, withdraw available, locks stay",
@@ -474,12 +509,12 @@ fn multi_lock_scenario_matrix() {
             final_locked: 500,
         },
         Case {
-            label: "all locks matured, partial withdrawal",
+            label: "all locks matured, withdraw available only",
             deposit: 1_000,
             lock_specs: &[(600, 3_000)],
             jump_to: 4_000,
-            withdraws: &[800],
-            final_locked: 0,
+            withdraws: &[400],
+            final_locked: 600,
         },
     ];
 
@@ -648,9 +683,13 @@ fn multi_lock_deterministic_sequence_invariants() {
             amount: 20_001,
         },
         Operation::TimeJump { timestamp: 3_500 },
+        Operation::WithdrawLock {
+            user_idx: 0,
+            lock_idx: 0,
+        },
         Operation::Withdraw {
             user_idx: 0,
-            amount: 4_000,
+            amount: 2_000,
         },
         Operation::TimeJump { timestamp: 4_500 },
         Operation::WithdrawLock {
@@ -666,21 +705,29 @@ fn multi_lock_deterministic_sequence_invariants() {
             lock_idx: 1,
         },
         Operation::TimeJump { timestamp: 7_000 },
-        Operation::Withdraw {
-            user_idx: 0,
-            amount: 1_000,
-        },
-        Operation::Withdraw {
-            user_idx: 0,
-            amount: 3_000,
+        Operation::WithdrawLock {
+            user_idx: 1,
+            lock_idx: 1,
         },
         Operation::Withdraw {
             user_idx: 1,
-            amount: 10_000,
+            amount: 5_000,
+        },
+        Operation::WithdrawLock {
+            user_idx: 2,
+            lock_idx: 0,
         },
         Operation::Withdraw {
             user_idx: 2,
-            amount: 30_000,
+            amount: 20_000,
+        },
+        Operation::WithdrawLock {
+            user_idx: 0,
+            lock_idx: 1,
+        },
+        Operation::Withdraw {
+            user_idx: 0,
+            amount: 1_000,
         },
     ];
 
