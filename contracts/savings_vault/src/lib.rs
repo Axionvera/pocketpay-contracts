@@ -274,6 +274,11 @@ impl SavingsVault {
     /// Returns the address of the Stellar Asset Contract (SAC) that the vault
     /// uses for deposits and withdrawals.
     ///
+    /// # Authorisation Rules
+    /// - **Required Signer:** `user` (enforced via `user.require_auth()`).
+    /// - **Caller Expectation:** The vault owner depositing funds for themselves.
+    /// - **Known Assumptions:** Arbitrary accounts cannot deposit on behalf of unconsenting users.
+    ///
     /// # Arguments
     ///
     /// * `env` - The Soroban environment
@@ -534,6 +539,11 @@ impl SavingsVault {
         let payload = (amount, current_balance);
         env.events().publish(topics, payload);
 
+        env.events().publish(
+            (Symbol::new(&env, "withdraw"), user.clone()),
+            (amount, current_balance),
+        );
+
         log!(
             &env,
             "Withdraw: user={}, amount={}, new_balance={}",
@@ -697,6 +707,18 @@ impl SavingsVault {
         let topics = (symbol_short!("lock"), user.clone());
         let payload = (amount, unlock_time, current_balance, new_locked);
         env.events().publish(topics, payload);
+
+        let mut total_locked: i128 = 0;
+        for lock in locks.iter() {
+            if current_time < lock.unlock_time {
+                total_locked += lock.amount;
+            }
+        }
+
+        env.events().publish(
+            (Symbol::new(&env, "lock"), user.clone()),
+            (amount, unlock_time, current_balance, total_locked),
+        );
 
         log!(
             &env,
