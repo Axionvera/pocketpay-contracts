@@ -208,6 +208,12 @@ fn test_withdraw() {
 
     client.withdraw(&user, &200);
     assert_eq!(client.get_balance(&user), 300);
+
+    let final_user_balance = token_client.balance(&user);
+    assert_eq!(&final_user_balance, &9700);
+
+    let final_contract_balance = token_client.balance(&current_contract_address);
+    assert_eq!(&final_contract_balance, &300);
 }
 
 #[test]
@@ -252,6 +258,7 @@ fn test_withdraw_entire_balance() {
     client.deposit(&user, &deposit_amount);
 
     client.withdraw(&user, &deposit_amount);
+
     assert_eq!(client.get_balance(&user), 0);
     // The full amount is returned to the user's token balance.
     assert_eq!(token_client.balance(&user), deposit_amount);
