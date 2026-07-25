@@ -211,6 +211,7 @@ stellar-pocketpay-contracts/
 ---
 ## Documentation
 
+- [Audit Readiness Review](docs/audit-readiness-review.md) – Audit readiness assessment, high-risk areas, missing test coverage, and unresolved design questions.
 - [Deployment Environments](docs/deployment-environments.md) — Network configuration for local, testnet, and future mainnet, including RPC URLs, identities, environment variables, and deployment commands.
 - [Contract Error Reference](docs/error-codes.md) - Current savings vault failure conditions and guidance for SDK and mobile callers.
 - [Architecture Documentation](docs/architecture.md) – Overview of project structure, state management, storage, SDK integration, and future extension points.
