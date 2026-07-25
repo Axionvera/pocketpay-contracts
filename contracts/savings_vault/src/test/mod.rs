@@ -751,3 +751,133 @@ fn balance_isolation_between_users_lock() {
     assert_eq!(client.get_balance(&bob), 1_500);
     assert_eq!(client.get_locked_balance(&bob), 2_500);
 }
+
+// =========================================================================
+// Authorisation & Cross-User Misuse Tests
+// =========================================================================
+
+/// Test that calling `deposit` without proper authorization fails.
+#[test]
+#[should_panic]
+fn test_deposit_unauthorized_caller_fails() {
+    let env = Env::default(); // Note: env.mock_all_auths() is NOT called
+    let (_id, client) = init_contract(&env);
+    let user = Address::generate(&env);
+    // Attempt to invoke deposit without setting up mock auths or signing
+    client.deposit(&user, &100);
+}
+
+/// Test that `user_b` attempting to withdraw from `user_a`'s balance fails auth.
+#[test]
+#[should_panic]
+fn test_withdraw_cross_user_unauthorized_fails() {
+    let env = Env::default();
+    let (contract_id, client) = init_contract(&env);
+    let (env, _admin, client, token_client, token_admin) = test_token(env, client);
+
+    let alice = Address::generate(&env);
+    let attacker = Address::generate(&env);
+
+    token_admin.mint(&alice, &1000);
+    
+    // Deposit for Alice with Alice's auth mocked
+    env.mock_auths(&[soroban_sdk::testutils::MockAuth {
+        address: &alice,
+        invoke: &soroban_sdk::testutils::MockAuthInvoke {
+            contract: &contract_id,
+            fn_name: "deposit",
+            args: (alice.clone(), 500_i128).into_val(&env),
+            sub_invokes: &[],
+        },
+    }]);
+    client.deposit(&alice, &500);
+    token_client.transfer(&alice, &contract_id, &500);
+
+    // Attacker attempts to withdraw from Alice's account with only Attacker's auth mocked
+    env.mock_auths(&[soroban_sdk::testutils::MockAuth {
+        address: &attacker,
+        invoke: &soroban_sdk::testutils::MockAuthInvoke {
+            contract: &contract_id,
+            fn_name: "withdraw",
+            args: (alice.clone(), 200_i128).into_val(&env),
+            sub_invokes: &[],
+        },
+    }]);
+
+    // This must fail Host require_auth because client.withdraw is calling require_auth on `alice`
+    client.withdraw(&alice, &200);
+}
+
+/// Test that `user_b` attempting to lock `user_a`'s funds fails auth.
+#[test]
+#[should_panic]
+fn test_lock_funds_cross_user_unauthorized_fails() {
+    let env = Env::default();
+    let (contract_id, client) = init_contract(&env);
+    let alice = Address::generate(&env);
+    let attacker = Address::generate(&env);
+
+    // Mock deposit for Alice
+    env.mock_auths(&[soroban_sdk::testutils::MockAuth {
+        address: &alice,
+        invoke: &soroban_sdk::testutils::MockAuthInvoke {
+            contract: &contract_id,
+            fn_name: "deposit",
+            args: (alice.clone(), 1000_i128).into_val(&env),
+            sub_invokes: &[],
+        },
+    }]);
+    client.deposit(&alice, &1000);
+
+    // Attacker tries to lock Alice's funds
+    env.mock_auths(&[soroban_sdk::testutils::MockAuth {
+        address: &attacker,
+        invoke: &soroban_sdk::testutils::MockAuthInvoke {
+            contract: &contract_id,
+            fn_name: "lock_funds",
+            args: (alice.clone(), 500_i128, 5000_u64).into_val(&env),
+            sub_invokes: &[],
+        },
+    }]);
+
+    client.lock_funds(&alice, &500, &5000);
+}
+
+/// Test that the contract `admin` cannot withdraw funds from a user's vault without the user's signature.
+#[test]
+#[should_panic]
+fn test_admin_cannot_withdraw_user_funds_without_user_auth() {
+    let env = Env::default();
+    let (contract_id, client) = init_contract(&env);
+    let (env, admin, client, token_client, token_admin) = test_token(env, client);
+
+    let user = Address::generate(&env);
+    token_admin.mint(&user, &1000);
+
+    env.mock_auths(&[soroban_sdk::testutils::MockAuth {
+        address: &user,
+        invoke: &soroban_sdk::testutils::MockAuthInvoke {
+            contract: &contract_id,
+            fn_name: "deposit",
+            args: (user.clone(), 500_i128).into_val(&env),
+            sub_invokes: &[],
+        },
+    }]);
+    client.deposit(&user, &500);
+    token_client.transfer(&user, &contract_id, &500);
+
+    // Admin attempts to withdraw user's funds signing with Admin credentials
+    env.mock_auths(&[soroban_sdk::testutils::MockAuth {
+        address: &admin,
+        invoke: &soroban_sdk::testutils::MockAuthInvoke {
+            contract: &contract_id,
+            fn_name: "withdraw",
+            args: (user.clone(), 500_i128).into_val(&env),
+            sub_invokes: &[],
+        },
+    }]);
+
+    // Fails because withdraw requires `user.require_auth()`
+    client.withdraw(&user, &500);
+}
+
