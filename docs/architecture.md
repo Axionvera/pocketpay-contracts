@@ -39,7 +39,7 @@ The state model is deliberately simple:
 | Key                | Type   | Description |
 |--------------------|--------|-------------|
 | `balance:{user}`   | `i128` | Unlocked funds available to a user.
-| `locks:{user}`     | `Vec<LockEntry>` | List of active and matured lock entries for a user.
+| `lock:{user}:{id}` | `LockEntry`| An individual active or matured lock entry for a user.
 | `next_lock_id:{user}` | `u64`| Monotonically increasing next lock ID for a user.
 | `admin`            | `Address` | Contract admin (set during `initialize`).
 | `initialized`      | `bool`   | Guard to ensure `initialize` runs only once.
@@ -50,12 +50,12 @@ All operations validate inputs (non‑negative amounts, sufficient balances, fut
 
 ## Token-Backed Accounting and Asset Custody
 
-The contract integrates with the **Stellar Asset Contract (SAC)** interface (`soroban_sdk::token::Client`) to manage real token custody:
+The contract integrates with the **Stellar Asset Contract (SAC)** interface to manage real token custody:
 
 - Calling `deposit` transfers the specified token amount from the user's wallet to the contract's address via `token_client.transfer` before updating internal persistent storage balances.
-- Calling `withdraw` transfers the specified token amount from contract custody back to the user's wallet via `token_client.transfer` before updating internal balances or lock states.
+- Calling `withdraw` or `withdraw_lock` transfers the specified token amount from contract custody back to the user's wallet before updating internal balances or lock states.
 
-Internal accounting (`Balance(user)` and `Locks(user)`) reconciles 1:1 with real SAC token balances held at the contract address. If a token transfer reverts or fails (e.g., due to insufficient balance or allowance), the entire Soroban transaction rolls back with zero state changes.
+Internal accounting (`Balance(user)` and `Lock(user, lock_id)`) reconciles 1:1 with real SAC token balances held at the contract address. If a token transfer reverts or fails (e.g., due to insufficient balance or allowance), the entire Soroban transaction rolls back with zero state changes.
 
 ---
 
@@ -74,7 +74,7 @@ The contract depends on the **Soroban SDK** (part of the Stellar ecosystem) for:
 - **Storage APIs** – `storage::set`, `storage::get`, and `storage::has` for deterministic on‑chain state.
 - **Testing utilities** – `testutils` to simulate ledger operations in unit tests.
 
-Future enhancements may integrate the **Stellar Asset Contract (SAC)** to enable real token transfers, moving beyond internal balance bookkeeping.
+The contract integrates with the **Stellar Asset Contract (SAC)** for real token custody on deposit, withdraw, and `withdraw_lock`. Internal persistent storage reconciles 1:1 with tokens held at the contract address.
 
 ---
 
@@ -82,8 +82,8 @@ Future enhancements may integrate the **Stellar Asset Contract (SAC)** to enable
 
 The current contract is a **stand‑alone savings vault**. To evolve into a full‑featured wallet SDK, consider the following extension points:
 
-1. **Token Transfer Layer** – Call the SAC `transfer` function to move XLM or custom assets on‑chain.
-2. **Admin Recovery & Upgrade** – Implement admin‑controlled migration or upgrade mechanisms using Soroban `upgrade` primitives.
+1. **Admin Recovery & Upgrade** – Implement admin‑controlled migration or upgrade mechanisms using Soroban `upgrade` primitives.
+2. **Structured Errors** – Replace panic strings with a `#[contracterror]` enum for SDK/mobile callers.
 3. **Off‑chain SDKs** – Provide JavaScript/TypeScript client libraries that abstract contract calls, handling address resolution, transaction building, and signing.
 
 These boundaries maintain a clean separation between **on‑chain logic** (this repository) and **off‑chain SDKs** that developers will consume.
@@ -94,7 +94,9 @@ These boundaries maintain a clean separation between **on‑chain logic** (this 
 
 - The **README.md** provides quick‑start guides for building, testing, and deploying the contract.
 - This **architecture.md** offers a deeper dive into internal design.
-- [**token-backed-withdrawals.md**](token-backed-withdrawals.md) details token transfer mechanics, authorization enforcement, and locked balance protection.
+- [**sdk-contract-sequence.md**](sdk-contract-sequence.md) shows the end‑to‑end request flow (mobile → SDK → Soroban RPC → vault contract) for balance queries, deposits, withdrawals, and error paths.
+- [**api-reference.md**](api-reference.md) documents the naming convention followed by `SavingsVault`'s public functions.
+- [**multi-lock-storage.md**](multi-lock-storage.md) documents the storage model, collision prevention, lock lifecycle, and SDK/mobile integration.
 - Additional module‑level docs (e.g., `admin-role.md`) cover specific responsibilities.
 
 Refer to the **Documentation** section of the README for links to all docs.
