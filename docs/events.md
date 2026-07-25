@@ -4,8 +4,8 @@ This document outlines the expected event topics, payloads, and naming conventio
 
 SDK maintainers can use this stable schema to consume contract events safely.
 
-> [!NOTE]
-> As events are not yet implemented in the contract, this document defines a **proposed schema**.
+> [!IMPORTANT]
+> The event schema defined in this document is fully implemented in `contracts/savings_vault/src/lib.rs` and enforced by unit tests in `contracts/savings_vault/src/test/mod.rs`. Breaking changes to event topics or payload structures will trigger build and CI test failures.
 
 ---
 

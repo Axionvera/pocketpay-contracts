@@ -12,7 +12,7 @@
 
 #![no_std]
 
-use soroban_sdk::{contract, contractimpl, contracttype, log, token, Address, Env, Vec};
+use soroban_sdk::{contract, contractimpl, contracttype, log, token, Address, Env, Symbol, Vec};
 
 // ---------------------------------------------------------------------------
 // Structs
@@ -62,13 +62,16 @@ impl SavingsVault {
     // Initialization
     // -----------------------------------------------------------------------
 
-    /// Initialize the contract with an admin address.
+    /// Initialize the contract with an admin address and token address.
     ///
-    /// This can only be called once. The admin address is stored for future
-    /// reference (e.g. upgradeability or admin-only features).
+    /// # Authorisation Rules
+    /// - **Required Signer:** `admin` (enforced via `admin.require_auth()`).
+    /// - **Caller Expectation:** Admin deployer identity during single-time setup.
+    /// - **Known Assumptions:** Can only be invoked once; subsequent calls panic with `"Contract is already initialized"`.
     ///
     /// # Arguments
-    /// * `admin` - The address that will be recorded as the contract admin.
+    /// * `admin` - The address recorded as contract admin in instance storage.
+    /// * `token` - The Stellar Asset Contract (SAC) token address associated with this vault.
     ///
     /// # Panics
     /// Panics if the contract has already been initialized.
@@ -86,6 +89,11 @@ impl SavingsVault {
         env.storage().instance().set(&DataKey::Initialized, &true);
         env.storage().instance().set(&DataKey::Token, &token);
 
+        env.events().publish(
+            (Symbol::new(&env, "initialize"), admin.clone()),
+            token.clone(),
+        );
+
         log!(&env, "Savings Vault initialized with admin: {}", admin);
     }
 
@@ -94,6 +102,11 @@ impl SavingsVault {
     // -----------------------------------------------------------------------
 
     /// Deposit funds into the caller's vault.
+    ///
+    /// # Authorisation Rules
+    /// - **Required Signer:** `user` (enforced via `user.require_auth()`).
+    /// - **Caller Expectation:** The vault owner depositing funds for themselves.
+    /// - **Known Assumptions:** Arbitrary accounts cannot deposit on behalf of unconsenting users.
     ///
     /// # Arguments
     /// * `user`   - The depositor's address (must authorize the call).
@@ -123,6 +136,11 @@ impl SavingsVault {
             .persistent()
             .set(&DataKey::Balance(user.clone()), &new_balance);
 
+        env.events().publish(
+            (Symbol::new(&env, "deposit"), user.clone()),
+            (amount, new_balance),
+        );
+
         log!(
             &env,
             "Deposit: user={}, amount={}, new_balance={}",
@@ -136,11 +154,12 @@ impl SavingsVault {
     // Withdrawals
     // -----------------------------------------------------------------------
 
-    // -----------------------------------------------------------------------
-    // Withdrawals
-    // -----------------------------------------------------------------------
-
     /// Withdraw funds from the caller's vault.
+    ///
+    /// # Authorisation Rules
+    /// - **Required Signer:** `user` (enforced via `user.require_auth()`).
+    /// - **Caller Expectation:** Only the owner of the funds can trigger a withdrawal to their address.
+    /// - **Known Assumptions:** Neither third parties nor the contract `admin` can authorize a withdrawal from a user's vault.
     ///
     /// # Arguments
     /// * `user`   - The withdrawer's address (must authorize the call).
@@ -230,6 +249,11 @@ impl SavingsVault {
             .persistent()
             .set(&DataKey::Locks(user.clone()), &locks);
 
+        env.events().publish(
+            (Symbol::new(&env, "withdraw"), user.clone()),
+            (amount, current_balance),
+        );
+
         log!(
             &env,
             "Withdraw: user={}, amount={}, new_balance={}",
@@ -244,8 +268,13 @@ impl SavingsVault {
     // -----------------------------------------------------------------------
 
     /// Get the available (unlocked) balance for a user.
-    /// Available balance includes regular deposited balance plus matured locks.
     ///
+    /// # Authorisation Rules
+    /// - **Required Signer:** None (read-only state query).
+    /// - **Caller Expectation:** Publicly callable by any account, frontend, or indexer.
+    /// - **Known Assumptions:** Does not mutate state or consume user auth.
+    ///
+    /// Available balance includes regular deposited balance plus matured locks.
     /// Returns `0` if the user has never deposited.
     pub fn get_balance(env: Env, user: Address) -> i128 {
         let deposited_balance: i128 = env
@@ -277,9 +306,10 @@ impl SavingsVault {
 
     /// Lock a portion of the user's balance until a specified time.
     ///
-    /// Locked funds are moved from the available balance into a separate
-    /// lock entry. They cannot be withdrawn until the
-    /// `unlock_time` has passed.
+    /// # Authorisation Rules
+    /// - **Required Signer:** `user` (enforced via `user.require_auth()`).
+    /// - **Caller Expectation:** Only the account owner can lock their own funds.
+    /// - **Known Assumptions:** Other accounts cannot lock a target user's liquid balance.
     ///
     /// # Arguments
     /// * `user`        - The user's address (must authorize the call).
@@ -352,6 +382,18 @@ impl SavingsVault {
         env.storage()
             .persistent()
             .set(&DataKey::Locks(user.clone()), &locks);
+
+        let mut total_locked: i128 = 0;
+        for lock in locks.iter() {
+            if current_time < lock.unlock_time {
+                total_locked += lock.amount;
+            }
+        }
+
+        env.events().publish(
+            (Symbol::new(&env, "lock"), user.clone()),
+            (amount, unlock_time, current_balance, total_locked),
+        );
 
         log!(
             &env,

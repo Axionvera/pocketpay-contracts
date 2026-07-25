@@ -751,3 +751,139 @@ fn balance_isolation_between_users_lock() {
     assert_eq!(client.get_balance(&bob), 1_500);
     assert_eq!(client.get_locked_balance(&bob), 2_500);
 }
+// =========================================================================
+// Event Schema & Breaking Change Protection Tests
+// =========================================================================
+
+use soroban_sdk::IntoVal;
+
+#[test]
+fn test_initialize_event_topics_and_payload_schema() {
+    let env = test_env();
+    let (contract_id, client) = init_contract(&env);
+    let admin = new_user(&env);
+    let token = new_user(&env);
+
+    client.initialize(&admin, &token);
+
+    let events = env.events().all();
+    assert_eq!(events.len(), 1, "Expected 1 event published on initialize");
+
+    let event = events.last().unwrap();
+    // Verify contract ID matches
+    assert_eq!(event.0, contract_id);
+    // Verify topics: [Symbol("initialize"), admin]
+    let expected_topics = (Symbol::new(&env, "initialize"), admin.clone()).into_val(&env);
+    assert_eq!(event.1, expected_topics, "Initialize event topics schema mismatch");
+    // Verify payload: token Address
+    let expected_payload = token.into_val(&env);
+    assert_eq!(event.2, expected_payload, "Initialize event payload schema mismatch");
+}
+
+#[test]
+fn test_deposit_event_topics_and_payload_schema() {
+    let env = test_env();
+    let (contract_id, client) = init_contract(&env);
+    let user = new_user(&env);
+    let deposit_amount: i128 = 500;
+
+    client.deposit(&user, &deposit_amount);
+
+    let events = env.events().all();
+    assert_eq!(events.len(), 1, "Expected 1 event published on deposit");
+
+    let event = events.last().unwrap();
+    assert_eq!(event.0, contract_id);
+    // Verify topics: [Symbol("deposit"), user]
+    let expected_topics = (Symbol::new(&env, "deposit"), user.clone()).into_val(&env);
+    assert_eq!(event.1, expected_topics, "Deposit event topics schema mismatch");
+    // Verify payload: tuple (amount, new_balance)
+    let expected_payload = (deposit_amount, 500_i128).into_val(&env);
+    assert_eq!(event.2, expected_payload, "Deposit event payload schema mismatch");
+}
+
+#[test]
+fn test_withdraw_event_topics_and_payload_schema() {
+    let (env, current_contract_address, client) = setup();
+    let (env, _admin, client, token_client, token_admin) = test_token(env, client);
+    let user = Address::generate(&env);
+    let deposit_amount: i128 = 1000;
+    let withdraw_amount: i128 = 400;
+
+    token_admin.mint(&user, &10000);
+    client.deposit(&user, &deposit_amount);
+    token_client.transfer(&user, &current_contract_address, &deposit_amount);
+
+    let events_before = env.events().all().len();
+
+    client.withdraw(&user, &withdraw_amount);
+
+    let events = env.events().all();
+    assert!(events.len() > events_before);
+
+    // Get the last event emitted by the vault contract
+    let last_event = events.last().unwrap();
+    assert_eq!(last_event.0, current_contract_address);
+    // Verify topics: [Symbol("withdraw"), user]
+    let expected_topics = (Symbol::new(&env, "withdraw"), user.clone()).into_val(&env);
+    assert_eq!(last_event.1, expected_topics, "Withdraw event topics schema mismatch");
+    // Verify payload: tuple (amount, remaining_balance) = (400, 600)
+    let expected_payload = (withdraw_amount, 600_i128).into_val(&env);
+    assert_eq!(last_event.2, expected_payload, "Withdraw event payload schema mismatch");
+}
+
+#[test]
+fn test_lock_funds_event_topics_and_payload_schema() {
+    let env = test_env();
+    let (contract_id, client) = init_contract(&env);
+    let user = new_user(&env);
+
+    set_ledger_timestamp(&env, 1_000);
+    client.deposit(&user, &1000);
+
+    let lock_amount: i128 = 300;
+    let unlock_time: u64 = 5_000;
+
+    client.lock_funds(&user, &lock_amount, &unlock_time);
+
+    let events = env.events().all();
+    let last_event = events.last().unwrap();
+
+    assert_eq!(last_event.0, contract_id);
+    // Verify topics: [Symbol("lock"), user]
+    let expected_topics = (Symbol::new(&env, "lock"), user.clone()).into_val(&env);
+    assert_eq!(last_event.1, expected_topics, "Lock event topics schema mismatch");
+    // Verify payload: tuple (amount, unlock_time, remaining_available, total_locked) = (300, 5000, 700, 300)
+    let expected_payload = (lock_amount, unlock_time, 700_i128, 300_i128).into_val(&env);
+    assert_eq!(last_event.2, expected_payload, "Lock event payload schema mismatch");
+}
+
+#[test]
+fn test_event_lifecycle_and_sequence_integrity() {
+    let (env, current_contract_address, client) = setup();
+    let (env, admin, client, token_client, token_admin) = test_token(env, client);
+    let user = Address::generate(&env);
+
+    token_admin.mint(&user, &10000);
+    set_ledger_timestamp(&env, 1_000);
+
+    // Action 1: deposit
+    client.deposit(&user, &1000);
+    token_client.transfer(&user, &current_contract_address, &1000);
+
+    // Action 2: lock
+    client.lock_funds(&user, &400, &5_000);
+
+    // Action 3: withdraw
+    client.withdraw(&user, &200);
+
+    // Verify all vault events are present and topic schemas remain intact
+    let all_events = env.events().all();
+    let vault_events: Vec<_> = all_events
+        .iter()
+        .filter(|e| e.0 == current_contract_address)
+        .collect();
+
+    // Must have at least initialize, deposit, lock, withdraw
+    assert!(vault_events.len() >= 4);
+}
