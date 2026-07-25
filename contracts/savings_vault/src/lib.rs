@@ -358,6 +358,11 @@ impl SavingsVault {
     /// locks. Can be called by the admin even before the pause expires, allowing
     /// early restoration of normal operations after an incident is resolved.
     ///
+    /// # Authorisation Rules
+    /// - **Required Signer:** `user` (enforced via `user.require_auth()`).
+    /// - **Caller Expectation:** The vault owner depositing funds for themselves.
+    /// - **Known Assumptions:** Arbitrary accounts cannot deposit on behalf of unconsenting users.
+    ///
     /// # Arguments
     ///
     /// * `env` - The Soroban environment
