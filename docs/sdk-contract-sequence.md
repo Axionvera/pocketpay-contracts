@@ -49,9 +49,9 @@ sequenceDiagram
 ## Deposit
 
 `deposit` is a state-changing call: it requires the user's signature and a
-submitted (not just simulated) transaction. Note that a successful deposit
-updates the vault's **internal accounting only**; see the deposit/custody
-limitation in [architecture.md](architecture.md#internal-balance-tracking-and-asset-custody).
+submitted (not just simulated) transaction. A successful deposit transfers tokens
+from the user to the vault via the configured Stellar Asset Contract (SAC), then
+updates internal accounting. See [architecture.md](architecture.md#token-backed-accounting-and-asset-custody).
 
 ```mermaid
 sequenceDiagram

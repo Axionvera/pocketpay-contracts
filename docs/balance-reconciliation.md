@@ -25,17 +25,7 @@ The savings vault maintains two conceptually distinct balance representations:
   asset custody layer. It can be queried by calling `balance` on the token
   contract with the vault's address.
 
-Today the two representations are decoupled. `deposit` writes to internal
-storage but does not call `token_client.transfer`. `withdraw` does call
-`token_client.transfer`, but only because a real SAC token is configured in
-tests to simulate the future behavior. In production today there is no
-guarantee that a user's internal balance is backed by tokens actually held at
-the vault address.
-
-Once real SAC integration is complete, every internal balance increment must
-correspond to an inbound token transfer, and every internal balance decrement
-must correspond to an outbound transfer. The sections below define what that
-alignment must look like and what can go wrong.
+Both representations are fully coupled: `deposit` invokes `token_client.transfer` to move tokens from the user into contract custody, and `withdraw` / `withdraw_lock` invoke `token_client.transfer` to return tokens from contract custody to the user. Every internal balance increment corresponds to an inbound token transfer, and every internal balance decrement corresponds to an outbound token transfer.
 
 ---
 

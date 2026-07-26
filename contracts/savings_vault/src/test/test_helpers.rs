@@ -32,7 +32,16 @@ pub fn new_user(env: &Env) -> Address {
 
 /// Deposits a balance for a user.
 /// Note: Contract must already be initialized.
-pub fn deposit_balance(client: &SavingsVaultClient, user: &Address, amount: i128) {
+pub fn deposit_balance(client: &SavingsVaultClient<'static>, user: &Address, amount: i128) {
+    let env = client.env.clone();
+    let token: Address = env.as_contract(&client.address, || {
+        env.storage()
+            .instance()
+            .get(&DataKey::Token)
+            .expect("token should be set during initialization")
+    });
+    let token_admin = token::StellarAssetClient::new(&env, &token);
+    token_admin.mint(user, &amount);
     client.deposit(user, &amount);
 }
 
@@ -47,6 +56,12 @@ pub fn seed_balances(client: &SavingsVaultClient, user: &Address, amounts: &[i12
 /// Sets the ledger's current timestamp (in unix seconds).
 pub fn set_ledger_timestamp(env: &Env, timestamp: u64) {
     env.ledger().set_timestamp(timestamp);
+}
+
+/// Withdraws a balance for a user.
+/// Note: Contract must already be initialized and user must have sufficient balance.
+pub fn withdraw_balance(client: &SavingsVaultClient, user: &Address, amount: i128) {
+    client.withdraw(user, &amount);
 }
 
 pub fn setup() -> (Env, Address, SavingsVaultClient<'static>) {

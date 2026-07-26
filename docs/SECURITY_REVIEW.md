@@ -128,7 +128,7 @@ All user-specific operations require the user to authorize via `require_auth()`,
 
 5. **Remaining limitations**
    - The contract uses panic strings rather than a custom error enum, so callers should not depend on stable machine-readable error codes.
-   - There is no admin recovery, pause, or emergency withdrawal path.
+   - There is no admin recovery, multi-sig, or upgrade mechanism. An emergency pause is implemented (blocking deposits/locks but NOT withdrawals) with time-bounded auto-expiry.
    - The contract assumes the configured SAC token is trustworthy and remains compatible with expected transfer semantics.
 
 ---

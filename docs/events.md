@@ -16,7 +16,10 @@ Event schema changes are considered breaking and require updates to consumer SDK
 
 Non-breaking changes include adding new optional fields to the payload (if the schema allows) or adding new event types.
 
-When making any event schema change, the event compatibility tests in `contracts/savings_vault/src/test/mod.rs` must be updated to match the new schema.
+When making any event schema change, the event compatibility tests in
+`contracts/savings_vault/src/test/event_compatibility.rs` and
+`contracts/savings_vault/src/test/event_schema.rs` must be updated to match the
+new schema.
 
 ---
 
@@ -76,12 +79,13 @@ Emitted when a user withdraws funds from their vault.
 - **Payload**: A tuple containing:
   1. `amount` (`i128`) - The amount withdrawn.
   2. `new_balance` (`i128`) - The user's new available balance.
+  3. `new_locked` (`i128`) - The user's new locked balance.
 
 #### Example Payload (JSON Representation)
 ```json
 {
   "topics": ["withdraw", "GD...USER_ADDRESS"],
-  "value": [500, 4500]
+  "value": [500, 4500, 0]
 }
 ```
 
@@ -108,19 +112,143 @@ Emitted when a portion of the user's balance is locked.
 
 ---
 
-### 5. Future Token Transfer Event
-Proposed event for future integration when the contract interacts directly with Stellar Asset Contract (SAC) or token transfers.
+### 5. Pause Event
+Emitted when the admin activates an emergency pause.
 
-- **Topic 0**: `Symbol::new(&env, "transfer")`
-- **Topic 1**: `user` (`Address`) - The address of the receiver/sender.
-- **Payload**: A tuple containing:
-  1. `to` (`Address`) - The recipient address.
-  2. `amount` (`i128`) - The amount transferred.
+- **Topic 0**: `Symbol::new(&env, "pause")`
+- **Topic 1**: `admin` (`Address`) - The admin address that triggered the pause.
+- **Payload**: `expiry` (`u64`) - The Unix timestamp (seconds) when the pause auto-expires.
 
 #### Example Payload (JSON Representation)
 ```json
 {
-  "topics": ["transfer", "GD...SENDER_ADDRESS"],
-  "value": ["GD...RECEIVER_ADDRESS", 1000]
+  "topics": ["pause", "GB...ADMIN_ADDRESS"],
+  "value": 1785000600
+}
+```
+
+---
+
+### 6. Unpause Event
+Emitted when the admin deactivates an active pause.
+
+- **Topic 0**: `Symbol::new(&env, "unpause")`
+- **Topic 1**: `admin` (`Address`) - The admin address that triggered the unpause.
+- **Payload**: `()` - Empty payload (unit type).
+
+#### Example Payload (JSON Representation)
+```json
+{
+  "topics": ["unpause", "GB...ADMIN_ADDRESS"],
+  "value": null
+}
+```
+
+---
+
+### 6. Withdraw Lock Event
+Emitted when a user withdraws a specific matured lock entry by its lock ID.
+
+- **Topic 0**: `Symbol::new(&env, "withdraw_lock")`
+- **Topic 1**: `user` (`Address`) - The address of the lock owner.
+- **Payload**: A tuple containing:
+  1. `lock_id` (`u64`) - The unique identifier of the lock being withdrawn.
+  2. `amount` (`i128`) - The amount of funds released from the lock.
+
+#### Example Payload (JSON Representation)
+```json
+{
+  "topics": ["withdraw_lock", "GD...USER_ADDRESS"],
+  "value": [1, 2000]
+}
+```
+
+---
+
+### 7. Pause Event
+Emitted when the admin activates an emergency pause on the contract.
+
+- **Topic 0**: `Symbol::new(&env, "pause")`
+- **Topic 1**: `admin` (`Address`) - The admin address that triggered the pause.
+- **Payload**: `expiry` (`u64`) - The Unix timestamp (seconds) when the pause auto-expires.
+
+#### Example Payload (JSON Representation)
+```json
+{
+  "topics": ["pause", "GB...ADMIN_ADDRESS"],
+  "value": 1785000600
+}
+```
+
+---
+
+### 8. Unpause Event
+Emitted when the admin deactivates an active pause.
+
+- **Topic 0**: `Symbol::new(&env, "unpause")`
+- **Topic 1**: `admin` (`Address`) - The admin address that triggered the unpause.
+- **Payload**: `()` - Empty payload (unit type).
+
+#### Example Payload (JSON Representation)
+```json
+{
+  "topics": ["unpause", "GB...ADMIN_ADDRESS"],
+  "value": null
+}
+```
+
+---
+
+### 9. Transfer Admin Event
+Emitted when the current admin transfers admin privileges to a new address.
+
+- **Topic 0**: `Symbol::new(&env, "xferadmin")` (short-form symbol)
+- **Topic 1**: `old_admin` (`Address`) - The address of the previous admin.
+- **Payload**: `new_admin` (`Address`) - The address of the new admin.
+
+#### Example Payload (JSON Representation)
+```json
+{
+  "topics": ["xferadmin", "GB...OLD_ADMIN_ADDRESS"],
+  "value": "GB...NEW_ADMIN_ADDRESS"
+}
+```
+
+---
+
+## Future Token Transfer Event (Proposed)
+Proposed event for future integration when the contract interacts directly with Stellar Asset Contract (SAC) or token transfers.
+
+- **Topic 0**: `Symbol::new(&env, "withdraw_lock")`
+- **Topic 1**: `user` (`Address`) - The address of the withdrawer.
+- **Payload**: A tuple containing:
+  1. `lock_id` (`u64`) - The lock entry ID withdrawn.
+  2. `amount` (`i128`) - The amount transferred out of the vault.
+
+#### Example Payload (JSON Representation)
+```json
+{
+  "topics": ["withdraw_lock", "GD...USER_ADDRESS"],
+  "value": [1, 500]
+}
+```
+
+---
+
+### 8. Transfer Admin Event
+Emitted when the current admin transfers admin privileges to a new address.
+
+- **Topic 0**: `symbol_short!("xferadmin")` — short symbol `xferadmin` (on-chain topic name)
+- **Topic 1**: `old_admin` (`Address`) - The previous admin address.
+- **Payload**: `new_admin` (`Address`) - The new admin address.
+
+> **Note:** The on-chain topic is the short symbol `xferadmin`, not `transfer_admin`.
+> Indexers and SDKs must filter on `xferadmin`.
+
+#### Example Payload (JSON Representation)
+```json
+{
+  "topics": ["xferadmin", "GB...OLD_ADMIN_ADDRESS"],
+  "value": "GB...NEW_ADMIN_ADDRESS"
 }
 ```
