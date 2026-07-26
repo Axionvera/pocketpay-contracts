@@ -10,6 +10,20 @@ The savings vault now uses internal balance tracking and real token transfers: `
 
 See [Known Limitations](#known-limitations) for other current constraints.
 
+## Release Readiness
+
+Quick maturity summary for casual visitors. This contract is **experimental** and meant for educational / testnet use — do not treat it as production software.
+
+| Area | Status | Notes |
+| --- | --- | --- |
+| Maturity | Experimental | Development and learning project; APIs and behaviour may change |
+| Network target | Testnet only | Deploy and invoke on Stellar **testnet**; mainnet is not supported |
+| External audit | Not audited | No third-party security audit report is published; see [audit readiness](docs/audit-readiness.md) |
+| Real token transfers | Supported on testnet | SAC-backed `deposit` / `withdraw` / `withdraw_lock` move configured tokens; not a claim of mainnet safety |
+| Production / mainnet | Not ready | Not production-ready; missing items include structured errors, multi-sig admin, and an upgrade path |
+
+For remaining constraints and open risks, see [Known Limitations](#known-limitations).
+
 ## Documentation
 
 - [Storage TTL Review](docs/storage-ttl.md) — notes on the current instance and persistent storage usage, TTL-sensitive entries, and renewal expectations for the vault contract.
