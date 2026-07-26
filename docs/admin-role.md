@@ -73,7 +73,14 @@ When adding admin capabilities in the future, consider the following best practi
 - Timelocks and delays: make critical changes subject to delays and on-chain announcements to allow user reaction time.
 - Emergency pause vs. recovery: separate a limited emergency pause from powerful recovery/migration privileges.
 - On-chain governance: consider decentralizing critical powers to a DAO or governance contract.
+- Safe admin key rotation: use a two-step nomination and acceptance flow (`propose_admin` and `accept_admin`) to prevent permanently loss of admin control due to typos or un-owned destination addresses. See [Safe Admin Key Rotation Design](admin-rotation-design.md).
 - Upgrade patterns: if supporting upgrades, prefer transparent proxy patterns, clearly documented migration steps, and on-chain governance or multisig protection.
+
+## Related Documentation
+
+- [Safe Admin Key Rotation Design](admin-rotation-design.md) — Two-step nomination-acceptance specification, authorization, events, and threat model.
+- [Emergency Pause Design](pause-design.md) — Research and design for emergency pause functionality.
+- [Upgrade Strategy](upgrade-strategy.md) — Contract upgradeability comparison and proxy patterns.
 
 ## Where to find this in the code
 
@@ -88,5 +95,5 @@ When adding admin capabilities in the future, consider the following best practi
 - [x] Docs explain current admin capabilities.
 - [x] Docs explain what admin cannot do.
 - [x] Docs mention future admin design considerations.
+- [x] Safe two-step admin key rotation design specification added (`docs/admin-rotation-design.md`).
 
-If you want, I can expand this file with recommended admin function implementations (pause, migrate, multisig examples) and accompanying tests.
