@@ -713,6 +713,82 @@ impl SavingsVault {
         next_id
     }
 
+    /// Extends the unlock duration of an active (non-withdrawn) lock to a further future timestamp.
+    ///
+    /// # Arguments
+    /// * `env` - The Soroban environment
+    /// * `user` - Lock owner address (must authorize transaction)
+    /// * `lock_id` - ID of the lock entry to extend
+    /// * `new_unlock_time` - New Unix timestamp (seconds) when the lock will mature
+    ///
+    /// # Authorization Rules
+    /// - Requires `user.require_auth()`. Only the lock owner can extend lock duration.
+    ///
+    /// # Accounting Impact
+    /// - Available balance (`Balance(user)`) remains unchanged.
+    /// - Total locked principal remains unchanged.
+    /// - SAC token balances held in contract custody remain unchanged.
+    /// - Only the maturity date `unlock_time` of the specified `LockEntry` is updated.
+    ///
+    /// # Panics
+    /// - If the contract is not initialized or unsupported storage version.
+    /// - If contract is emergency paused.
+    /// - If caller is unauthorized.
+    /// - If lock is not found.
+    /// - If lock is already withdrawn.
+    /// - If `new_unlock_time` is not strictly greater than current `lock.unlock_time`.
+    /// - If `new_unlock_time` is not in the future (`<= env.ledger().timestamp()`).
+    pub fn extend_lock(env: Env, user: Address, lock_id: u64, new_unlock_time: u64) {
+        Self::assert_initialized(&env);
+        Self::try_migrate(&env);
+        Self::assert_supported_storage_version(&env);
+        Self::require_not_paused(&env);
+
+        user.require_auth();
+
+        let mut lock: LockEntry = match env
+            .storage()
+            .persistent()
+            .get::<_, LockEntry>(&DataKey::Lock(user.clone(), lock_id))
+        {
+            Some(l) => l,
+            None => panic!("Lock not found"),
+        };
+
+        if lock.withdrawn {
+            panic!("Lock already withdrawn");
+        }
+
+        let current_time = env.ledger().timestamp();
+        if new_unlock_time <= current_time {
+            panic!("Unlock time must be in the future");
+        }
+
+        if new_unlock_time <= lock.unlock_time {
+            panic!("New unlock time must be strictly greater than current unlock time");
+        }
+
+        let old_unlock_time = lock.unlock_time;
+        lock.unlock_time = new_unlock_time;
+
+        env.storage()
+            .persistent()
+            .set(&DataKey::Lock(user.clone(), lock_id), &lock);
+
+        let topics = (Symbol::new(&env, "extend_lock"), user.clone());
+        let payload = (lock_id, old_unlock_time, new_unlock_time, lock.amount);
+        env.events().publish(topics, payload);
+
+        log!(
+            &env,
+            "ExtendLock: user={}, lock_id={}, old_unlock_time={}, new_unlock_time={}",
+            user,
+            lock_id,
+            old_unlock_time,
+            new_unlock_time
+        );
+    }
+
     /// Returns the sum of all lock amounts that have not been withdrawn yet
     /// (both matured and immature). Matured locks must be withdrawn via
     /// `withdraw_lock`.
