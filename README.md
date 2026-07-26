@@ -204,6 +204,7 @@ stellar-pocketpay-contracts/
             └── test.rs                 # Unit tests
 └── docs/
     ├── admin-role.md                   # Admin role documentation
+    ├── freeze-configuration-design.md  # Post-deployment configuration freezing design
     ├── pause-design.md                 # Pause / emergency stop research
     └── upgrade-strategy.md             # Upgrade strategy research
 ```
@@ -214,6 +215,7 @@ stellar-pocketpay-contracts/
 - [Deployment Environments](docs/deployment-environments.md) — Network configuration for local, testnet, and future mainnet, including RPC URLs, identities, environment variables, and deployment commands.
 - [Contract Error Reference](docs/error-codes.md) - Current savings vault failure conditions and guidance for SDK and mobile callers.
 - [Architecture Documentation](docs/architecture.md) – Overview of project structure, state management, storage, SDK integration, and future extension points.
+- [Post-Deployment Configuration Freezing](docs/freeze-configuration-design.md) - Design for immutable parameters, freeze actions, authorization, and user trust implications.
 - [Event Schema Documentation](docs/events.md) – Overview of event names, topics, payload schemas, and JSON examples for vault actions.
 - [Vault Contract ID Handoff](docs/contract-id-handoff.md) - How to pass a deployed vault contract ID safely to SDK configuration and the mobile app.
 

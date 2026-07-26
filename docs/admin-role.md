@@ -33,6 +33,7 @@ When adding admin capabilities in the future, consider the following best practi
 - Principle of least privilege: give admin only the minimal necessary powers.
 - Multi-signature or multisig guardianship: require multiple parties to authorize sensitive admin actions.
 - Timelocks and delays: make critical changes subject to delays and on-chain announcements to allow user reaction time.
+- Configuration freezing: support post-deployment irreversible parameter freezing (`freeze_token`, `freeze_admin`) to lock configuration parameters once user funds are present. See [Post-Deployment Configuration Freezing Design](freeze-configuration-design.md).
 - Emergency pause vs. recovery: separate a limited emergency pause from powerful recovery/migration privileges.
 - On-chain governance: consider decentralizing critical powers to a DAO or governance contract.
 - Upgrade patterns: if supporting upgrades, prefer transparent proxy patterns, clearly documented migration steps, and on-chain governance or multisig protection.

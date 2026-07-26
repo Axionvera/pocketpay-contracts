@@ -42,7 +42,10 @@ The state model is deliberately simple:
 | `locks:{user}`     | `Vec<LockEntry>` | List of active and matured lock entries for a user.
 | `next_lock_id:{user}` | `u64`| Monotonically increasing next lock ID for a user.
 | `admin`            | `Address` | Contract admin (set during `initialize`).
+| `token`            | `Address` | Stellar Asset Contract token address.
 | `initialized`      | `bool`   | Guard to ensure `initialize` runs only once.
+| `token_frozen`     | `bool`   | One-way latch flag: true if `token` address is permanently frozen.
+| `admin_frozen`     | `bool`   | One-way latch flag: true if administrative configuration powers are frozen.
 
 All operations validate inputs (non‑negative amounts, sufficient balances, future unlock times) and emit descriptive `require_auth` checks.
 
@@ -93,6 +96,7 @@ These boundaries maintain a clean separation between **on‑chain logic** (this 
 
 - The **README.md** provides quick‑start guides for building, testing, and deploying the contract.
 - This **architecture.md** offers a deeper dive into internal design.
+- The **[freeze-configuration-design.md](freeze-configuration-design.md)** documents the post-deployment configuration freeze mechanism.
 - Additional module‑level docs (e.g., `admin-role.md`) cover specific responsibilities.
 
 Refer to the **Documentation** section of the README for links to all docs.
