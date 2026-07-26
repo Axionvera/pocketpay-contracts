@@ -251,3 +251,27 @@ Emitted when the current admin transfers admin privileges to a new address.
   "value": "GB...NEW_ADMIN_ADDRESS"
 }
 ```
+
+---
+
+## Multi-Step Operation Event Ordering
+
+To support deterministic off-chain indexing and transaction replay analysis, event order is guaranteed for all operations:
+
+1. **Deposit**: SAC Token `transfer` event occurs first, followed by the Vault `deposit` event.
+2. **Withdrawal**: SAC Token `transfer` event occurs first, followed by the Vault `withdraw` event.
+3. **Lock Creation**: Vault `lock` event is emitted upon internal accounting update.
+4. **Lock Withdrawal**: SAC Token `transfer` event occurs first, followed by the Vault `withdraw_lock` event.
+
+### Complete Lifecycle Sequence Matrix
+
+| Sequence | Event Producer | Event Topic 0 | Subject / Target | Key Payload Information |
+|---|---|---|---|---|
+| 1 | SAC Contract | `transfer` | User -> Vault Contract | `amount` |
+| 2 | SavingsVault | `deposit` | User Address | `(amount, new_balance)` |
+| 3 | SavingsVault | `lock` | User Address | `(amount, unlock_time, available, locked)` |
+| 4 | SAC Contract | `transfer` | Vault Contract -> User | `lock_amount` |
+| 5 | SavingsVault | `withdraw_lock` | User Address | `(lock_id, lock_amount)` |
+| 6 | SAC Contract | `transfer` | Vault Contract -> User | `available_amount` |
+| 7 | SavingsVault | `withdraw` | User Address | `(amount, new_balance)` |
+

@@ -284,6 +284,39 @@ const events = await server.getEvents({
 Repeat with the topic string you need (`"initialize"`, `"withdraw"`, `"lock"`,
 `"withdraw_lock"`, `"pause"`, `"unpause"`, `"xferadmin"`).
 
+## Event Emission Order & Multi-Step Operations
+
+Off-chain indexers and SDK consumers relying on Soroban transaction event streams require predictable chronological event order. The contract guarantees deterministic event order across all single-step and multi-step operations:
+
+### 1. Operation-Level Event Sequences
+
+- **`deposit(user, amount)`**:
+  1. `Stellar Asset Contract (SAC)` emits `transfer` event (`from: user`, `to: contract`, `amount`).
+  2. `SavingsVault` emits `deposit` event (`subject: user`, payload: `(amount, new_balance)`).
+- **`withdraw(user, amount)`**:
+  1. `Stellar Asset Contract (SAC)` emits `transfer` event (`from: contract`, `to: user`, `amount`).
+  2. `SavingsVault` emits `withdraw` event (`subject: user`, payload: `(amount, new_balance)`).
+- **`lock_funds(user, amount, unlock_time)`**:
+  1. `SavingsVault` emits `lock` event (`subject: user`, payload: `(amount, unlock_time, available, total_locked)`).
+  *(No SAC transfer occurs as funds are reallocated within contract storage).*
+- **`withdraw_lock(user, lock_id)`**:
+  1. `Stellar Asset Contract (SAC)` emits `transfer` event (`from: contract`, `to: user`, `amount`).
+  2. `SavingsVault` emits `withdraw_lock` event (`subject: user`, payload: `(lock_id, amount)`).
+
+### 2. Full Multi-Step Lifecycle Event Sequence
+
+When an account undergoes a complete vault lifecycle (Deposit -> Lock -> Withdraw Matured Lock -> Withdraw Remaining Balance), the ledger event stream produces events in the following exact order:
+
+```text
+Event #1: SAC Token      - transfer (User -> Vault, amount = deposit_amount)
+Event #2: SavingsVault   - deposit (subject = user, amount = deposit_amount, new_balance)
+Event #3: SavingsVault   - lock (subject = user, amount = lock_amount, unlock_time, available, locked)
+Event #4: SAC Token      - transfer (Vault -> User, amount = lock_amount)
+Event #5: SavingsVault   - withdraw_lock (subject = user, lock_id, amount = lock_amount)
+Event #6: SAC Token      - transfer (Vault -> User, amount = remaining_balance)
+Event #7: SavingsVault   - withdraw (subject = user, amount = remaining_balance, new_balance = 0)
+```
+
 ---
 
 ## Stability guarantees
