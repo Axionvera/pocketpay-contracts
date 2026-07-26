@@ -212,6 +212,7 @@ stellar-pocketpay-contracts/
 ---
 ## Documentation
 
+- [Vault Storage Audit Map](docs/vault_storage_audit_map.md) — Comprehensive map of all vault storage entries, keys, mutating functions, and invariants.
 - [Audit Preparation Checklist](docs/audit-preparation.md) — Checklist of documentation, tests, threat model, and deployment details required before any external security review or audit.
 - [Storage Audit](docs/storage-audit.md) — Comprehensive details on the contract's storage layout, keys, mutating functions, and security invariants.
 - [Deployment Environments](docs/deployment-environments.md) — Network configuration for local, testnet, and future mainnet, including RPC URLs, identities, environment variables, and deployment commands.
