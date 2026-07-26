@@ -220,6 +220,7 @@ stellar-pocketpay-contracts/
             └── test.rs                 # Unit tests
 └── docs/
     ├── admin-role.md                   # Admin role documentation
+    ├── accounting-invariants.md        # Formal accounting invariants
     ├── api-reference.md                # Function naming conventions
     ├── architecture.md                 # Architecture overview
     ├── contract-id-handoff.md          # Contract ID handoff guide
@@ -258,7 +259,8 @@ stellar-pocketpay-contracts/
 - [Documentation Style Guide](docs/docs-style-guide.md) — Conventions for Testnet wording, avoiding production claims, placeholders, command formatting, and linking related docs.
 - [Sample Vault Interaction Walkthrough](docs/walkthrough.md) — End-to-end deploy, deposit, lock, query, and withdraw example with expected state changes and current limitations.
 - [CLI Smoke Test Guide](docs/cli-smoke-test.md) — Quick post-deployment verification flow using the Soroban CLI to confirm every contract function responds correctly on testnet or a local sandbox.
-- [Balance Reconciliation Design Note](docs/balance-reconciliation.md) — How internal accounting should reconcile with real token balances once SAC integration is implemented, including failure modes and invariants tests must enforce.
+- [Balance Reconciliation Design Note](docs/balance-reconciliation.md) — How internal accounting reconciles with real token balances under the current SAC integration, including failure modes and invariants tests must enforce.
+- [Formal Accounting Invariants](docs/accounting-invariants.md) - Audit-oriented invariants for available balances, locks, withdrawals, token custody, user isolation, failed operations, and identified test gaps.
 - [Version Metadata](docs/version-metadata.md) — How the `get_version` read-only function works, how SDKs and deployment scripts should use it, and how to bump the version.
 - [Lock Read Helpers](docs/lock-read-helpers.md) — Response shapes and pagination for `get_lock` and `list_locks`.
 - [Test Coverage Summary](docs/test-coverage.md) — Maps initialization, deposit, withdrawal, and locking behaviours to the tests that cover them, plus known test gaps.

@@ -35,12 +35,7 @@ real funds.
   keep a clear statement such as "this contract is for educational and
   testnet use," matching the wording already used in the README's
   [Security Considerations](../README.md#security-considerations) section.
-- Be precise about custody: this contract currently tracks balances
-  internally and does not transfer or hold real XLM, SAC assets, or other
-  tokens. Do not describe `deposit` or `withdraw` as moving real funds. See
-  the README's
-  [Deposit and custody limitation](../README.md#deposit-and-custody-limitation)
-  section for the wording to reuse.
+- Be precise about custody: the current contract uses a configured Stellar Asset Contract (SAC) and performs token transfers for deposits and withdrawals. Do not imply native XLM custody, mainnet readiness, or audited production safety. Keep wording consistent with the README's [Deposit and custody](../README.md#deposit-and-custody) section.
 - When describing a feature that does not exist yet (e.g. upgrades, pausing,
   admin recovery), say so plainly and link to the relevant research doc
   (for example [docs/upgrade-strategy.md](upgrade-strategy.md) or
