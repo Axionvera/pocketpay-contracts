@@ -4,6 +4,7 @@
 //! on-chain interactions in an isolated environment.
 mod balance_conservation;
 mod test_helpers;
+mod total_vault_balance;
 
 use super::*;
 use soroban_sdk::{testutils::Address as _, Address};
