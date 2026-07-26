@@ -3,6 +3,7 @@
 //! These tests use the Soroban SDK test utilities to simulate
 //! on-chain interactions in an isolated environment.
 mod admin_invariant_guard;
+mod admin_rotation;
 mod balance_conservation;
 mod event_compatibility;
 mod independent_lock_creation;

@@ -16,12 +16,16 @@ This document explains what the `admin` address recorded by `initialize(admin)` 
 - **State changes**: None (read-only).
 - **Panics**: If the contract has not been initialized yet.
 
-### `transfer_admin(new_admin)`
+### `transfer_admin(admin, new_admin)`
 - **Access**: Admin-only.
 - **Description**: Transfers admin privileges from the current admin to a new address.
-- **Authorization**: Must be called by the current admin (requires `admin.require_auth()`).
-- **State changes**: Updates the `Admin` key in instance storage to the new admin address, emits a `transfer_admin` event.
-- **Panics**: If the contract has not been initialized, or if the caller is not the current admin.
+- **Authorization**: Must be called by the current admin (enforces `admin.require_auth()` and `admin == stored_admin`).
+- **Input Validation**:
+  - Rejects self-rotation (`new_admin == admin`) with panic `"Invalid new admin: cannot transfer to self"`.
+  - Rejects setting contract address as admin (`new_admin == env.current_contract_address()`) with panic `"Invalid new admin: cannot set contract address as admin"`.
+- **State changes**: Updates the `DataKey::Admin` key in instance storage to the new admin address, emits an `xferadmin` event.
+- **Event Schema**: Topics `(Symbol("xferadmin"), old_admin: Address)`, Data `new_admin: Address`.
+- **Panics**: If the contract has not been initialized, caller signature is missing/unauthorized, caller is not current stored admin, or `new_admin` input is invalid (self or contract address).
 
 ### `pause(duration_secs)`
 - **Access**: Admin-only.
