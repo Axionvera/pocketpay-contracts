@@ -368,6 +368,13 @@ impl SavingsVault {
     /// - **Caller Expectation:** The vault owner depositing funds for themselves.
     /// - **Known Assumptions:** Arbitrary accounts cannot deposit on behalf of unconsenting users.
     ///
+    /// ## Amount Normalisation & Units
+    /// * **Units:** `amount` is specified as an integer `i128` representing raw atomic base units
+    ///   (e.g., 1 stroop for XLM, where 1 XLM = 10,000,000 stroops).
+    /// * **Minimum Amount:** Must be strictly greater than zero (`amount >= 1` atomic unit).
+    /// * **Precision:** Determined by the configured Stellar Asset Contract (SAC) token decimals
+    ///   (typically 7 decimals for native XLM). Fractional values smaller than 1 atomic unit are not supported.
+    ///
     /// # Arguments
     ///
     /// * `env` - The Soroban environment
