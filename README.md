@@ -10,13 +10,23 @@ The savings vault now uses internal balance tracking and real token transfers: `
 
 See [Known Limitations](#known-limitations) for other current constraints.
 
+## Release Readiness
+
+Quick maturity summary for casual visitors. This contract is **experimental** and meant for educational / testnet use — do not treat it as production software.
+
+| Area | Status | Notes |
+| --- | --- | --- |
+| Maturity | Experimental | Development and learning project; APIs and behaviour may change |
+| Network target | Testnet only | Deploy and invoke on Stellar **testnet**; mainnet is not supported |
+| External audit | Not audited | No third-party security audit report is published; see [audit readiness](docs/audit-readiness.md) |
+| Real token transfers | Supported on testnet | SAC-backed `deposit` / `withdraw` / `withdraw_lock` move configured tokens; not a claim of mainnet safety |
+| Production / mainnet | Not ready | Not production-ready; missing items include structured errors, multi-sig admin, and an upgrade path |
+
+For remaining constraints and open risks, see [Known Limitations](#known-limitations).
+
 ## Documentation
 
 - [Storage TTL Review](docs/storage-ttl.md) — notes on the current instance and persistent storage usage, TTL-sensitive entries, and renewal expectations for the vault contract.
-- [Ledger Time and Lock Maturity Model](docs/ledger-time-and-maturity.md) — comprehensive guide on Soroban block timestamps (`env.ledger().timestamp()`), created vs. unlock timestamps, maturity evaluation, boundary condition handling, and testing strategies.
-- [Safe Admin Key Rotation Design](docs/admin-rotation-design.md) — two-step nomination-acceptance protocol, authorization model, storage layout, events, failure cases, and misuse threat mitigations.
-
-
 
 ## Security Considerations
 
@@ -224,26 +234,31 @@ stellar-pocketpay-contracts/
             └── test.rs                 # Unit tests
 └── docs/
     ├── admin-role.md                   # Admin role documentation
+    ├── accounting-invariants.md        # Formal accounting invariants
     ├── api-reference.md                # Function naming conventions
     ├── architecture.md                 # Architecture overview
     ├── contract-id-handoff.md          # Contract ID handoff guide
     ├── deployment-environments.md      # Deployment environment config
-    ├── error-codes.md                  # Error code reference
     ├── events.md                       # Event schema documentation
+    ├── event-privacy-review.md         # Smart contract event privacy review
     ├── state-machine.md                # Vault state machine documentation
     ├── pause-design.md                 # Pause / emergency stop research
-    ├── admin-pause-threat-model.md    # Emergency pause and admin misuse threat model
+    ├── admin-pause-threat-model.md     # Emergency pause and admin misuse threat model
     ├── storage-migration.md            # Storage versioning and migration guide
     ├── storage-ttl.md                  # Storage TTL guide
     ├── testing.md                      # Test naming conventions
+    ├── ledger-time-locks.md            # Ledger time and lock maturity guide
     ├── troubleshooting.md              # Troubleshooting guide
     ├── upgrade-strategy.md             # Upgrade strategy research
     └── withdrawal-queue-design.md      # Withdrawal queue design note
 ```
 
 ---
+
 ## Documentation
 
+- [Event Privacy Review](docs/event-privacy-review.md) — Event privacy risks, minimum payload guidance, data exposure boundaries, and indexing utility guidelines.
+- [Ledger Time and Lock Maturity Guide](docs/ledger-time-locks.md) — How the contract uses ledger timestamps for time-locking, maturity validation, boundary conditions, and testing.
 - [Contract Upgradeability](docs/upgradeability.md) — Current upgrade posture (non-upgradeable), trust model, storage migration impact, and future options.
 - [Audit Preparation Checklist](docs/audit-preparation.md) — Checklist of documentation, tests, threat model, and deployment details required before any external security review or audit.
 - [Emergency Pause and Admin Misuse Threat Model](docs/admin-pause-threat-model.md) — Threat scenarios, withdrawal impact, recovery assumptions, mitigations, limitations, and residual risks for admin-controlled pause mechanisms.
@@ -262,7 +277,8 @@ stellar-pocketpay-contracts/
 - [Documentation Style Guide](docs/docs-style-guide.md) — Conventions for Testnet wording, avoiding production claims, placeholders, command formatting, and linking related docs.
 - [Sample Vault Interaction Walkthrough](docs/walkthrough.md) — End-to-end deploy, deposit, lock, query, and withdraw example with expected state changes and current limitations.
 - [CLI Smoke Test Guide](docs/cli-smoke-test.md) — Quick post-deployment verification flow using the Soroban CLI to confirm every contract function responds correctly on testnet or a local sandbox.
-- [Balance Reconciliation Design Note](docs/balance-reconciliation.md) — How internal accounting should reconcile with real token balances once SAC integration is implemented, including failure modes and invariants tests must enforce.
+- [Balance Reconciliation Design Note](docs/balance-reconciliation.md) — How internal accounting reconciles with real token balances under the current SAC integration, including failure modes and invariants tests must enforce.
+- [Formal Accounting Invariants](docs/accounting-invariants.md) - Audit-oriented invariants for available balances, locks, withdrawals, token custody, user isolation, failed operations, and identified test gaps.
 - [Version Metadata](docs/version-metadata.md) — How the `get_version` read-only function works, how SDKs and deployment scripts should use it, and how to bump the version.
 - [Lock Read Helpers](docs/lock-read-helpers.md) — Response shapes and pagination for `get_lock` and `list_locks`.
 - [Test Coverage Summary](docs/test-coverage.md) — Maps initialization, deposit, withdrawal, and locking behaviours to the tests that cover them, plus known test gaps.

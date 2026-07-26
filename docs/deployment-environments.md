@@ -185,11 +185,11 @@ See [troubleshooting.md](troubleshooting.md) for common issues with:
 
 ### Status
 
-Mainnet deployment is **not supported** at this stage. The contract uses internal balance tracking rather than real token custody, and it has not been audited for production use. See the README [Project Status and Scope](../README.md#project-status-and-scope) section for details.
+Mainnet deployment is **not supported** at this stage. The contract uses real Stellar Asset Contract (SAC) token custody with internal accounting, but it has **not** completed an external security audit and is not production-ready. See the README [Project Status and Scope](../README.md#project-status-and-scope) section and [audit-readiness.md](audit-readiness.md) for details.
 
 ### When mainnet is ready
 
-When the contract supports real asset custody (likely through Stellar Asset Contract integration) and has been audited, this section will be updated with:
+When the contract has passed an external security audit and operational requirements (multi-sig admin, TTL procedures, upgrade strategy) are resolved, this section will be updated with:
 
 - Production RPC URL
 - Mainnet network passphrase
