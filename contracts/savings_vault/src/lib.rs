@@ -461,7 +461,7 @@ impl SavingsVault {
         user.require_auth();
 
         if amount <= 0 {
-            return Err(ContractError::InvalidDepositAmount);
+            panic!("Amount must be positive");
         }
 
         let token = env.storage().instance().get(&DataKey::Token).unwrap();
@@ -492,7 +492,6 @@ impl SavingsVault {
             amount,
             new_balance
         );
-        Ok(())
     }
 
     // -----------------------------------------------------------------------
@@ -510,7 +509,7 @@ impl SavingsVault {
         user.require_auth();
 
         if amount <= 0 {
-            return Err(ContractError::InvalidWithdrawAmount);
+            panic!("Amount must be positive");
         }
 
         let mut current_balance: i128 = env
@@ -551,7 +550,6 @@ impl SavingsVault {
             amount,
             current_balance
         );
-        Ok(())
     }
 
     /// Withdraws a specific matured lock entry by its ID.
@@ -606,83 +604,6 @@ impl SavingsVault {
             lock_id,
             withdrawn_amount
         );
-        Ok(())
-    }
-
-    /// Withdraw a specific matured lock entry.
-    ///
-    /// This function allows a user to withdraw the funds associated with a specific
-    /// lock entry, provided that the lock has matured (current_time >= unlock_time).
-    ///
-    /// # Arguments
-    ///
-    /// * `env` - The Soroban environment
-    /// * `user` - The owner of the lock (must authorize this transaction via `require_auth()`)
-    /// * `lock_id` - The unique identifier of the lock to withdraw
-    ///
-    /// # Authorization
-    ///
-    /// The `user` address must sign the transaction.
-    ///
-    /// # Panics
-    /// - If the contract has not been initialized.
-    /// - If the lock with the given `lock_id` does not exist for the `user`.
-    /// - If the lock has not yet matured (current_time < unlock_time).
-    pub fn withdraw_lock(env: Env, user: Address, lock_id: u64) {
-        if !env.storage().instance().has(&DataKey::Initialized) {
-            panic!("Contract not initialized");
-        }
-
-        // Authorization
-        user.require_auth();
-
-        // Load locks
-        let mut locks = Self::load_locks(&env, user.clone());
-
-        // Find the lock index
-        let lock_index = locks.iter().position(|lock| lock.id == lock_id);
-
-        let index = match lock_index {
-            Some(i) => i,
-            None => panic!("Lock not found"),
-        };
-
-        let lock = locks.get(index).unwrap();
-
-        // Verify maturity
-        let current_time = env.ledger().timestamp();
-        if current_time < lock.unlock_time {
-            panic!("Lock has not matured yet");
-        }
-
-        // Get token address & client
-        let token = env.storage().instance().get(&DataKey::Token).unwrap();
-        let token_client = token::Client::new(&env, &token);
-        let contract_address = env.current_contract_address();
-
-        // Perform token transfer to the user
-        token_client.transfer(&contract_address, &user, &lock.amount);
-
-        // Remove the lock from the locks vector
-        locks.remove(index);
-
-        // Save updated locks back to persistent storage
-        env.storage()
-            .persistent()
-            .set(&DataKey::Locks(user.clone()), &locks);
-
-        // Emit withdrawal lock event
-        let topics = (Symbol::new(&env, "withdraw_lock"), user.clone());
-        let payload = (lock_id, lock.amount);
-        env.events().publish(topics, payload);
-
-        log!(
-            &env,
-            "WithdrawLock: user={}, lock_id={}, amount={}",
-            user,
-            lock_id,
-            lock.amount
-        );
     }
 
     // -----------------------------------------------------------------------
@@ -720,12 +641,12 @@ impl SavingsVault {
         user.require_auth();
 
         if amount <= 0 {
-            return Err(ContractError::InvalidLockAmount);
+            panic!("Amount must be positive");
         }
 
         let current_time = env.ledger().timestamp();
         if unlock_time <= current_time {
-            return Err(ContractError::InvalidUnlockTime);
+            panic!("Unlock time must be in the future");
         }
 
         let mut current_balance: i128 = env
@@ -735,7 +656,7 @@ impl SavingsVault {
             .unwrap_or(0);
 
         if amount > current_balance {
-            return Err(ContractError::InsufficientBalanceToLock);
+            panic!("Insufficient balance");
         }
 
         let next_id: u64 = env
@@ -784,18 +705,6 @@ impl SavingsVault {
         let payload = (amount, unlock_time, current_balance, new_locked);
         env.events().publish(topics, payload);
 
-        let mut total_locked: i128 = 0;
-        for lock in locks.iter() {
-            if current_time < lock.unlock_time {
-                total_locked += lock.amount;
-            }
-        }
-
-        env.events().publish(
-            (Symbol::new(&env, "lock"), user.clone()),
-            (amount, unlock_time, current_balance, total_locked),
-        );
-
         log!(
             &env,
             "Lock: user={}, amount={}, unlock_time={}, available={}, lock_id={}",
@@ -806,7 +715,7 @@ impl SavingsVault {
             next_id
         );
 
-        Ok(next_id)
+        next_id
     }
 
     /// Returns the sum of all lock amounts that have not been withdrawn yet
@@ -926,6 +835,13 @@ impl SavingsVault {
         Self::assert_initialized(&env);
         admin.require_auth();
         Self::assert_admin(&env, &admin);
+
+        if admin == new_admin {
+            panic!("Invalid new admin: cannot transfer to self");
+        }
+        if new_admin == env.current_contract_address() {
+            panic!("Invalid new admin: cannot set contract address as admin");
+        }
 
         let old_admin: Address = env.storage().instance().get(&DataKey::Admin).unwrap();
         env.storage().instance().set(&DataKey::Admin, &new_admin);
