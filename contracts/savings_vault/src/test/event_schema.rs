@@ -10,7 +10,7 @@
 //! |-----------------|------------------------|--------------------|-------------------------------------------------|
 //! | initialize      | `"initialize"`         | admin              | token (Address)                                 |
 //! | deposit         | `"deposit"`            | user               | (amount: i128, new_balance: i128)               |
-//! | withdraw        | `"withdraw"`           | user               | (amount: i128, new_balance: i128, new_locked: i128) |
+//! | withdraw        | `"withdraw"`           | user               | (amount: i128, new_balance: i128)               |
 //! | lock            | `"lock"`               | user               | (amount: i128, unlock_time: u64, available: i128, locked: i128) |
 //! | withdraw_lock   | `"withdraw_lock"`      | user               | (lock_id: u64, amount: i128)                    |
 //! | transfer_admin  | `"transfer_admin"`     | old_admin          | new_admin (Address)                             |
@@ -143,7 +143,7 @@ fn event_schema_deposit_multiple() {
 /// The withdraw event must emit:
 /// - topics[0] = Symbol("withdraw")
 /// - topics[1] = user address
-/// - payload = (amount: i128, new_balance: i128, new_locked: i128)
+/// - payload = (amount: i128, new_balance: i128)
 #[test]
 fn event_schema_withdraw() {
     let f = event_fixture();
@@ -162,14 +162,13 @@ fn event_schema_withdraw() {
     let topic1: Address = topics.get(1).unwrap().try_into_val(&f.env).unwrap();
     assert_eq!(topic1, f.user);
 
-    // Payload: (amount, new_balance, new_locked)
-    let (amount, new_balance, new_locked): (i128, i128, i128) = data.try_into_val(&f.env).unwrap();
+    // Payload: (amount, new_balance)
+    let (amount, new_balance): (i128, i128) = data.try_into_val(&f.env).unwrap();
     assert_eq!(amount, 400);
     assert_eq!(new_balance, 600);
-    assert_eq!(new_locked, 0);
 }
 
-/// Withdraw after locking funds must report correct new_locked in the event.
+/// Withdraw after locking funds must report correct available balance in the event payload.
 #[test]
 fn event_schema_withdraw_with_locks() {
     let f = event_fixture();
@@ -186,10 +185,9 @@ fn event_schema_withdraw_with_locks() {
     let topic0: Symbol = topics.get(0).unwrap().try_into_val(&f.env).unwrap();
     assert_eq!(topic0, symbol_short!("withdraw"));
 
-    let (amount, new_balance, new_locked): (i128, i128, i128) = data.try_into_val(&f.env).unwrap();
+    let (amount, new_balance): (i128, i128) = data.try_into_val(&f.env).unwrap();
     assert_eq!(amount, 200);
     assert_eq!(new_balance, 500); // 700 - 200
-    assert_eq!(new_locked, 300); // unchanged
 }
 
 // =========================================================================

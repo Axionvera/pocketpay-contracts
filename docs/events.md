@@ -2,7 +2,7 @@
 
 This document outlines the expected event topics, payloads, and naming conventions for actions in the **Savings Vault Contract**. 
 
-SDK maintainers can use this stable schema to consume contract events safely.
+SDK maintainers can use this stable schema to consume contract events safely. See [event-privacy-review.md](event-privacy-review.md) for the privacy and minimum payload guidelines.
 
 ---
 
@@ -55,7 +55,7 @@ Emitted once when the contract is initialized by the administrator.
 ### 2. Deposit Event
 Emitted when a user deposits funds into their vault.
 
-- **Topic 0**: `Symbol::new(&env, "deposit")`
+- **Topic 0**: `symbol_short!("deposit")`
 - **Topic 1**: `user` (`Address`) - The address of the depositor.
 - **Payload**: A tuple containing:
   1. `amount` (`i128`) - The amount deposited.
@@ -74,18 +74,17 @@ Emitted when a user deposits funds into their vault.
 ### 3. Withdraw Event
 Emitted when a user withdraws funds from their vault.
 
-- **Topic 0**: `Symbol::new(&env, "withdraw")`
+- **Topic 0**: `symbol_short!("withdraw")`
 - **Topic 1**: `user` (`Address`) - The address of the withdrawer.
 - **Payload**: A tuple containing:
   1. `amount` (`i128`) - The amount withdrawn.
   2. `new_balance` (`i128`) - The user's new available balance.
-  3. `new_locked` (`i128`) - The user's new locked balance.
 
 #### Example Payload (JSON Representation)
 ```json
 {
   "topics": ["withdraw", "GD...USER_ADDRESS"],
-  "value": [500, 4500, 0]
+  "value": [500, 4500]
 }
 ```
 

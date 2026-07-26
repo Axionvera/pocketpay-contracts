@@ -239,11 +239,11 @@ stellar-pocketpay-contracts/
     ├── architecture.md                 # Architecture overview
     ├── contract-id-handoff.md          # Contract ID handoff guide
     ├── deployment-environments.md      # Deployment environment config
-    ├── error-codes.md                  # Error code reference
     ├── events.md                       # Event schema documentation
+    ├── event-privacy-review.md         # Smart contract event privacy review
     ├── state-machine.md                # Vault state machine documentation
     ├── pause-design.md                 # Pause / emergency stop research
-    ├── admin-pause-threat-model.md    # Emergency pause and admin misuse threat model
+    ├── admin-pause-threat-model.md     # Emergency pause and admin misuse threat model
     ├── storage-migration.md            # Storage versioning and migration guide
     ├── storage-ttl.md                  # Storage TTL guide
     ├── testing.md                      # Test naming conventions
@@ -254,8 +254,10 @@ stellar-pocketpay-contracts/
 ```
 
 ---
+
 ## Documentation
 
+- [Event Privacy Review](docs/event-privacy-review.md) — Event privacy risks, minimum payload guidance, data exposure boundaries, and indexing utility guidelines.
 - [Ledger Time and Lock Maturity Guide](docs/ledger-time-locks.md) — How the contract uses ledger timestamps for time-locking, maturity validation, boundary conditions, and testing.
 - [Contract Upgradeability](docs/upgradeability.md) — Current upgrade posture (non-upgradeable), trust model, storage migration impact, and future options.
 - [Audit Preparation Checklist](docs/audit-preparation.md) — Checklist of documentation, tests, threat model, and deployment details required before any external security review or audit.
