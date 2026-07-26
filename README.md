@@ -247,6 +247,7 @@ stellar-pocketpay-contracts/
     ├── storage-migration.md            # Storage versioning and migration guide
     ├── storage-ttl.md                  # Storage TTL guide
     ├── testing.md                      # Test naming conventions
+    ├── ledger-time-locks.md            # Ledger time and lock maturity guide
     ├── troubleshooting.md              # Troubleshooting guide
     ├── upgrade-strategy.md             # Upgrade strategy research
     └── withdrawal-queue-design.md      # Withdrawal queue design note
@@ -255,6 +256,7 @@ stellar-pocketpay-contracts/
 ---
 ## Documentation
 
+- [Ledger Time and Lock Maturity Guide](docs/ledger-time-locks.md) — How the contract uses ledger timestamps for time-locking, maturity validation, boundary conditions, and testing.
 - [Contract Upgradeability](docs/upgradeability.md) — Current upgrade posture (non-upgradeable), trust model, storage migration impact, and future options.
 - [Audit Preparation Checklist](docs/audit-preparation.md) — Checklist of documentation, tests, threat model, and deployment details required before any external security review or audit.
 - [Emergency Pause and Admin Misuse Threat Model](docs/admin-pause-threat-model.md) — Threat scenarios, withdrawal impact, recovery assumptions, mitigations, limitations, and residual risks for admin-controlled pause mechanisms.
