@@ -538,11 +538,6 @@ impl SavingsVault {
         let payload = (amount, current_balance);
         env.events().publish(topics, payload);
 
-        env.events().publish(
-            (Symbol::new(&env, "withdraw"), user.clone()),
-            (amount, current_balance),
-        );
-
         log!(
             &env,
             "Withdraw: user={}, amount={}, new_balance={}",
