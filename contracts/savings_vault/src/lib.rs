@@ -95,12 +95,20 @@ impl SavingsVault {
 
     /// Deposit funds into the caller's vault.
     ///
+    /// ## Amount Normalisation & Units
+    /// * **Units:** `amount` is specified as an integer `i128` representing raw atomic base units
+    ///   (e.g., 1 stroop for XLM, where 1 XLM = 10,000,000 stroops).
+    /// * **Minimum Amount:** Must be strictly greater than zero (`amount >= 1` atomic unit).
+    /// * **Precision:** Determined by the configured Stellar Asset Contract (SAC) token decimals
+    ///   (typically 7 decimals for native XLM). Fractional values smaller than 1 atomic unit are not supported.
+    ///
     /// # Arguments
     /// * `user`   - The depositor's address (must authorize the call).
-    /// * `amount` - The amount to deposit (must be > 0).
+    /// * `amount` - The amount to deposit in atomic base units (must be > 0).
     ///
     /// # Panics
-    /// Panics if `amount` is zero or negative.
+    /// - Panics if `amount` is zero or negative.
+    /// - Panics if balance addition causes an `i128` overflow.
     pub fn deposit(env: Env, user: Address, amount: i128) {
         // Authorization: only the user can deposit on their own behalf
         user.require_auth();
@@ -117,8 +125,11 @@ impl SavingsVault {
             .get(&DataKey::Balance(user.clone()))
             .unwrap_or(0);
 
-        // Update balance
-        let new_balance = current_balance + amount;
+        // Update balance safely with overflow check
+        let new_balance = current_balance
+            .checked_add(amount)
+            .expect("Deposit balance overflow");
+
         env.storage()
             .persistent()
             .set(&DataKey::Balance(user.clone()), &new_balance);
@@ -142,9 +153,14 @@ impl SavingsVault {
 
     /// Withdraw funds from the caller's vault.
     ///
+    /// ## Amount Normalisation & Units
+    /// * **Units:** `amount` must be in raw atomic base units as `i128`.
+    /// * **Minimum Amount:** Must be strictly greater than zero (`amount >= 1` atomic unit).
+    /// * **Precision:** Determined by the configured SAC token.
+    ///
     /// # Arguments
     /// * `user`   - The withdrawer's address (must authorize the call).
-    /// * `amount` - The amount to withdraw (must be > 0).
+    /// * `amount` - The amount to withdraw in atomic base units (must be > 0).
     ///
     /// # Panics
     /// - If `amount` is zero or negative.
@@ -281,9 +297,13 @@ impl SavingsVault {
     /// lock entry. They cannot be withdrawn until the
     /// `unlock_time` has passed.
     ///
+    /// ## Amount Normalisation & Units
+    /// * **Units:** `amount` must be in raw atomic base units as `i128`.
+    /// * **Minimum Amount:** Must be strictly greater than zero (`amount >= 1` atomic unit).
+    ///
     /// # Arguments
     /// * `user`        - The user's address (must authorize the call).
-    /// * `amount`      - The amount to lock (must be > 0).
+    /// * `amount`      - The amount to lock in atomic base units (must be > 0).
     /// * `unlock_time` - Unix timestamp (seconds) when the funds unlock.
     ///
     /// # Panics

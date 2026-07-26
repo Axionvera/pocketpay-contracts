@@ -37,14 +37,23 @@ Initialization also requires authorization from `admin`; see
 
 ## Invalid amount errors
 
+See [Amount Normalisation Documentation](amount-normalization.md) for full precision, minimum value (`>= 1`), and atomic unit definitions.
+
 ### `Deposit amount must be greater than zero`
 
 - **Current failure:** Panic message from `deposit`.
-- **Meaning:** The deposit amount is zero or negative.
+- **Meaning:** The deposit amount is zero or negative (less than the minimum valid amount of `1` atomic base unit).
 - **Likely cause:** Invalid input, unit conversion, sign handling, or an empty
   field converted to zero.
 - **Caller/developer action:** Require a positive `i128` amount in the token's
   smallest unit before invoking the contract.
+
+### `Deposit balance overflow`
+
+- **Current failure:** Panic message from `deposit`.
+- **Meaning:** Adding the deposit amount to the user's current balance exceeds `i128::MAX`.
+- **Likely cause:** Overflow testing or abnormal amount submission.
+- **Caller/developer action:** Validate total balance before submission.
 
 ### `Withdrawal amount must be greater than zero`
 

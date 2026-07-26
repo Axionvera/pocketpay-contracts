@@ -2,6 +2,7 @@
 //!
 //! These tests use the Soroban SDK test utilities to simulate
 //! on-chain interactions in an isolated environment.
+mod amount_normalization;
 mod balance_conservation;
 mod test_helpers;
 

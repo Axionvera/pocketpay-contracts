@@ -44,7 +44,7 @@ The state model is deliberately simple:
 | `admin`            | `Address` | Contract admin (set during `initialize`).
 | `initialized`      | `bool`   | Guard to ensure `initialize` runs only once.
 
-All operations validate inputs (non‑negative amounts, sufficient balances, future unlock times) and emit descriptive `require_auth` checks.
+All operations validate inputs (positive amounts in atomic base units `i128`, minimum amount `>= 1`, sufficient balances, future unlock times) and emit descriptive `require_auth` checks. See [Amount Normalisation](amount-normalization.md) for precision and unit guidelines.
 
 ---
 
