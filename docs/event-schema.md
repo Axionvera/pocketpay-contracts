@@ -204,6 +204,28 @@ by outgoing admin can find the transition; the new admin is in data.
 
 ---
 
+### 9. `extend_lock`
+
+Emitted when a user extends the duration of an existing time-lock.
+
+**Topics**
+
+| Position | Type      | Value                          |
+|----------|-----------|--------------------------------|
+| 0        | `Symbol`  | `"extend_lock"` (long symbol)  |
+| 1        | `Address` | Lock owner                     |
+
+**Data**
+
+| Field             | Type   | Description                                             |
+|-------------------|--------|---------------------------------------------------------|
+| `lock_id`         | `u64`  | ID of the lock entry extended                           |
+| `old_unlock_time` | `u64`  | Previous Unix-seconds unlock timestamp                  |
+| `new_unlock_time` | `u64`  | New extended Unix-seconds unlock timestamp              |
+| `amount`          | `i128` | Principal locked in this entry (unchanged)              |
+
+---
+
 ## Consumer Examples
 
 ### TypeScript / JavaScript (`@stellar/stellar-sdk`)
