@@ -86,6 +86,7 @@ pub fn set_ledger_timestamp(env: &Env, timestamp: u64) {
 
 | Test Module | Coverage & Test Focus |
 | :--- | :--- |
+| [`lock_maturity_boundary.rs`](../contracts/savings_vault/src/test/lock_maturity_boundary.rs) | Explicit boundary condition tests covering $T = \text{unlock\_time} - 1$ (rejected), $T = \text{unlock\_time}$ (succeeds), $T = \text{unlock\_time} + 1$ (succeeds), $T > \text{unlock\_time}$ (succeeds), and `can_withdraw` transition behavior. |
 | [`zero_duration_lock.rs`](../contracts/savings_vault/src/test/zero_duration_lock.rs) | Tests rejection of `unlock_time == current_time` across zero and non-zero base timestamps, confirms failed locks do not mutate balances, and verifies exact 1-second duration lock maturity. |
 | [`withdraw_lock.rs`](../contracts/savings_vault/src/test/withdraw_lock.rs) | Verifies that `withdraw_lock` panics when `current_time < unlock_time`, succeeds when `current_time >= unlock_time`, and rejects duplicate withdrawal attempts on already-withdrawn locks. |
 | [`pause.rs`](../contracts/savings_vault/src/test/pause.rs) | Tests admin pause activation, zero-duration pause rejection, auto-expiration when timestamp advances past `pause_expiry`, and unpause overrides. |

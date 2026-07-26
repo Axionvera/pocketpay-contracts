@@ -9,6 +9,7 @@ mod event_compatibility;
 mod event_ordering;
 mod independent_lock_creation;
 mod initialization;
+mod lock_maturity_boundary;
 mod lock_read_helpers;
 mod maximum_amount_boundary;
 mod multi_lock_invariants;
