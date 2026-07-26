@@ -27,7 +27,12 @@
 
 ## Current State
 
-As of the current codebase, the Savings Vault contract has **no upgrade mechanism**. The contract wasm is deployed once, and its logic cannot be changed after deployment. The `initialize(admin)` function records an admin address, but that admin has no upgrade powers — the address is stored for future reference only.
+As of the current codebase, the Savings Vault contract has **no upgrade mechanism** (logic cannot be changed after deployment). However, it does have **storage versioning** to support future safe migrations:
+- `DataKey::StorageVersion` is stored in instance storage (set to `1` during initialization).
+- The `assert_supported_storage_version` helper checks for version compatibility on all function calls.
+- Missing version (legacy pre-versioning contracts) are treated as version `1` for backward compatibility.
+
+The `initialize(admin, token)` function records an admin address (for future reference) and token address.
 
 From the README:
 
