@@ -4,10 +4,25 @@
 //! accounting. Each test simulates a transfer failure and verifies that
 //! all storage state remains unchanged after the failure.
 //!
+//! ## Expected Failure Behavior
+//!
+//! The contract follows a strict ordering pattern to ensure atomicity:
+//! 1. **Deposit**: Token transfer occurs first, then balance is credited.
+//!    - If transfer fails: No balance update, no events, state unchanged
+//!    - If transfer succeeds: Balance is credited, event emitted
+//!
+//! 2. **Withdraw**: Token transfer occurs first, then balance is debited.
+//!    - If transfer fails: No balance update, no events, state unchanged
+//!    - If transfer succeeds: Balance is debited, event emitted
+//!
+//! 3. **Withdraw Lock**: Token transfer occurs first, then lock is marked withdrawn.
+//!    - If transfer fails: Lock remains unwithdrawn, amount unchanged, no events
+//!    - If transfer succeeds: Lock marked withdrawn, amount set to 0, event emitted
+//!
 //! ## Invariants under test
 //! - Failed deposit: balance → unchanged, locks → unchanged, events → none
 //! - Failed withdrawal: balance → unchanged, locks → unchanged, events → none
-//! - Failed withdraw_lock: locks → unchanged, balance → unchanged
+//! - Failed withdraw_lock: locks → unchanged (amount, withdrawn flag), balance → unchanged
 //!
 //! ## Key architectural guarantee
 //! The vault performs token transfers *before* mutating storage in every
@@ -368,4 +383,61 @@ fn test_balance_consistency_after_mixed_failures() {
     // Totals must reconcile
     let total = client.get_balance(&user_a) + client.get_balance(&user_b);
     assert_eq!(total, 1_200, "total user balances = 700 + 500 = 1200");
+}
+
+#[test]
+fn test_failed_withdraw_lock_token_transfer_failure_preserves_state() {
+    // Test that when the token transfer in withdraw_lock fails, the lock state
+    // remains unchanged. This simulates a scenario where the contract doesn't
+    // have enough tokens to transfer back (e.g., due to a bug or external factor).
+    let env = test_env();
+    let (contract_id, client, token_client, token_admin) = vault_with_sac(&env);
+    let user = Address::generate(&env);
+
+    set_ledger_timestamp(&env, 1_000);
+    token_admin.mint(&user, &1_000);
+
+    // Deposit and create a lock
+    client.deposit(&user, &500);
+    let lock_id = client.lock_funds(&user, &200, &5_000);
+
+    // Verify initial state
+    let (bal_before, locked_before, events_before) = snapshot(&env, &client, &user);
+    assert_eq!(bal_before, 300);
+    assert_eq!(locked_before, 200);
+
+    // Fast-forward past unlock time
+    set_ledger_timestamp(&env, 10_000);
+
+    // Drain the contract's token balance to simulate transfer failure
+    let contract_address = contract_id;
+    let contract_balance = token_client.balance(&contract_address);
+    token_admin.mint(&Address::generate(&env), &contract_balance); // Move tokens elsewhere
+
+    // Attempt withdraw_lock - should fail due to insufficient contract token balance
+    let result = client.try_withdraw_lock(&user, &lock_id);
+    assert!(
+        result.is_err(),
+        "withdraw_lock must fail when contract has insufficient token balance"
+    );
+
+    // Verify state is unchanged
+    let (bal_after, locked_after, events_after) = snapshot(&env, &client, &user);
+    assert_eq!(
+        bal_after, bal_before,
+        "available balance must not change on failed withdraw_lock"
+    );
+    assert_eq!(
+        locked_after, locked_before,
+        "locked balance must not change on failed withdraw_lock"
+    );
+    assert_eq!(
+        events_after, events_before,
+        "no new events must be emitted on failed withdraw_lock"
+    );
+
+    // Verify the lock entry itself is unchanged
+    let lock = client.get_lock(&user, lock_id).expect("lock should still exist");
+    assert_eq!(lock.amount, 200, "lock amount should remain unchanged");
+    assert!(!lock.withdrawn, "lock should not be marked as withdrawn");
 }
