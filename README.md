@@ -32,6 +32,8 @@ For remaining constraints and open risks, see [Known Limitations](#known-limitat
 
 > **This contract is for educational and testnet use.** Review the following before any mainnet deployment.
 
+**[Audit Evidence Index](docs/audit-evidence-index.md)**: A comprehensive directory linking all security-relevant vault documentation, tests, threat models, and known audit gaps.
+
 See the [Admin Role](docs/admin-role.md) document for details on what the `initialize(admin)` value records, what the admin can and cannot do today, and future admin design considerations.
 See the [Emergency Pause and Admin Misuse Threat Model](docs/admin-pause-threat-model.md) for malicious or compromised admin scenarios, withdrawal impact, recovery assumptions, mitigations, and residual risks.
 See the [Vault Fee Model](docs/vault-fee-model.md) document for clarification on fee assumptions, accounting implications, and user transparency requirements.
