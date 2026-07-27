@@ -12,6 +12,7 @@ mod initialization;
 mod invalid_lock_id;
 mod lock_extension;
 mod lock_atomicity;
+mod lock_amount_validation;
 mod lock_id_generation;
 mod lock_maturity_boundary;
 mod lock_read_helpers;
