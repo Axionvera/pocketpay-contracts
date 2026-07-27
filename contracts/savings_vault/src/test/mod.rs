@@ -16,6 +16,7 @@ mod lock_atomicity;
 mod lock_amount_validation;
 mod lock_id_generation;
 mod lock_maturity_boundary;
+mod lock_maturity_replay;
 mod lock_read_helpers;
 mod maximum_amount_boundary;
 mod maximum_lock_duration;
