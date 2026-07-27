@@ -691,12 +691,6 @@ impl SavingsVault {
         let payload = (amount, current_balance);
         env.events().publish(topics, payload);
 
-        let token = env.storage().instance().get(&DataKey::Token).unwrap();
-        let token_client = token::Client::new(&env, &token);
-        let contract_address = env.current_contract_address();
-
-        token_client.transfer(&contract_address, &user, &amount);
-
         log!(
             &env,
             "Withdraw: user={}, amount={}, new_balance={}",

@@ -108,7 +108,7 @@ fn test_lock_ids_do_not_collide_across_users() {
 
 // 4. Invalid inputs are rejected
 #[test]
-#[should_panic(expected = "Lock amount must be greater than zero")]
+#[should_panic(expected = "Amount must be positive")]
 fn test_negative_lock_amount_is_rejected() {
     let env = test_env();
     let (contract_id, client) = init_contract(&env);

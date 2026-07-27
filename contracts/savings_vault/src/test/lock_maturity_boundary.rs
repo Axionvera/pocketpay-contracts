@@ -98,8 +98,12 @@ fn test_boundary_exact_maturity_second_succeeds() {
     assert!(lock_entry.withdrawn);
     assert_eq!(lock_entry.amount, 0);
 
-    // Verify token balance received
-    assert_eq!(f.token_client.balance(&f.user), 5_000); // 3800 available + 1200 withdrawn lock
+    // Verify token balance received.
+    // Wallet balance = 10_000 minted - 5_000 moved to the vault on deposit
+    // + 1_200 released back by withdraw_lock = 6_200. The 3_800 still
+    // showing as "available" in the vault's accounting remains in the
+    // vault's custody until the user calls `withdraw`.
+    assert_eq!(f.token_client.balance(&f.user), 6_200);
 }
 
 // =========================================================================

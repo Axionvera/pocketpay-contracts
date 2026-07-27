@@ -13,9 +13,9 @@ fn test_env() -> Env {
     env
 }
 
-fn init_with_admin(env: &Env) -> (Address, savings_vault::SavingsVaultClient<'static>, Address) {
-    let contract_id = env.register(savings_vault::SavingsVault, ());
-    let client = savings_vault::SavingsVaultClient::new(env, &contract_id);
+fn init_with_admin(env: &Env) -> (Address, crate::SavingsVaultClient<'static>, Address) {
+    let contract_id = env.register(crate::SavingsVault, ());
+    let client = crate::SavingsVaultClient::new(env, &contract_id);
     let admin = Address::generate(env);
     let token = {
         let issuer = Address::generate(env);
