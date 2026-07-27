@@ -17,6 +17,7 @@ mod lock_amount_validation;
 mod lock_id_generation;
 mod lock_maturity_boundary;
 mod lock_read_helpers;
+mod matured_lock_discovery;
 mod maximum_amount_boundary;
 mod maximum_lock_duration;
 mod minimum_deposit_amount;
