@@ -1,216 +1,262 @@
-# Savings Vault Error Reference
+# Savings Vault Error Reference (Canonical)
 
-This reference describes error behavior in `contracts/savings_vault/src/lib.rs`.
-The contract defines a custom error enum with stable numeric error codes via
-the `#[contracterror]` attribute. See [error-code-standard.md](./error-code-standard.md)
-for the complete error code standard and SDK mapping guidance.
+This reference documents the **real, contract-defined `ContractError` enum**
+in [`contracts/savings_vault/src/lib.rs`](../contracts/savings_vault/src/lib.rs).
+The contract uses `#[contracterror]` with a `#[repr(u32)]` discriminant, so
+errors are exposed to SDKs and mobile clients as **stable `u32` codes** — not
+as arbitrary panic strings.
 
-SDK and mobile callers should use the numeric error codes for reliable error
-handling and display user-friendly messages based on the error category.
+> **Breaking-change contract.** Numeric codes in this file are part of the
+> cross-repo SDK interface. Any code renumber here MUST be version-bumped and
+> co-ordinated with SDK + mobile releases. See the mapping guidance in
+> [`sdk-error-mapping-guide.md`](./sdk-error-mapping-guide.md).
 
-## Configuration errors (1000-1999)
+## Category Ranges
 
-### `AlreadyInitialized` (Code: 1001)
+| Range | Category | Examples |
+| --- | --- | --- |
+| **1001–1099** | **Validation** | Bad amounts, bad timestamps, bad durations |
+| **2001–2099** | **Authorisation** | Wrong caller role (non-admin calling admin-only) |
+| **3001–3099** | **Lifecycle** | Initialization, pause state |
+| **4001–4099** | **Accounting** | Insufficient available balance |
+| **5001–5099** | **Locks** | Missing lock, already withdrawn, immature, unchanged extend |
+| **6001–6099** | **Storage** | Schema version, missing required entry |
+| **7001–7099** | **Token** | Token configuration issues |
+| **8001–8099** | **Admin rotation** | Invalid new-admin address |
 
-- **Current failure:** Returns `ContractError::AlreadyInitialized` from `initialize`.
-- **Meaning:** The one-time initialization flag already exists.
-- **Likely cause:** A repeated initialization, a retry after success, or the
-  wrong contract ID.
-- **Caller/developer action:** Do not retry. Confirm the contract ID and use the
-  existing deployment; this is not a transient network failure.
+## 1000s — Validation
 
-### `NotInitialized` (Code: 1002)
+### `AmountNotPositive` (1001)
 
-- **Current failure:** Returns `ContractError::NotInitialized` when attempting operations
-  that require initialization.
-- **Meaning:** The contract has not been initialized.
-- **Likely cause:** Operations called before initialization or instance storage unavailable.
-- **Caller/developer action:** Ensure initialization succeeded before enabling
-  vault operations.
+- **Raised by:** `deposit`, `withdraw`, `lock_funds`
+- **Meaning:** The submitted `amount` is `0` or negative.
+- **Likely cause:** Empty field coerced to `0`, a sign bug, or a unit-conversion
+  bug between whole-token and stroops / the asset's decimal exponent.
+- **Caller action:** Block submission client-side until `amount > 0`. Format the
+  error to show the asset's decimal representation, not the raw `i128` stroop
+  value.
 
-## Validation errors (2000-2999)
+### `UnlockTimeNotInFuture` (1002)
 
-### `InvalidDepositAmount` (Code: 2001)
+- **Raised by:** `lock_funds`, `extend_lock`
+- **Meaning:** `unlock_time <= current ledger timestamp`.
+- **Likely cause:** Past time, seconds / ms confusion, clock skew, or choosing a
+  time too close to submission.
+- **Caller action:** Send Unix time in **seconds** and leave a safety margin
+  (≥ 30 s) above the last-seen ledger time.
 
-- **Current failure:** Returns `ContractError::InvalidDepositAmount` from `deposit`.
-- **Meaning:** The deposit amount is zero or negative.
-- **Likely cause:** Invalid input, unit conversion, sign handling, or an empty
-  field converted to zero.
-- **Caller/developer action:** Require a positive `i128` amount in the token's
-  smallest unit before invoking the contract.
+### `LockDurationExceedsMaximum` (1003)
 
-### `InvalidWithdrawAmount` (Code: 2002)
+- **Raised by:** `lock_funds`
+- **Meaning:** `unlock_time - now > max_lock_duration`.
+- **Likely cause:** Wrong asset config read, or a UI picker allowing years
+  beyond the configured max.
+- **Caller action:** Read `MaxLockDuration` from config (or its storage-backed
+  setter) and clamp the picker before submission.
 
-- **Current failure:** Returns `ContractError::InvalidWithdrawAmount` from `withdraw`.
-- **Meaning:** The withdrawal amount is zero or negative.
-- **Likely cause:** Invalid input or an amount-conversion bug.
-- **Caller/developer action:** Reject non-positive amounts before submission.
+### `LockDurationBelowMinimum` (1004)
 
-### `InvalidLockAmount` (Code: 2003)
+- **Raised by:** `lock_funds`
+- **Meaning:** `unlock_time - now < min_lock_duration`.
+- **Likely cause:** UX allowing 1-second locks when min is e.g. 1 day.
+- **Caller action:** Same as above — pre-clamp.
 
-- **Current failure:** Returns `ContractError::InvalidLockAmount` from `lock_funds`.
-- **Meaning:** The lock amount is zero or negative.
-- **Likely cause:** Invalid input or an amount-conversion bug.
-- **Caller/developer action:** Require a positive amount before submission.
+### `AmountBelowMinimumDeposit` (1005)
 
-### `InvalidUnlockTime` (Code: 2004)
+- **Raised by:** `deposit`
+- **Meaning:** `amount < min_deposit_amount`.
+- **Likely cause:** Asset decimal mismatch, or a UX not honouring the configured
+  floor.
+- **Caller action:** Read the configured min and reject below it client-side.
 
-- **Current failure:** Returns `ContractError::InvalidUnlockTime` from `lock_funds`.
-- **Meaning:** `unlock_time` is less than or equal to the current ledger
-  timestamp; it must be strictly later when executed.
-- **Likely cause:** A past timestamp, seconds/milliseconds confusion, clock skew,
-  or submission too close to the selected time.
-- **Caller/developer action:** Send Unix time in **seconds** and leave a safety
-  margin beyond the latest ledger time.
+### `PauseDurationMustBePositive` (1006)
 
-## Balance errors (4000-4999)
+- **Raised by:** `pause` (admin)
+- **Meaning:** `duration_secs == 0` on the admin pause call.
+- **Likely cause:** Accidental zero input.
+- **Caller action:** Admin UI only; enforce a minimum (e.g. 1 hour) when
+  submitting.
 
-These checks use the vault's **available internal balance**, not the wallet
-balance or locked balance.
+### `MinDepositAmountNegative` (1007)
 
-### `InsufficientBalance` (Code: 4001)
+- **Raised by:** `set_min_deposit_amount` (admin)
+- **Meaning:** Attempt to set the global min deposit to a negative `i128`.
+- **Likely cause:** Admin-console sign bug.
+- **Caller action:** Admin console validation.
 
-- **Current failure:** Returns `ContractError::InsufficientBalance` from `withdraw`.
-- **Meaning:** The withdrawal exceeds the available internal balance; a missing
-  balance is treated as zero.
-- **Likely cause:** The request is too large, no deposit is recorded, or some
-  balance was moved to the locked bucket.
-- **Caller/developer action:** Refresh `get_balance(user)`, cap the request to
-  that value, and explain that locked funds are unavailable.
+## 2000s — Authorisation
 
-### `InsufficientBalanceToLock` (Code: 4002)
+### `NotAuthorizedAdmin` (2001)
 
-- **Current failure:** Returns `ContractError::InsufficientBalanceToLock` from `lock_funds`.
-- **Meaning:** The lock amount exceeds the available internal balance.
-- **Likely cause:** A stale displayed balance, an excessive request, or funds
-  already moved to the locked bucket.
-- **Caller/developer action:** Refresh `get_balance(user)` and allow no more than
-  the returned available amount.
+- **Raised by:** all admin-only entrypoints (`pause`, `unpause`,
+  `set_min_deposit_amount`, `set_max_lock_duration`, `set_min_lock_duration`,
+  `transfer_admin`)
+- **Meaning:** The `require_auth`-verified caller does not match the stored
+  `Admin`.
+- **Likely cause:** Wrong wallet connected, or trying to use a governance role
+  that was never transferred to.
+- **Caller action:** Confirm the connected address is the current admin (use
+  `get_admin()`), or — for app backends — route through a signer that holds
+  the admin role.
+- **Distinction from host auth failures:** Soroban's host-level auth failures
+  (e.g. signature missing) raise a host `Status(Auth, …)`; this code is a
+  contract-level **role check** that runs AFTER the host has confirmed the
+  caller signed.
 
-### `FundsLockedUntilMaturity` (Code: 4003)
+## 3000s — Lifecycle
 
-- **Current failure:** Returns `ContractError::FundsLockedUntilMaturity` from `withdraw`.
-- **Meaning:** The withdrawal amount exceeds the available balance and would
-  require withdrawing from immature (unmatured) locked funds. This is a specific
-  error that occurs when the user has locked funds that have not yet reached
-  their unlock time.
-- **Likely cause:** The user attempted to withdraw more than their available
-  (unlocked) balance, and the shortfall would need to come from locked funds
-  that are still immature (current_time < unlock_time).
-- **Caller/developer action:** Check `get_balance(user)` to see available funds
-  and `get_locked_balance(user)` to see locked funds. Only withdraw up to the
-  available balance. Wait for locks to mature (check with `can_withdraw(user)`)
-  before attempting to withdraw locked funds.
+### `AlreadyInitialized` (3001)
 
-## Authorization errors (3000-3999)
+- **Raised by:** `initialize`
+- **Meaning:** The `StorageVersion` flag already exists.
+- **Likely cause:** A double-call to `initialize` (e.g. an infra retry after a
+  success that the caller didn't observe) or pointing at the wrong deployed
+  contract.
+- **Caller action:** Do not retry. Use `get_version()` / `get_token()` to
+  confirm the contract is already live.
 
-### `Unauthorized` (Code: 3001)
+### `NotInitialized` (3002)
 
-- **Current failure:** Soroban host authorization failure from `require_auth()`;
-  the contract defines this error for documentation purposes, but the actual
-  failure comes from the Soroban host.
-- **Meaning:** Valid authorization for the required address is absent.
-- **Likely cause:** `initialize` lacks `admin` authorization, or `deposit`,
-  `withdraw`, or `lock_funds` lacks `user` authorization. The app may be trying
-  to act for another address.
-- **Caller/developer action:** Build and sign with the required address. Do not
-  retry unchanged; request the correct wallet signature.
+- **Raised by:** every guarded public entrypoint (`get_version`, `get_token`,
+  `pause`, `deposit`, `withdraw`, `lock_funds`, `list_locks`, `get_admin`, …)
+- **Meaning:** The contract was deployed but `initialize` hasn't run.
+- **Likely cause:** A deploy script that forgot the init call, or a race where
+  the UI renders operations before init lands on-chain.
+- **Caller action:** Gate all vault UI behind a contract-ready check
+  (`get_version()` succeeds).
 
-Read-only calls (`get_balance`, `get_locked_balance`, and `can_withdraw`) do not
-call `require_auth()`.
+### `ContractPaused` (3003)
 
-## Lock and unlock time behavior
+- **Raised by:** state-mutating non-withdrawal operations (`deposit`,
+  `lock_funds`, `extend_lock`, plus admin-setters if the team later chooses
+  to tighten them). `withdraw`, `withdraw_lock`, and reads remain **allowed**.
+- **Meaning:** Emergency pause active and not yet expired.
+- **Likely cause:** Admin-incident response.
+- **Caller action:** Show an incident banner. Allow / encourage withdrawal;
+  block new deposits and lock creation. Use `is_paused()` to poll expiry.
 
-**Zero-duration locks:** Passing `unlock_time == current ledger timestamp`
-(a zero-second duration) is rejected with this same panic, because the check
-is `unlock_time <= current_time`, not `<`. There is no way to create a lock
-that is already matured at creation time; the smallest valid duration is one
-second (`unlock_time == current_time + 1`), and funds locked that way remain
-locked until the ledger timestamp advances to that value — `can_withdraw`
-and `get_balance` still treat it as locked at the moment of creation.
+## 4000s — Accounting
 
-### `Contract is paused`
+### `InsufficientBalance` (4001)
 
-- **Current failure:** Panic message from `deposit` and `lock_funds`.
-- **Meaning:** The contract is in an emergency pause state. Deposits and lock
-  operations are blocked. Withdrawals (`withdraw`, `withdraw_lock`) and
-  read-only queries remain available.
-- **Likely cause:** The admin activated a pause for an incident response.
-- **Caller/developer action:** Check `is_paused()` to confirm. If the pause
-  has an expiry, wait for it to expire. Otherwise, the admin must call
-  `unpause()` to restore normal operations. Users can still withdraw funds
-  during a pause.
+- **Raised by:** `withdraw`
+- **Meaning:** `amount > available_balance(user)`. Locked funds are NOT in
+  `available_balance`.
+- **Likely cause:** Stale displayed balance, or the user is trying to withdraw
+  more than their unlocked funds.
+- **Caller action:** Call `get_balance(user)` first, cap the submit, and show
+  "Locked balance is unavailable. Wait for it to mature with `can_withdraw`."
 
-### `Pause duration must be greater than zero`
+### `InsufficientBalanceToLock` (4002)
 
-- **Current failure:** Panic message from `pause`.
-- **Meaning:** The `duration_secs` argument to `pause()` was zero. A pause
-  must have a non-zero duration to ensure it auto-expires.
-- **Likely cause:** Invalid input or an accidental zero value.
-- **Caller/developer action:** Pass a positive duration in seconds (e.g.,
-  604800 for 7 days).
+- **Raised by:** `lock_funds`
+- **Meaning:** `amount > available_balance(user)`.
+- **Semantic disambiguation from 4001:** Same underlying test, different
+  operation. SDKs SHOULD show a distinct copy:
+  - 4001 → "You don't have enough available to withdraw **X** tokens."
+  - 4002 → "You don't have enough unlocked balance to lock **X** tokens."
 
-### Locked funds are not yet withdrawable
+## 5000s — Locks
 
-- **Current condition:** `can_withdraw(user)` returns `false`; it does not fail.
-- **Meaning:** No locked funds exist, or the ledger timestamp is earlier than
-  the unlock time. At exactly the unlock timestamp it returns `true`.
-- **Likely cause:** The lock has not matured or no lock exists.
-- **Caller/developer action:** Treat `false` as normal state and disable the
-  action. The current contract has no operation to release or withdraw locked
-  funds; `can_withdraw` is only a query.
+### `LockNotFound` (5001)
 
-### `Cannot withdraw: funds are locked until maturity`
+- **Raised by:** `withdraw_lock`, `extend_lock`
+- **Meaning:** No `Lock { amount, unlock_time, withdrawn }` stored under the
+  `DataKey::Lock(owner, id)` key.
+- **Likely cause:** Stale lock ID, lock storage TTL expired and was not
+  bumped, or wrong owner (the lookup is scoped to the authenticated owner).
+- **Caller action:** Re-fetch via `get_lock` / `list_locks`. If TTL expiry is
+  plausible, check storage TTL tooling.
 
-- **Current failure:** Panic message from `withdraw`.
-- **Meaning:** The withdrawal amount exceeds the available balance and would
-  require withdrawing from immature (unmatured) locked funds. This is a specific
-  error that occurs when the user has locked funds that have not yet reached
-  their unlock time.
-- **Likely cause:** The user attempted to withdraw more than their available
-  (unlocked) balance, and the shortfall would need to come from locked funds
-  that are still immature (current_time < unlock_time).
-- **Caller/developer action:** Check `get_balance(user)` to see available funds
-  and `get_locked_balance(user)` to see locked funds. Only withdraw up to the
-  available balance. Wait for locks to mature (check with `can_withdraw(user)`)
-  before attempting to withdraw locked funds.
+### `LockAlreadyWithdrawn` (5002)
 
-## Unauthorised access errors
+- **Raised by:** `withdraw_lock`, `extend_lock`
+- **Meaning:** The lock's `withdrawn` boolean is `true`.
+- **Likely cause:** UI double-submit after a success the user didn't see, or a
+  retry of a completed transaction.
+- **Caller action:** Idempotent on the client side: if `get_lock(owner, id)`
+  says `withdrawn == true`, treat as success and don't re-submit.
 
-### `LockNotFound` (Code: 5001)
+### `LockNotMatured` (5003)
 
-- **Current failure:** Reserved for future use.
-- **Meaning:** No lock found for the specified lock ID.
-- **Likely cause:** Invalid lock ID or lock has been consumed.
-- **Caller/developer action:** Verify lock ID and check lock status.
+- **Raised by:** `withdraw_lock`
+- **Meaning:** `now < lock.unlock_time`.
+- **Likely cause:** UI enabled the "withdraw lock" button too early due to
+  local-clock skew, or the user manually forced the call.
+- **Caller action:** Gate the button behind `can_withdraw(user)` AND a
+  per-lock `now >= unlock_time` check using the last-seen ledger timestamp,
+  not local device time.
 
-Read-only calls (`get_balance`, `get_locked_balance`, `get_lock`, `list_locks`,
-and `can_withdraw`) do not call `require_auth()`.
+### `ExtendLockTimeNotIncreased` (5004)
 
-## Other existing failure conditions
+- **Raised by:** `extend_lock`
+- **Meaning:** `new_unlock_time <= lock.unlock_time`.
+- **Likely cause:** UX that lets the user pick an earlier time when "extending".
+- **Caller action:** Pre-clamp to `max(lock.unlock_time + 1, selection)`.
 
-### Token transfer failure during withdrawal
+## 6000s — Storage
 
-- **Current failure:** Error or trap propagated by the configured token
-  contract; the vault defines no wrapper error.
-- **Meaning:** The token transfer from the vault contract to the user failed.
-- **Likely cause:** Insufficient real token balance, an invalid or incompatible
-  token address, token authorization failure, or token-contract rejection. An
-  internal balance does not guarantee matching tokens are held.
-- **Caller/developer action:** Inspect the nested token diagnostic. Verify the
-  configured token and vault token balance; do not label this only as an
-  internal-balance error.
+### `StorageVersionUnsupported` (6001)
+
+- **Raised by:** `try_migrate`, `assert_supported_storage_version`
+- **Meaning:** On-chain storage has a version strictly greater than the code's
+  `CURRENT_STORAGE_VERSION` (downgrade / rollback attempt), OR migration code
+  cannot interpret the stored layout.
+- **Likely cause:** Wrong WASM deployed (older version vs. newer storage), or
+  a failed upgrade path.
+- **Caller action:** Escalate to contract deployment owners; do NOT auto-retry.
+
+### `RequiredStorageEntryMissing` (6002)
+
+- **Raised by:** paths that `.unwrap_or_else(|| RequiredStorageEntryMissing)`
+  a required instance-storage cell (e.g. `Admin`, `Token`).
+- **Meaning:** Contract storage is internally inconsistent (a mandatory
+  singleton was never written or was dropped by an accidental TTL expiry).
+- **Likely cause:** Deployment bug: `initialize` failed half-way, or an
+  admin-rotation code path omitted the write. In principle unreachable on a
+  correctly-initialized contract; presence of 6002 is ALERTS-level.
+- **Caller action:** Pause the UI. Page on-call.
+
+## 7000s — Token
+
+### `TokenNotConfigured` (7001)
+
+- **Raised by:** SAC-custody paths if the `Token` storage cell is missing
+  (`deposit`, `withdraw`, `withdraw_lock`).
+- **Meaning:** The configured asset address is not set; custody transfers can't
+  run.
+- **Likely cause:** Corrupt initialization or migration.
+- **Caller action:** Escalate.
+
+## 8000s — Admin Rotation
+
+### `CannotTransferAdminToSelf` (8001)
+
+- **Raised by:** `transfer_admin`
+- **Meaning:** `new_admin == current_admin`.
+- **Likely cause:** Form submitted with the same address.
+- **Caller action:** Admin console validation; treat as no-op success if the
+  user intention was to "keep admin".
+
+### `CannotTransferAdminToContractAddress` (8002)
+
+- **Raised by:** `transfer_admin`
+- **Meaning:** `new_admin == contract_address` (i.e. setting the vault itself
+  as its own admin, which would permanently orphan admin-only operations).
+- **Likely cause:** Paste error selecting the contract instead of the signer.
+- **Caller action:** Admin console guard that blacklists the contract's own
+  address.
 
 ## Error Code Stability
 
-All error codes defined in the `ContractError` enum are stable and backward compatible:
-
-- Existing error codes will never change
-- New error codes will be added within their category ranges
-- Deprecated error codes will be marked in documentation but remain functional
-- See [error-code-standard.md](./error-code-standard.md) for the complete standard
+- Existing codes **will never be renumbered** within a major release line.
+- New codes **will be added inside their category range** (1001–1099, …) to
+  keep SDK route-by-thousand-category logic correct.
+- Deprecated codes **will keep their number**; deprecation is signalled via
+  variant docs only.
+- See [`error-code-standard.md`](./error-code-standard.md) for design rationale.
 
 ## SDK Integration
 
-For SDK mapping guidance and mobile UX recommendations, see
-[error-code-standard.md](./error-code-standard.md).
+For how to map these `u32` codes into TypeScript / Kotlin / Swift user-facing
+messages + analytics, see [`sdk-error-mapping-guide.md`](./sdk-error-mapping-guide.md).
