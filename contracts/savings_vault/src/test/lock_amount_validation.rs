@@ -5,7 +5,7 @@
 //! user's available balance. Valid amounts within bounds must succeed and
 //! leave accounting consistent.
 
-use soroban_sdk::{testutils::Address as _, Address, Env};
+use soroban_sdk::{testutils::{Address as _, Ledger}, Address, Env};
 
 fn test_env() -> Env {
     let env = Env::default();
@@ -13,9 +13,9 @@ fn test_env() -> Env {
     env
 }
 
-fn init_with_admin(env: &Env) -> (Address, savings_vault::SavingsVaultClient<'static>) {
-    let contract_id = env.register(savings_vault::SavingsVault, ());
-    let client = savings_vault::SavingsVaultClient::new(env, &contract_id);
+fn init_with_admin(env: &Env) -> (Address, crate::SavingsVaultClient<'static>) {
+    let contract_id = env.register(crate::SavingsVault, ());
+    let client = crate::SavingsVaultClient::new(env, &contract_id);
     let admin = Address::generate(env);
     let token = {
         let issuer = Address::generate(env);
@@ -25,12 +25,12 @@ fn init_with_admin(env: &Env) -> (Address, savings_vault::SavingsVaultClient<'st
     (admin, client)
 }
 
-fn fund(client: &savings_vault::SavingsVaultClient<'static>, user: &Address, amount: i128) {
+fn fund(client: &crate::SavingsVaultClient<'static>, user: &Address, amount: i128) {
     let env = client.env.clone();
     let token: Address = env.as_contract(&client.address, || {
         env.storage()
             .instance()
-            .get(&savings_vault::DataKey::Token)
+            .get(&crate::DataKey::Token)
             .expect("token should be set during initialization")
     });
     let token_admin = soroban_sdk::token::StellarAssetClient::new(&env, &token);
