@@ -86,6 +86,11 @@ pub enum DataKey {
     /// than zero, `deposit` rejects amounts strictly below it. A value of zero
     /// (or unset) means no floor is enforced.
     MinDepositAmount,
+    /// Maximum lock duration rule (issue #343), in seconds. When set to a value
+    /// less than `u64::MAX`, `lock_funds` rejects locks whose duration
+    /// (`unlock_time - current_time`) exceeds it. A value of zero (or unset)
+    /// means no upper bound is enforced (unbounded).
+    MaxLockDurationSecs,
 }
 
 pub const STORAGE_VERSION: u64 = 1;
@@ -453,6 +458,47 @@ impl SavingsVault {
             .unwrap_or(0)
     }
 
+    // -----------------------------------------------------------------------
+    // Maximum lock duration rule (issue #343)
+    // -----------------------------------------------------------------------
+
+    /// Sets the maximum lock duration rule, in seconds. A `lock_funds` whose
+    /// duration (`unlock_time - current_time`) exceeds `max_duration_secs` is
+    /// rejected. Pass `0` to disable the upper bound (unbounded).
+    ///
+    /// # Panics
+    ///
+    /// - If the contract has not been initialized
+    /// - If the caller is not the admin
+    pub fn set_max_lock_duration(env: Env, admin: Address, max_duration_secs: u64) {
+        Self::assert_initialized(&env);
+        admin.require_auth();
+        Self::assert_admin(&env, &admin);
+
+        env.storage()
+            .instance()
+            .set(&DataKey::MaxLockDurationSecs, &max_duration_secs);
+
+        let topics = (symbol_short!("cfg_maxlk"), admin.clone());
+        env.events().publish(topics, max_duration_secs);
+
+        log!(
+            &env,
+            "Max lock duration set to {}s by admin={}",
+            max_duration_secs,
+            admin
+        );
+    }
+
+    /// Returns the current maximum lock duration rule (seconds). `0` means no
+    /// upper bound is enforced (unbounded).
+    pub fn get_max_lock_duration(env: Env) -> u64 {
+        env.storage()
+            .instance()
+            .get(&DataKey::MaxLockDurationSecs)
+            .unwrap_or(0)
+    }
+
     /// Check whether the contract is currently paused.
     ///
     /// Returns `true` when the pause flag is set **and** the pause has not yet
@@ -708,6 +754,15 @@ impl SavingsVault {
         let current_time = env.ledger().timestamp();
         if unlock_time <= current_time {
             panic!("Unlock time must be in the future");
+        }
+
+        let max_duration: u64 = env
+            .storage()
+            .instance()
+            .get(&DataKey::MaxLockDurationSecs)
+            .unwrap_or(0);
+        if max_duration > 0 && unlock_time - current_time > max_duration {
+            panic!("Lock duration exceeds maximum");
         }
 
         let mut current_balance: i128 = env

@@ -13,6 +13,7 @@ mod lock_extension;
 mod lock_maturity_boundary;
 mod lock_read_helpers;
 mod maximum_amount_boundary;
+mod maximum_lock_duration;
 mod minimum_deposit_amount;
 mod multi_lock_invariants;
 mod pause;
