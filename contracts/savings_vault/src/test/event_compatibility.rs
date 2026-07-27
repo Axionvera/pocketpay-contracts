@@ -195,6 +195,30 @@ fn test_withdraw_event_carries_available_balance() {
     assert_eq!(new_balance, 200);
 }
 
+fn test_withdraw_event_reflects_running_balance() {
+    // Guards against a subtle regression where a future refactor emits the
+    // withdraw `amount` in the `new_balance` slot instead of the post-withdraw
+    // running total.
+    let (env, cid, client) = setup();
+    let (env, _a, client, _tc, ta) = test_token(env, cid, client);
+    let user = Address::generate(&env);
+    ta.mint(&user, &2_000);
+    client.deposit(&user, &1_000);
+
+    client.withdraw(&user, &300);
+    client.withdraw(&user, &200);
+
+    let matches = events_with_topic0(&env, &symbol_short!("withdraw"));
+    assert!(!matches.is_empty());
+    let (_c, _t, d) = matches.last().unwrap();
+    let (amount, new_balance): (i128, i128) = d.try_into_val(&env).unwrap();
+    assert_eq!(amount, 200, "amount slot carries the withdraw amount");
+    assert_eq!(
+        new_balance, 500,
+        "new_balance slot carries the running total after withdraw"
+    );
+}
+
 // ---------------------------------------------------------------------------
 // lock_funds — topics: (Symbol("lock"), user),
 //              data: (amount, unlock_time, new_balance, new_locked)
@@ -330,6 +354,29 @@ fn test_transfer_admin_event_schema() {
 
     let emitted_new_admin: Address = data.try_into_val(&env).unwrap();
     assert_eq!(emitted_new_admin, new_admin);
+}
+
+fn test_withdraw_lock_event_reflects_correct_amount() {
+    // Guards against a regression where withdraw_lock emits the wrong amount
+    // or lock_id.
+    let (env, cid, client) = setup();
+    let (env, _a, client, _tc, ta) = test_token(env, cid, client);
+    let user = Address::generate(&env);
+    ta.mint(&user, &2_000);
+    set_ledger_timestamp(&env, 1_000);
+    client.deposit(&user, &1_000);
+    let lid1 = client.lock_funds(&user, &300, &3_000);
+    let lid2 = client.lock_funds(&user, &500, &4_000);
+    set_ledger_timestamp(&env, 5_000);
+
+    client.withdraw_lock(&user, &lid2);
+
+    let matches = events_with_topic0(&env, &Symbol::new(&env, "withdraw_lock"));
+    assert!(!matches.is_empty());
+    let (_c, _t, d) = matches.last().unwrap();
+    let (emitted_lock_id, amount): (u64, i128) = d.try_into_val(&env).unwrap();
+    assert_eq!(emitted_lock_id, lid2);
+    assert_eq!(amount, 500);
 }
 
 // ---------------------------------------------------------------------------
