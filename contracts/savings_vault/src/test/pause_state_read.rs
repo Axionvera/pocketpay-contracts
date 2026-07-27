@@ -4,7 +4,8 @@
 //! `is_paused` read helper must report the active pause state accurately,
 //! including explicit unpause and automatic expiry.
 
-use soroban_sdk::{testutils::Address as _, Address, Env};
+use soroban_sdk::{testutils::Address as _, testutils::Ledger as _, Address, Env};
+
 
 fn test_env() -> Env {
     let env = Env::default();

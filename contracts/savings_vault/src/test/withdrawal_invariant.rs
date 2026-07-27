@@ -4,7 +4,8 @@
 //! available balance and never disturbs locked funds, unrelated totals, or
 //! other users' balances — the core accounting correctness guarantee.
 
-use soroban_sdk::{testutils::Address as _, Address, Env};
+use soroban_sdk::{testutils::Address as _, testutils::Ledger as _, Address, Env};
+
 
 fn test_env() -> Env {
     let env = Env::default();

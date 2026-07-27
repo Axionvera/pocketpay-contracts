@@ -5,7 +5,8 @@
 //! lock ID fail safely, without mutating unrelated state, so callers (and the
 //! SDK) get a clear, deterministic error instead of silent corruption.
 
-use soroban_sdk::{testutils::Address as _, Address, Env};
+use soroban_sdk::{testutils::Address as _, testutils::Ledger as _, Address, Env};
+
 
 fn test_env() -> Env {
     let env = Env::default();

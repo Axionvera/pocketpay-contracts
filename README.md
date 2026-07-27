@@ -259,6 +259,7 @@ stellar-pocketpay-contracts/
 
 ## Documentation
 
+- **[Vault Governance Model](docs/vault-governance-model.md)** — Complete vault governance specification detailing admin boundaries, parameter mutability table, pause mechanics, user withdrawal guarantees, auto-expiry, and admin misuse threat model.
 - **[Audit Evidence Index](docs/audit-evidence-index.md)** — Comprehensive index of security documentation, invariants, test coverage, and threat models for auditors.
 - [Event Privacy Review](docs/event-privacy-review.md) — Event privacy risks, minimum payload guidance, data exposure boundaries, and indexing utility guidelines.
 - [Ledger Time and Lock Maturity Guide](docs/ledger-time-locks.md) — How the contract uses ledger timestamps for time-locking, maturity validation, boundary conditions, and testing.

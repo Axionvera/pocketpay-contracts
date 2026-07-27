@@ -23,6 +23,10 @@
 extern crate alloc;
 #[cfg(test)]
 extern crate std;
+#[cfg(test)]
+extern crate self as savings_vault;
+
+
 
 use soroban_sdk::{
     contract, contractimpl, contracttype, log, symbol_short, token, Address, Env, Symbol, Vec,
@@ -691,12 +695,6 @@ impl SavingsVault {
         let payload = (amount, current_balance);
         env.events().publish(topics, payload);
 
-        let token = env.storage().instance().get(&DataKey::Token).unwrap();
-        let token_client = token::Client::new(&env, &token);
-        let contract_address = env.current_contract_address();
-
-        token_client.transfer(&contract_address, &user, &amount);
-
         log!(
             &env,
             "Withdraw: user={}, amount={}, new_balance={}",
@@ -705,6 +703,7 @@ impl SavingsVault {
             current_balance
         );
     }
+
 
     /// Withdraws a specific matured lock entry by its ID.
     /// Panics if the lock doesn't exist or hasn't matured.

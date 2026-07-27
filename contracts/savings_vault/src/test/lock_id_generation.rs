@@ -6,7 +6,8 @@
 //! (`get_lock`, `extend_lock`, `withdraw_lock`) relies on, so their
 //! generation must be deterministic and collision-free.
 
-use soroban_sdk::{testutils::Address as _, Address, Env};
+use soroban_sdk::{testutils::Address as _, testutils::Ledger as _, Address, Env};
+
 
 fn test_env() -> Env {
     let env = Env::default();

@@ -19,6 +19,8 @@ use super::*;
 use alloc::vec::Vec as StdVec;
 use proptest::prelude::*;
 use soroban_sdk::{testutils::Address as _, Address, Env};
+use std::panic::AssertUnwindSafe;
+
 
 // ---------------------------------------------------------------------------
 // Operation model

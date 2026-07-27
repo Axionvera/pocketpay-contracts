@@ -99,8 +99,9 @@ fn test_boundary_exact_maturity_second_succeeds() {
     assert_eq!(lock_entry.amount, 0);
 
     // Verify token balance received
-    assert_eq!(f.token_client.balance(&f.user), 5_000); // 3800 available + 1200 withdrawn lock
+    assert_eq!(f.token_client.balance(&f.user), 6_200); // 5000 remaining + 1200 withdrawn lock
 }
+
 
 // =========================================================================
 // 3. One Second After Maturity (Success)

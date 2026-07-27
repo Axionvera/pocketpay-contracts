@@ -17,7 +17,8 @@
 //!
 //! No contract logic is modified — these only exercise existing public API.
 
-use soroban_sdk::{testutils::Address as _, Address, Env};
+use soroban_sdk::{testutils::Address as _, testutils::Ledger as _, Address, Env};
+
 
 fn test_env() -> Env {
     let env = Env::default();

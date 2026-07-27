@@ -412,7 +412,8 @@ fn test_failed_withdraw_lock_token_transfer_failure_preserves_state() {
     // Drain the contract's token balance to simulate transfer failure
     let contract_address = contract_id;
     let contract_balance = token_client.balance(&contract_address);
-    token_admin.mint(&Address::generate(&env), &contract_balance); // Move tokens elsewhere
+    token_client.transfer(&contract_address, &Address::generate(&env), &contract_balance); // Move tokens out of contract
+
 
     // Attempt withdraw_lock - should fail due to insufficient contract token balance
     let result = client.try_withdraw_lock(&user, &lock_id);
@@ -437,7 +438,8 @@ fn test_failed_withdraw_lock_token_transfer_failure_preserves_state() {
     );
 
     // Verify the lock entry itself is unchanged
-    let lock = client.get_lock(&user, lock_id).expect("lock should still exist");
+    let lock = client.get_lock(&user, &lock_id).expect("lock should still exist");
     assert_eq!(lock.amount, 200, "lock amount should remain unchanged");
+
     assert!(!lock.withdrawn, "lock should not be marked as withdrawn");
 }

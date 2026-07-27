@@ -6,7 +6,8 @@
 //! exercised on the user-facing paths (`deposit`, `lock_funds`) that
 //! `require_not_paused` protects.
 
-use soroban_sdk::{testutils::Address as _, Address, Env};
+use soroban_sdk::{testutils::Address as _, testutils::Ledger as _, Address, Env};
+
 
 fn test_env() -> Env {
     let env = Env::default();
@@ -77,8 +78,8 @@ fn test_lock_funds_blocked_while_paused() {
     let (admin, client) = init_with_admin(&env);
     let user = Address::generate(&env);
 
-    client.pause(&admin, &10_000);
     fund(&client, &user, 1_000);
+    client.pause(&admin, &10_000);
 
     client.lock_funds(&user, &100, &(env.ledger().timestamp() + 60));
 }
@@ -94,11 +95,10 @@ fn test_pause_auto_expires_after_expiry() {
     let (admin, client) = init_with_admin(&env);
     let user = Address::generate(&env);
 
-    env.ledger().set_timestamp(1_000);
+    fund(&client, &user, 1_000);
     client.pause(&admin, &500); // expires at T=1_500
 
     // Still paused before expiry: a lock is rejected.
-    fund(&client, &user, 1_000);
     let blocked = client.try_lock_funds(&user, &100, &(env.ledger().timestamp() + 60));
     assert!(blocked.is_err(), "lock must be blocked before pause expiry");
 
@@ -119,9 +119,8 @@ fn test_unpause_reEnables_operations_early() {
     let (admin, client) = init_with_admin(&env);
     let user = Address::generate(&env);
 
-    env.ledger().set_timestamp(1_000);
-    client.pause(&admin, &100_000); // would expire far in the future
     fund(&client, &user, 1_000);
+    client.pause(&admin, &100_000); // would expire far in the future
 
     client.unpause(&admin);
     let id = client.lock_funds(&user, &100, &(env.ledger().timestamp() + 60));

@@ -5,7 +5,8 @@
 //! user's available balance. Valid amounts within bounds must succeed and
 //! leave accounting consistent.
 
-use soroban_sdk::{testutils::Address as _, Address, Env};
+use soroban_sdk::{testutils::Address as _, testutils::Ledger as _, Address, Env};
+
 
 fn test_env() -> Env {
     let env = Env::default();

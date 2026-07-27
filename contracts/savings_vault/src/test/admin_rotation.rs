@@ -102,9 +102,9 @@ fn test_revoked_admin_cannot_pause_or_unpause() {
     client.transfer_admin(&original_admin, &new_admin);
 
     // Verify original admin cannot pause
-    let res_pause = std::panic::catch_unwind(|| {
+    let res_pause = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         client.pause(&original_admin, &3600);
-    });
+    }));
     assert!(res_pause.is_err(), "Old admin must not be able to pause contract");
 
     // New admin pauses contract
@@ -112,9 +112,9 @@ fn test_revoked_admin_cannot_pause_or_unpause() {
     assert!(client.is_paused());
 
     // Verify original admin cannot unpause
-    let res_unpause = std::panic::catch_unwind(|| {
+    let res_unpause = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         client.unpause(&original_admin);
-    });
+    }));
     assert!(res_unpause.is_err(), "Old admin must not be able to unpause contract");
 
     // New admin can unpause
@@ -178,13 +178,13 @@ fn test_repeated_admin_rotation_chain() {
     assert_eq!(client.get_admin(), admin_d);
 
     // Assert prior admins (A, B, C) are all revoked and cannot rotate
-    let res_a = std::panic::catch_unwind(|| client.transfer_admin(&admin_a, &new_user(&env)));
+    let res_a = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| client.transfer_admin(&admin_a, &new_user(&env))));
     assert!(res_a.is_err());
 
-    let res_b = std::panic::catch_unwind(|| client.transfer_admin(&admin_b, &new_user(&env)));
+    let res_b = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| client.transfer_admin(&admin_b, &new_user(&env))));
     assert!(res_b.is_err());
 
-    let res_c = std::panic::catch_unwind(|| client.transfer_admin(&admin_c, &new_user(&env)));
+    let res_c = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| client.transfer_admin(&admin_c, &new_user(&env))));
     assert!(res_c.is_err());
 
     // Only Admin D can perform operations
@@ -213,7 +213,7 @@ fn test_cyclic_admin_rotation() {
     client.pause(&admin_a, &500);
     assert!(client.is_paused());
 
-    let res_b_pause = std::panic::catch_unwind(|| client.unpause(&admin_b));
+    let res_b_pause = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| client.unpause(&admin_b)));
     assert!(res_b_pause.is_err(), "Admin B must be revoked after transferring back to A");
 }
 
@@ -237,14 +237,15 @@ fn test_transfer_admin_emits_event_schema() {
     // Verify contract address
     assert_eq!(event.0, contract_id);
 
-    // Verify topic schema: (symbol_short!("xferadmin"), old_admin)
-    let topic_symbol: Symbol = event.1.get_unchecked(0);
-    let topic_admin: Address = event.1.get_unchecked(1);
+    use soroban_sdk::IntoVal;
+    let topic_symbol: Symbol = event.1.get_unchecked(0).into_val(&env);
+    let topic_admin: Address = event.1.get_unchecked(1).into_val(&env);
 
     assert_eq!(topic_symbol, symbol_short!("xferadmin"));
     assert_eq!(topic_admin, admin_a);
 
     // Verify data payload: new_admin
-    let payload_admin: Address = event.2;
+    let payload_admin: Address = event.2.into_val(&env);
     assert_eq!(payload_admin, admin_b);
 }
+
