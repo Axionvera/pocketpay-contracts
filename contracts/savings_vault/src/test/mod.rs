@@ -21,6 +21,7 @@ mod minimum_deposit_amount;
 mod minimum_lock_duration;
 mod multi_lock_invariants;
 mod pause;
+mod pause_state_read;
 mod pause_transition;
 mod property_fee_invariants;
 mod property_vault_accounting;
