@@ -61,17 +61,9 @@ fn test_extend_lock_success() {
     let new_unlock: u64 = 10_000;
     f.client.extend_lock(&f.user, &lock_id, &new_unlock);
 
-    // Verify updated lock entry in storage
-    let updated_lock = f.client.get_lock(&f.user, &lock_id).unwrap();
-    assert_eq!(updated_lock.unlock_time, new_unlock);
-    assert_eq!(updated_lock.amount, lock_amount);
-    assert!(!updated_lock.withdrawn);
-
-    // Verify accounting balances remain unchanged
-    assert_eq!(f.client.get_balance(&f.user), 3_500);
-    assert_eq!(f.client.get_locked_balance(&f.user), 1_500);
-
-    // Verify event emission
+    // Verify event emission. `env.events().all()` only returns events from
+    // the single most recent top-level contract call, so this must be read
+    // immediately after `extend_lock`, before any other client call.
     let events = f.env.events().all();
     let (contract, topics, data) = events.get(events.len() - 1).unwrap();
     assert_eq!(contract, f.contract_id);
@@ -86,6 +78,16 @@ fn test_extend_lock_success() {
     assert_eq!(old_time, initial_unlock);
     assert_eq!(new_time, new_unlock);
     assert_eq!(amount, lock_amount);
+
+    // Verify updated lock entry in storage
+    let updated_lock = f.client.get_lock(&f.user, &lock_id).unwrap();
+    assert_eq!(updated_lock.unlock_time, new_unlock);
+    assert_eq!(updated_lock.amount, lock_amount);
+    assert!(!updated_lock.withdrawn);
+
+    // Verify accounting balances remain unchanged
+    assert_eq!(f.client.get_balance(&f.user), 3_500);
+    assert_eq!(f.client.get_locked_balance(&f.user), 1_500);
 }
 
 /// Verifies that at the old unlock timestamp, the extended lock is NOT withdrawable,
