@@ -130,3 +130,15 @@ pub fn deposit_with_sac(
     // 3. Mimic SAC transfer for custody
     token_client.transfer(user, contract_address, &amount);
 }
+
+/// Returns a default test environment WITHOUT mocking all auths.
+pub fn strict_test_env() -> Env {
+    Env::default()
+}
+
+pub fn strict_setup() -> (Env, Address, SavingsVaultClient<'static>) {
+    let env = Env::default();
+    let contract_id = env.register(SavingsVault, ());
+    let client = SavingsVaultClient::new(&env, &contract_id);
+    (env, contract_id, client)
+}
