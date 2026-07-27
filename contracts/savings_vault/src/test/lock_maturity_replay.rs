@@ -17,7 +17,7 @@
 //!
 //! No contract logic is modified — these only exercise existing public API.
 
-use soroban_sdk::{testutils::Address as _, Address, Env};
+use soroban_sdk::{testutils::{Address as _, Ledger}, Address, Env};
 
 fn test_env() -> Env {
     let env = Env::default();
@@ -26,9 +26,9 @@ fn test_env() -> Env {
 }
 
 /// Registers + initializes the vault and returns (env, admin, client).
-fn init_with_admin(env: &Env) -> (Address, savings_vault::SavingsVaultClient<'static>) {
-    let contract_id = env.register(savings_vault::SavingsVault, ());
-    let client = savings_vault::SavingsVaultClient::new(env, &contract_id);
+fn init_with_admin(env: &Env) -> (Address, crate::SavingsVaultClient<'static>) {
+    let contract_id = env.register(crate::SavingsVault, ());
+    let client = crate::SavingsVaultClient::new(env, &contract_id);
     let admin = Address::generate(env);
     let token = {
         let issuer = Address::generate(env);
@@ -39,19 +39,19 @@ fn init_with_admin(env: &Env) -> (Address, savings_vault::SavingsVaultClient<'st
 }
 
 /// Returns the configured token address for a client.
-fn token_address(client: &savings_vault::SavingsVaultClient<'static>) -> Address {
+fn token_address(client: &crate::SavingsVaultClient<'static>) -> Address {
     let env = client.env.clone();
     env.as_contract(&client.address, || {
         env.storage()
             .instance()
-            .get(&savings_vault::DataKey::Token)
+            .get(&crate::DataKey::Token)
             .expect("token should be set during initialization")
     })
 }
 
 /// Mints `amount` to `user` and deposits it, giving available balance to lock.
 fn fund(
-    client: &savings_vault::SavingsVaultClient<'static>,
+    client: &crate::SavingsVaultClient<'static>,
     user: &Address,
     amount: i128,
 ) {
@@ -62,7 +62,7 @@ fn fund(
     client.deposit(user, &amount);
 }
 
-fn token_balance(client: &savings_vault::SavingsVaultClient<'static>, user: &Address) -> i128 {
+fn token_balance(client: &crate::SavingsVaultClient<'static>, user: &Address) -> i128 {
     let env = client.env.clone();
     let token = token_address(client);
     let token_client = soroban_sdk::token::Client::new(&env, &token);

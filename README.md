@@ -240,6 +240,7 @@ stellar-pocketpay-contracts/
 └── docs/
     ├── admin-role.md                   # Admin role documentation
     ├── advanced-development-and-testing.md # Advanced dev & testing guide
+    ├── simulation-compatibility.md     # Per-function simulateTransaction reference
     ├── accounting-invariants.md        # Formal accounting invariants
     ├── api-reference.md                # Function naming conventions
     ├── architecture.md                 # Architecture overview
@@ -264,6 +265,7 @@ stellar-pocketpay-contracts/
 ## Documentation
 
 - **[Advanced Local Development and Testing Guide](docs/advanced-development-and-testing.md)** — Comprehensive guide for building, running, extending, and debugging advanced contract tests, Soroban test fixtures, deterministic ledger time, SAC token mocking, and failure scenario rollbacks.
+- **[Contract Simulation Compatibility](docs/simulation-compatibility.md)** — Per-function reference for SDK integrators: which calls need a signature, which are safe to simulate speculatively, matured-withdrawal prediction via read helpers, and deterministic error/unsupported-call fixtures.
 - **[Audit Evidence Index](docs/audit-evidence-index.md)** — Comprehensive index of security documentation, invariants, test coverage, and threat models for auditors.
 - [Event Privacy Review](docs/event-privacy-review.md) — Event privacy risks, minimum payload guidance, data exposure boundaries, and indexing utility guidelines.
 - [Ledger Time and Lock Maturity Guide](docs/ledger-time-locks.md) — How the contract uses ledger timestamps for time-locking, maturity validation, boundary conditions, and testing.

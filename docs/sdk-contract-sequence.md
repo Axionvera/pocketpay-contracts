@@ -141,6 +141,10 @@ sequenceDiagram
 
 ## See also
 
+- [Contract Simulation Compatibility](simulation-compatibility.md) —
+  per-function reference for what `simulateTransaction` returns for every
+  vault call, including lock-related and read-helper calls not covered by
+  the flows above.
 - [Architecture Documentation](architecture.md) — component responsibilities
   and storage design.
 - [Savings Vault Error Reference](error-codes.md) — current failure
