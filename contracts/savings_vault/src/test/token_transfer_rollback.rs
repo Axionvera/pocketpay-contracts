@@ -446,3 +446,85 @@ fn test_failed_withdraw_lock_token_transfer_failure_preserves_state() {
     assert_eq!(lock.amount, 200, "lock amount should remain unchanged");
     assert!(!lock.withdrawn, "lock should not be marked as withdrawn");
 }
+
+#[test]
+fn test_failed_withdraw_token_transfer_failure_preserves_state() {
+    // Mirror of `test_failed_withdraw_lock_token_transfer_failure_preserves_state`
+    // but for the plain `withdraw` entrypoint. Verifies that when the SAC
+    // transfer from contract -> user fails (contract custody drained below
+    // the user's internal available balance), every piece of vault state
+    // (available balance, locked balance, events, lock entries) is preserved
+    // exactly as it was before the call.
+    let env = test_env();
+    let (contract_id, client, token_client, token_admin) = vault_with_sac(&env);
+    let user = Address::generate(&env);
+
+    set_ledger_timestamp(&env, 1_000);
+    token_admin.mint(&user, &1_000);
+
+    // Deposit + lock to build mixed state so we verify both available and
+    // locked sides remain untouched by a failed withdrawal.
+    client.deposit(&user, &800);
+    let _lock_id = client.lock_funds(&user, &300, &5_000);
+
+    // Internal state before failure: 500 available, 300 locked, 800 total
+    let (bal_before, locked_before, events_before) = snapshot(&env, &client, &user);
+    assert_eq!(bal_before, 500);
+    assert_eq!(locked_before, 300);
+
+    // Also snapshot the lock entry fields to rule out any mutation
+    let lock_snapshot_before = client.get_lock(&user, &_lock_id).unwrap();
+
+    // Drain the contract's SAC balance to an unrelated sink address so the
+    // internal `token_client.transfer(contract -> user)` inside `withdraw`
+    // will be rejected by the SAC even though the user's internal balance
+    // is sufficient. `mock_all_auths()` grants the `from.require_auth()`
+    // check the SAC performs on the contract address itself.
+    let contract_address = contract_id.clone();
+    let contract_balance = token_client.balance(&contract_address);
+    assert_eq!(contract_balance, 800, "custody = sum of liabilities pre-drain");
+    let sink = Address::generate(&env);
+    env.mock_all_auths();
+    token_client.transfer(&contract_address, &sink, &contract_balance);
+    env.set_auths(&[]); // clear mocks so real user auth is required again
+    assert_eq!(token_client.balance(&contract_address), 0);
+
+    // Attempt withdraw for an amount covered by the internal balance (so
+    // the internal check passes) but NOT covered by SAC custody (so the
+    // transfer must fail and roll back the host call).
+    let result = client.try_withdraw(&user, &200);
+    assert!(
+        result.is_err(),
+        "withdraw must fail when contract has insufficient SAC custody"
+    );
+
+    // Zero state drift: available balance, locked balance, event count
+    let (bal_after, locked_after, events_after) = snapshot(&env, &client, &user);
+    assert_eq!(
+        bal_after, bal_before,
+        "available balance must not change on failed withdraw SAC transfer"
+    );
+    assert_eq!(
+        locked_after, locked_before,
+        "locked balance must not change on failed withdraw SAC transfer"
+    );
+    assert_eq!(
+        events_after, events_before,
+        "no new events must be emitted on failed withdraw SAC transfer"
+    );
+
+    // Lock entry byte-identical to snapshot (no field drift)
+    let lock_snapshot_after = client.get_lock(&user, &_lock_id).unwrap();
+    assert_eq!(
+        lock_snapshot_after.amount, lock_snapshot_before.amount,
+        "lock amount unchanged after failed withdraw"
+    );
+    assert_eq!(
+        lock_snapshot_after.unlock_time, lock_snapshot_before.unlock_time,
+        "lock unlock_time unchanged after failed withdraw"
+    );
+    assert_eq!(
+        lock_snapshot_after.withdrawn, lock_snapshot_before.withdrawn,
+        "lock withdrawn flag unchanged after failed withdraw"
+    );
+}
