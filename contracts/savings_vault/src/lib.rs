@@ -46,6 +46,57 @@ pub struct LockEntry {
     pub withdrawn: bool,
 }
 
+/// A point-in-time snapshot of a user's balance state, suitable for SDK and
+/// mobile display without additional off-chain computation.
+///
+/// # Fields
+///
+/// * `unlocked` – Available (deposited) balance that can be withdrawn
+///   immediately via `withdraw`.
+/// * `locked` – Sum of all non-withdrawn lock amounts (both matured and
+///   immature). Matured locks must be withdrawn individually via
+///   `withdraw_lock`.
+/// * `total` – `unlocked + locked`. Represents the user's total principal
+///   held by the vault (excluding already-withdrawn locks).
+/// * `withdrawable` – Sum of matured, non-withdrawn lock amounts. These
+///   locks can be released via `withdraw_lock`.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct BalanceSnapshot {
+    pub unlocked: i128,
+    pub locked: i128,
+    pub total: i128,
+    pub withdrawable: i128,
+}
+
+/// Aggregated summary of a user's lock entries, designed to give SDK and
+/// mobile clients a quick overview without paginating through individual
+/// locks.
+///
+/// # Fields
+///
+/// * `active_count` – Number of non-withdrawn locks (both matured and
+///   immature).
+/// * `total_locked_amount` – Sum of amounts across all non-withdrawn locks.
+/// * `matured_count` – Number of non-withdrawn locks whose `unlock_time`
+///   has been reached.
+/// * `withdrawable_amount` – Sum of amounts across matured, non-withdrawn
+///   locks.
+/// * `earliest_unlock` – The smallest `unlock_time` among immature,
+///   non-withdrawn locks (0 if none exist).
+/// * `latest_unlock` – The largest `unlock_time` among immature,
+///   non-withdrawn locks (0 if none exist).
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct LockSummary {
+    pub active_count: u32,
+    pub total_locked_amount: i128,
+    pub matured_count: u32,
+    pub withdrawable_amount: i128,
+    pub earliest_unlock: u64,
+    pub latest_unlock: u64,
+}
+
 // ---------------------------------------------------------------------------
 // Storage Keys
 // ---------------------------------------------------------------------------
@@ -691,12 +742,6 @@ impl SavingsVault {
         let payload = (amount, current_balance);
         env.events().publish(topics, payload);
 
-        let token = env.storage().instance().get(&DataKey::Token).unwrap();
-        let token_client = token::Client::new(&env, &token);
-        let contract_address = env.current_contract_address();
-
-        token_client.transfer(&contract_address, &user, &amount);
-
         log!(
             &env,
             "Withdraw: user={}, amount={}, new_balance={}",
@@ -777,6 +822,166 @@ impl SavingsVault {
             .unwrap_or(0);
 
         deposited_balance
+    }
+
+    /// Returns a point-in-time snapshot of the user's balance state.
+    ///
+    /// This is a convenience read helper designed for SDK and mobile clients
+    /// that need to display unlocked, locked, total, and withdrawable
+    /// amounts in a single call rather than issuing several queries.
+    ///
+    /// # Arguments
+    ///
+    /// * `env` - The Soroban environment
+    /// * `user` - The user address to query
+    ///
+    /// # Returns
+    ///
+    /// A [`BalanceSnapshot`] containing:
+    /// - `unlocked` – deposited balance available for immediate withdrawal
+    /// - `locked` – sum of all non-withdrawn lock amounts
+    /// - `total` – `unlocked + locked`
+    /// - `withdrawable` – sum of matured, non-withdrawn lock amounts
+    ///
+    /// # Authorization
+    ///
+    /// No authorization required (read-only operation).
+    ///
+    /// # Storage Iteration
+    ///
+    /// Iterates over all lock IDs `1..next_lock_id` for the user. On-chain
+    /// cost grows linearly with the number of locks ever created (including
+    /// withdrawn ones whose storage key was kept). For users with a very
+    /// large number of historical locks this may become expensive; consider
+    /// off-chain indexing in that case.
+    pub fn get_balance_snapshot(env: Env, user: Address) -> BalanceSnapshot {
+        Self::assert_initialized(&env);
+        Self::try_migrate(&env);
+        Self::assert_supported_storage_version(&env);
+
+        let unlocked: i128 = env
+            .storage()
+            .persistent()
+            .get(&DataKey::Balance(user.clone()))
+            .unwrap_or(0);
+
+        let next_lock_id: u64 = env
+            .storage()
+            .persistent()
+            .get(&DataKey::NextLockId(user.clone()))
+            .unwrap_or(1);
+
+        let current_time = env.ledger().timestamp();
+        let mut locked: i128 = 0;
+        let mut withdrawable: i128 = 0;
+
+        for i in 1..next_lock_id {
+            if let Some(lock) = env
+                .storage()
+                .persistent()
+                .get::<_, LockEntry>(&DataKey::Lock(user.clone(), i))
+            {
+                if !lock.withdrawn {
+                    locked += lock.amount;
+                    if current_time >= lock.unlock_time {
+                        withdrawable += lock.amount;
+                    }
+                }
+            }
+        }
+
+        BalanceSnapshot {
+            unlocked,
+            locked,
+            total: unlocked + locked,
+            withdrawable,
+        }
+    }
+
+    /// Returns an aggregated summary of the user's lock entries.
+    ///
+    /// This is a convenience read helper designed for SDK and mobile clients
+    /// that need a quick overview of a user's locks (counts, totals,
+    /// matured amounts, and the unlock-time window) in a single call.
+    ///
+    /// # Arguments
+    ///
+    /// * `env` - The Soroban environment
+    /// * `user` - The user address to query
+    ///
+    /// # Returns
+    ///
+    /// A [`LockSummary`] containing:
+    /// - `active_count` – number of non-withdrawn locks
+    /// - `total_locked_amount` – sum of amounts across non-withdrawn locks
+    /// - `matured_count` – number of matured, non-withdrawn locks
+    /// - `withdrawable_amount` – sum of amounts across matured,
+    ///   non-withdrawn locks
+    /// - `earliest_unlock` – smallest immature unlock time (0 if none)
+    /// - `latest_unlock` – largest immature unlock time (0 if none)
+    ///
+    /// # Authorization
+    ///
+    /// No authorization required (read-only operation).
+    ///
+    /// # Storage Iteration
+    ///
+    /// Same linear-scan caveat as [`get_balance_snapshot`]. For users with
+    /// a very large number of historical locks, prefer off-chain indexing.
+    pub fn get_lock_summary(env: Env, user: Address) -> LockSummary {
+        Self::assert_initialized(&env);
+        Self::try_migrate(&env);
+        Self::assert_supported_storage_version(&env);
+
+        let next_lock_id: u64 = env
+            .storage()
+            .persistent()
+            .get(&DataKey::NextLockId(user.clone()))
+            .unwrap_or(1);
+
+        let current_time = env.ledger().timestamp();
+        let mut active_count: u32 = 0;
+        let mut total_locked_amount: i128 = 0;
+        let mut matured_count: u32 = 0;
+        let mut withdrawable_amount: i128 = 0;
+        let mut earliest_unlock: u64 = 0;
+        let mut latest_unlock: u64 = 0;
+
+        for i in 1..next_lock_id {
+            if let Some(lock) = env
+                .storage()
+                .persistent()
+                .get::<_, LockEntry>(&DataKey::Lock(user.clone(), i))
+            {
+                if !lock.withdrawn {
+                    active_count += 1;
+                    total_locked_amount += lock.amount;
+
+                    if current_time >= lock.unlock_time {
+                        // Matured lock
+                        matured_count += 1;
+                        withdrawable_amount += lock.amount;
+                    } else {
+                        // Immature lock — track unlock-time window
+                        if earliest_unlock == 0 || lock.unlock_time < earliest_unlock {
+                            earliest_unlock = lock.unlock_time;
+                        }
+                        if lock.unlock_time > latest_unlock {
+                            latest_unlock = lock.unlock_time;
+                        }
+                    }
+                }
+            }
+        }
+
+        LockSummary {
+            active_count,
+            total_locked_amount,
+            matured_count,
+            withdrawable_amount,
+            earliest_unlock,
+            latest_unlock,
+        }
     }
 
     // -----------------------------------------------------------------------

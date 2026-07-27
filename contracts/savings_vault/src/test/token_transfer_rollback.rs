@@ -409,10 +409,15 @@ fn test_failed_withdraw_lock_token_transfer_failure_preserves_state() {
     // Fast-forward past unlock time
     set_ledger_timestamp(&env, 10_000);
 
-    // Drain the contract's token balance to simulate transfer failure
+    // Drain the contract's token balance to simulate transfer failure.
+    // Note: `mint` only credits a target address, it never debits the
+    // contract's own balance. `clawback` would debit it, but the SAC's
+    // default test issuance isn't clawback-enabled. Instead, move the
+    // contract's tokens out directly; `mock_all_auths()` satisfies the
+    // `from.require_auth()` the SAC transfer performs internally.
     let contract_address = contract_id;
     let contract_balance = token_client.balance(&contract_address);
-    token_admin.mint(&Address::generate(&env), &contract_balance); // Move tokens elsewhere
+    token_client.transfer(&contract_address, &Address::generate(&env), &contract_balance);
 
     // Attempt withdraw_lock - should fail due to insufficient contract token balance
     let result = client.try_withdraw_lock(&user, &lock_id);
@@ -437,7 +442,7 @@ fn test_failed_withdraw_lock_token_transfer_failure_preserves_state() {
     );
 
     // Verify the lock entry itself is unchanged
-    let lock = client.get_lock(&user, lock_id).expect("lock should still exist");
+    let lock = client.get_lock(&user, &lock_id).expect("lock should still exist");
     assert_eq!(lock.amount, 200, "lock amount should remain unchanged");
     assert!(!lock.withdrawn, "lock should not be marked as withdrawn");
 }

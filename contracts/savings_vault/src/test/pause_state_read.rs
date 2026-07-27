@@ -4,7 +4,7 @@
 //! `is_paused` read helper must report the active pause state accurately,
 //! including explicit unpause and automatic expiry.
 
-use soroban_sdk::{testutils::Address as _, Address, Env};
+use soroban_sdk::{testutils::{Address as _, Ledger}, Address, Env};
 
 fn test_env() -> Env {
     let env = Env::default();
@@ -12,9 +12,9 @@ fn test_env() -> Env {
     env
 }
 
-fn init_with_admin(env: &Env) -> (Address, savings_vault::SavingsVaultClient<'static>) {
-    let contract_id = env.register(savings_vault::SavingsVault, ());
-    let client = savings_vault::SavingsVaultClient::new(env, &contract_id);
+fn init_with_admin(env: &Env) -> (Address, crate::SavingsVaultClient<'static>) {
+    let contract_id = env.register(crate::SavingsVault, ());
+    let client = crate::SavingsVaultClient::new(env, &contract_id);
     let admin = Address::generate(env);
     let token = {
         let issuer = Address::generate(env);

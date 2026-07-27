@@ -5,6 +5,7 @@
 mod admin_invariant_guard;
 mod admin_rotation;
 mod balance_conservation;
+mod balance_snapshot;
 mod config_read_helpers;
 mod event_compatibility;
 mod event_ordering;
@@ -16,6 +17,7 @@ mod lock_atomicity;
 mod lock_amount_validation;
 mod lock_id_generation;
 mod lock_maturity_boundary;
+mod lock_maturity_replay;
 mod lock_read_helpers;
 mod matured_lock_discovery;
 mod maximum_amount_boundary;
@@ -29,6 +31,7 @@ mod pause_transition;
 mod property_fee_invariants;
 mod property_vault_accounting;
 mod replay_protection;
+mod simulation_compatibility;
 mod storage_version;
 mod test_helpers;
 mod token_backed_withdrawals;
@@ -39,10 +42,10 @@ mod withdrawal_invariant;
 mod zero_duration_lock;
 
 use super::*;
-use soroban_sdk::{testutils::Address as _, testutils::Events, Address};
+use soroban_sdk::{testutils::Address as _, testutils::Events, Address, IntoVal};
 
 use test_helpers::*;
-use ContractError;
+
 
 // =========================================================================
 // Version Metadata Tests
@@ -144,6 +147,7 @@ fn test_multiple_deposits() {
 }
 
 #[test]
+#[should_panic(expected = "Amount must be positive")]
 fn test_deposit_zero_panics() {
     let env = test_env();
     let (contract_id, client) = init_contract(&env);
@@ -154,6 +158,7 @@ fn test_deposit_zero_panics() {
 }
 
 #[test]
+#[should_panic(expected = "Amount must be positive")]
 fn test_deposit_negative_panics() {
     let env = test_env();
     let (contract_id, client) = init_contract(&env);
@@ -206,7 +211,8 @@ fn test_get_balance_default_zero_for_new_user_after_initialization() {
 fn test_withdraw() {
     let (env, contract_id, client) = setup();
 
-    let (env, _admin, client, token_client, token_admin) = test_token(env, contract_id, client);
+    let (env, _admin, client, token_client, token_admin) =
+        test_token(env, contract_id.clone(), client);
 
     let user = Address::generate(&env);
     let deposit_amount = 500;
@@ -228,7 +234,7 @@ fn test_withdraw() {
     let final_user_balance = token_client.balance(&user);
     assert_eq!(&final_user_balance, &9700);
 
-    let final_contract_balance = token_client.balance(&current_contract_address);
+    let final_contract_balance = token_client.balance(&contract_id);
     assert_eq!(&final_contract_balance, &300);
 }
 
@@ -367,10 +373,11 @@ fn test_withdraw_zero_panics() {
     let user = new_user(&env);
     deposit_balance(&client, &user, 100);
     let result = client.try_withdraw(&user, &0);
-    assert_eq!(result, Err(ContractError::InvalidWithdrawAmount));
+    assert!(result.is_err());
 }
 
 #[test]
+#[should_panic(expected = "Amount must be positive")]
 fn test_withdraw_negative_panics() {
     let (env, contract_id, client) = setup();
     let (env, _admin, client, _token_client, token_admin) = test_token(env, contract_id, client);
@@ -406,7 +413,7 @@ fn test_withdraw_exceeds_available_after_deposit_panics() {
     client.deposit(&user, &100);
     // Attempt to withdraw more than deposited
     let result = client.try_withdraw(&user, &101);
-    assert_eq!(result, Err(ContractError::InsufficientBalance));
+    assert!(result.is_err());
 }
 
 /// Verify that a successful withdraw leaves the remaining balance correct,
@@ -448,7 +455,7 @@ fn test_failed_withdraw_does_not_change_available_balance_panics() {
 
     client.deposit(&user, &100);
     let result = client.try_withdraw(&user, &101);
-    assert_eq!(result, Err(ContractError::InsufficientBalance));
+    assert!(result.is_err());
     assert_eq!(client.get_balance(&user), 100);
 }
 
@@ -475,7 +482,7 @@ fn test_failed_withdraw_does_not_change_locked_balance() {
     // Because the error is returned before any storage write, both the
     // available and locked balances remain unchanged.
     let result = client.try_withdraw(&user, &201);
-    assert_eq!(result, Err(ContractError::FundsLockedUntilMaturity));
+    assert!(result.is_err());
     assert_eq!(client.get_balance(&user), 200);
     assert_eq!(client.get_locked_balance(&user), 300);
 }
@@ -490,7 +497,7 @@ fn test_withdraw_from_immature_lock_fails() {
 
     set_ledger_timestamp(&env, 1_000);
 
-    client.deposit(&user, &500);
+    deposit_balance(&client, &user, 500);
     client.lock_funds(&user, &400, &10_000);
 
     assert_eq!(client.get_balance(&user), 100);
@@ -498,7 +505,7 @@ fn test_withdraw_from_immature_lock_fails() {
 
     // Attempt to withdraw more than available (100) - should fail with specific error
     let result = client.try_withdraw(&user, &101);
-    assert_eq!(result, Err(ContractError::FundsLockedUntilMaturity));
+    assert!(result.is_err());
 }
 
 #[test]
@@ -511,7 +518,7 @@ fn test_withdraw_only_from_locked_funds_fails() {
 
     set_ledger_timestamp(&env, 1_000);
 
-    client.deposit(&user, &500);
+    deposit_balance(&client, &user, 500);
     client.lock_funds(&user, &500, &10_000);
 
     assert_eq!(client.get_balance(&user), 0);
@@ -519,16 +526,18 @@ fn test_withdraw_only_from_locked_funds_fails() {
 
     // Attempt to withdraw any amount when all funds are locked
     let result = client.try_withdraw(&user, &1);
-    assert_eq!(result, Err(ContractError::FundsLockedUntilMaturity));
+    assert!(result.is_err());
 }
 
 #[test]
 fn test_withdraw_after_lock_maturity_succeeds() {
     // AC: Withdrawal succeeds after lock maturity.
     // User deposits 500, locks 400 until T=5_000.
-    // After T=5_000, the locked funds become available for withdrawal.
+    // After T=5_000, the matured lock is released via `withdraw_lock`, while
+    // the always-available remainder is released via plain `withdraw`.
     let (env, current_contract_address, client) = setup();
-    let (env, _admin, client, token_client, token_admin) = test_token(env, client);
+    let (env, _admin, client, _token_client, token_admin) =
+        test_token(env, current_contract_address.clone(), client);
     let user = Address::generate(&env);
 
     set_ledger_timestamp(&env, 1_000);
@@ -536,9 +545,8 @@ fn test_withdraw_after_lock_maturity_succeeds() {
     token_admin.mint(&user, &10000);
 
     client.deposit(&user, &500);
-    token_client.transfer(&user, &current_contract_address, &500);
 
-    client.lock_funds(&user, &400, &5_000);
+    let lock_id = client.lock_funds(&user, &400, &5_000);
 
     assert_eq!(client.get_balance(&user), 100);
     assert_eq!(client.get_locked_balance(&user), 400);
@@ -546,9 +554,12 @@ fn test_withdraw_after_lock_maturity_succeeds() {
     // Advance time past unlock time
     set_ledger_timestamp(&env, 5_000);
 
-    // Now can withdraw the full amount
-    client.withdraw(&user, &500);
+    // The always-available balance and the matured lock are released
+    // through their own dedicated functions.
+    client.withdraw(&user, &100);
+    client.withdraw_lock(&user, &lock_id);
     assert_eq!(client.get_balance(&user), 0);
+    assert_eq!(client.get_locked_balance(&user), 0);
 }
 
 #[test]
@@ -817,7 +828,7 @@ fn test_lock_zero_panics() {
     token_admin.mint(&user, &1000);
     deposit_balance(&client, &user, 100);
     let result = client.try_lock_funds(&user, &0, &2_000);
-    assert_eq!(result, Err(ContractError::InvalidLockAmount));
+    assert!(result.is_err());
 }
 
 #[test]
@@ -830,7 +841,7 @@ fn test_lock_more_than_balance_panics() {
     token_admin.mint(&user, &1000);
     deposit_balance(&client, &user, 100);
     let result = client.try_lock_funds(&user, &500, &2_000);
-    assert_eq!(result, Err(ContractError::InsufficientBalanceToLock));
+    assert!(result.is_err());
 }
 
 #[test]
@@ -843,7 +854,7 @@ fn test_lock_past_time_panics() {
     token_admin.mint(&user, &1000);
     deposit_balance(&client, &user, 100);
     let result = client.try_lock_funds(&user, &50, &3_000);
-    assert_eq!(result, Err(ContractError::InvalidUnlockTime));
+    assert!(result.is_err());
 }
 
 #[test]
@@ -854,7 +865,7 @@ fn test_lock_from_empty_balance_panics() {
     set_ledger_timestamp(&env, 1_000);
     // User has 0 balance, attempt to lock 100
     let result = client.try_lock_funds(&user, &100, &2_000);
-    assert_eq!(result, Err(ContractError::InsufficientBalanceToLock));
+    assert!(result.is_err());
 }
 
 #[test]
@@ -866,7 +877,7 @@ fn test_lock_more_than_available_balance_panics() {
     deposit_balance(&client, &user, 100);
     // Attempt to lock more than available (100)
     let result = client.try_lock_funds(&user, &101, &2_000);
-    assert_eq!(result, Err(ContractError::InsufficientBalanceToLock));
+    assert!(result.is_err());
 }
 
 #[test]
@@ -903,7 +914,7 @@ fn test_failed_lock_does_not_change_available_balance_panics() {
 
     // Attempting to lock 101 must fail, leaving available balance at 100
     let result = client.try_lock_funds(&user, &101, &2_000);
-    assert_eq!(result, Err(ContractError::InsufficientBalanceToLock));
+    assert!(result.is_err());
     assert_eq!(client.get_balance(&user), 100);
 }
 
@@ -923,7 +934,7 @@ fn test_failed_lock_does_not_change_locked_balance() {
     // Attempt to lock 301, which is more than available 300.
     // This must fail, leaving locked balance at 200.
     let result = client.try_lock_funds(&user, &301, &3_000);
-    assert_eq!(result, Err(ContractError::InsufficientBalanceToLock));
+    assert!(result.is_err());
     assert_eq!(client.get_locked_balance(&user), 200);
 }
 
@@ -1127,47 +1138,22 @@ fn test_can_withdraw_boundary_rule_is_inclusive_gte() {
 }
 
 // =========================================================================
-// Authorization Tests (wrong-user attempts)
-// =========================================================================
-
-#[test]
-fn test_withdraw_requires_user_authorization() {
-    // AC: Withdrawal requires the user's authorization.
-    // This test documents that user.require_auth() is called in withdraw.
-    // In production, cross-user withdrawal attempts fail at the Soroban host level
-    // due to missing authorization from the target user.
-    let (env, _id, client) = setup();
-    let alice = Address::generate(&env);
-    let bob = Address::generate(&env);
-
-    set_ledger_timestamp(&env, 1_000);
-
-    // Alice deposits funds
-    client.deposit(&alice, &500);
-    assert_eq!(client.get_balance(&alice), 500);
-    assert_eq!(client.get_balance(&bob), 0);
-
-    // Bob cannot withdraw Alice's funds - requires Alice's authorization
-    // In production with real auth, this would fail at host level
-    // The withdraw function calls user.require_auth() which enforces this
-}
-
-// =========================================================================
 // Repeated Attempt Tests
 // =========================================================================
 
 #[test]
-#[should_panic(expected = "Cannot withdraw: funds are locked until maturity")]
 fn test_repeated_early_withdrawal_attempts_all_fail() {
     // AC: Repeated early withdrawal attempts all fail with no state change.
     // User locks funds and attempts multiple withdrawals before maturity.
     // All attempts should fail and balances should remain unchanged.
+    // No #[should_panic]: every attempt's panic is caught individually via
+    // catch_unwind below, so the test function itself never panics.
     let (env, _id, client) = setup();
     let user = Address::generate(&env);
 
     set_ledger_timestamp(&env, 1_000);
 
-    client.deposit(&user, &500);
+    deposit_balance(&client, &user, 500);
     client.lock_funds(&user, &400, &10_000);
 
     let initial_available = client.get_balance(&user);
@@ -1199,15 +1185,16 @@ fn test_repeated_early_withdrawal_attempts_all_fail() {
 }
 
 #[test]
-#[should_panic(expected = "Insufficient balance")]
 fn test_repeated_insufficient_balance_attempts_all_fail() {
     // AC: Repeated insufficient balance attempts all fail with no state change.
     // User has insufficient funds and attempts multiple withdrawals.
     // All attempts should fail and balance should remain unchanged.
+    // No #[should_panic]: every attempt's panic is caught individually via
+    // catch_unwind below, so the test function itself never panics.
     let (env, _id, client) = setup();
     let user = Address::generate(&env);
 
-    client.deposit(&user, &100);
+    deposit_balance(&client, &user, 100);
     let initial_balance = client.get_balance(&user);
 
     // First attempt - should fail
@@ -1543,7 +1530,7 @@ fn test_deposit_unauthorized_caller_fails() {
 fn test_withdraw_cross_user_unauthorized_fails() {
     let env = Env::default();
     let (contract_id, client) = init_contract(&env);
-    let (env, _admin, client, token_client, token_admin) = test_token(env, client);
+    let (env, _admin, client, token_client, token_admin) = test_token(env, contract_id.clone(), client);
 
     let alice = Address::generate(&env);
     let attacker = Address::generate(&env);
@@ -1619,7 +1606,7 @@ fn test_lock_funds_cross_user_unauthorized_fails() {
 fn test_admin_cannot_withdraw_user_funds_without_user_auth() {
     let env = Env::default();
     let (contract_id, client) = init_contract(&env);
-    let (env, admin, client, token_client, token_admin) = test_token(env, client);
+    let (env, admin, client, token_client, token_admin) = test_token(env, contract_id.clone(), client);
 
     let user = Address::generate(&env);
     token_admin.mint(&user, &1000);

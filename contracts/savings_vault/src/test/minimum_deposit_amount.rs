@@ -16,9 +16,9 @@ fn test_env() -> Env {
 }
 
 /// Registers + initializes the vault and returns (env, admin, client).
-fn init_with_admin(env: &Env) -> (Address, savings_vault::SavingsVaultClient<'static>) {
-    let contract_id = env.register(savings_vault::SavingsVault, ());
-    let client = savings_vault::SavingsVaultClient::new(env, &contract_id);
+fn init_with_admin(env: &Env) -> (Address, crate::SavingsVaultClient<'static>) {
+    let contract_id = env.register(crate::SavingsVault, ());
+    let client = crate::SavingsVaultClient::new(env, &contract_id);
     let admin = Address::generate(env);
     let token = {
         let issuer = Address::generate(env);
@@ -28,12 +28,12 @@ fn init_with_admin(env: &Env) -> (Address, savings_vault::SavingsVaultClient<'st
     (admin, client)
 }
 
-fn deposit_balance(client: &savings_vault::SavingsVaultClient<'static>, user: &Address, amount: i128) {
+fn deposit_balance(client: &crate::SavingsVaultClient<'static>, user: &Address, amount: i128) {
     let env = client.env.clone();
     let token: Address = env.as_contract(&client.address, || {
         env.storage()
             .instance()
-            .get(&savings_vault::DataKey::Token)
+            .get(&crate::DataKey::Token)
             .expect("token should be set during initialization")
     });
     let token_admin = soroban_sdk::token::StellarAssetClient::new(&env, &token);
