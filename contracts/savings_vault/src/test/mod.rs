@@ -5,6 +5,7 @@
 mod admin_invariant_guard;
 mod admin_rotation;
 mod balance_conservation;
+mod config_read_helpers;
 mod event_compatibility;
 mod event_ordering;
 mod independent_lock_creation;
