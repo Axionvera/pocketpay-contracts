@@ -7,6 +7,7 @@ mod admin_rotation;
 mod balance_conservation;
 mod balance_snapshot;
 mod config_read_helpers;
+mod contract_error_codes;
 mod event_compatibility;
 mod event_ordering;
 mod independent_lock_creation;
