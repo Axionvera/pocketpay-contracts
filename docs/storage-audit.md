@@ -1,99 +1,82 @@
-# Storage Audit: Savings Vault Contract
-This document provides a comprehensive audit of all storage keys used in the Savings Vault contract, including:
-- Storage key definitions and types
-- Mutation points (which functions modify which keys)
-- Invariants that must always hold
-- TTL management guidelines
+# Storage Audit Map and Mutation Trace
+
+This document provides a comprehensive audit of all storage usage in the PocketPay Savings Vault contract. It maps storage keys, value types, mutation points, invariants, and test coverage to ensure a high-security posture for fund custody and accounting.
+
+## 1. Storage Key Map
+
+The contract uses Soroban's **Instance** storage for global configuration and **Persistent** storage for user-specific data to optimize for resource usage and scalability.
+
+| DataKey Variant | Storage Type | Value Type | Ownership | Description |
+| :--- | :--- | :--- | :--- | :--- |
+| `Admin` | Instance | `Address` | Global | The current administrator address for configuration and pause controls. |
+| `Initialized` | Instance | `bool` | Global | Flag indicating if the contract has been successfully initialized. |
+| `Token` | Instance | `Address` | Global | The address of the SAC token managed by this vault. |
+| `StorageVersion` | Instance | `u64` | Global | Current schema version for the contract storage. |
+| `Paused` | Instance | `bool` | Global | Current pause status of the vault. |
+| `PauseExpiry` | Instance | `u64` | Global | Timestamp (ledger seconds) when the current pause automatically expires. |
+| `MinDepositAmount` | Instance | `i128` | Global | Minimum amount required for a single deposit operation. |
+| `MaxLockDurationSecs` | Instance | `u64` | Global | Maximum duration a lock can be active. |
+| `MinLockDurationSecs` | Instance | `u64` | Global | Minimum duration required for a new lock. |
+| `Balance(Address)` | Persistent | `i128` | User | Total balance (available + locked) for a specific user. |
+| `Lock(Address, u64)` | Persistent | `LockEntry` | User | Individual lock record keyed by user and a monotonic ID. |
+| `NextLockId(Address)` | Persistent | `u64` | User | Monotonic counter used to generate unique IDs for a user's locks. |
+
+*Note: The `Locks(Address)` variant is defined in the enum but is currently unused in favor of individual `Lock(Address, u64)` entries.*
 
 ---
 
-## 1. Storage Layers
-The contract uses two Soroban storage layers:
+## 2. Mutation Trace
 
-| Layer | Purpose |
-|-------|---------|
-| **Instance Storage** | Stores configuration and initialization state (admin, token, initialized flag, storage version) |
-| **Persistent Storage** | Stores per-user state (balances, locks, lock ID counter) |
+The following table tracks which functions mutate specific storage keys. Read-only operations are omitted for brevity.
 
----
-
-## 2. Storage Key Audit
-
-### Instance Storage Keys
-| Key | Type | Default | Initialization | Mutation Points | Invariants |
-|-----|------|---------|----------------|-----------------|------------|
-| `DataKey::Admin` | `Address` | None | Set once in `initialize` | `transfer_admin` | - Immutable after `transfer_admin`; only admin can change |
-| `DataKey::Initialized` | `bool` | None | Set to `true` in `initialize` | None (never modified after initialization) | - Always `true` after initialization; never unset |
-| `DataKey::Token` | `Address` | None | Set once in `initialize` | None (never modified after initialization) | - Immutable after initialization |
-| `DataKey::StorageVersion` | `u64` | None | Set to `STORAGE_VERSION` (1) in `initialize` | None (never modified after initialization) | - Always equals `STORAGE_VERSION` |
-
-### Persistent Storage Keys
-| Key | Type | Default | Initialization | Mutation Points | Invariants |
-|-----|------|---------|----------------|-----------------|------------|
-| `DataKey::Balance(Address)` | `i128` | `0` (implicit) | Not set at initialization | `deposit`, `withdraw`, `lock_funds` | - ≥ 0 at all times; represents available balance |
-| `DataKey::Lock(Address, u64)` | `LockEntry` | None | Not set at initialization | `lock_funds`, `withdraw`, `withdraw_lock` | - `LockEntry.amount` ≥ 0; `LockEntry.id` unique for user; `LockEntry.unlock_time` ≥ 0 |
-| `DataKey::NextLockId(Address)` | `u64` | `1` (implicit) | Not set at initialization | `lock_funds` | - Strictly increasing (monotonic); never decreases |
+| Function | Mutated Keys | State Change Description |
+| :--- | :--- | :--- |
+| `initialize` | `Admin`, `Initialized`, `Token`, `StorageVersion` | Sets global config; locks initialization. |
+| `try_migrate` | `StorageVersion` | Increments schema version during upgrades. |
+| `pause` | `Paused`, `PauseExpiry` | Enables emergency pause with an expiry timestamp. |
+| `unpause` | `Paused`, `PauseExpiry` | Manually clears pause state. |
+| `require_not_paused` | `Paused`, `PauseExpiry` | **Lazy Mutation**: Clears pause if `ledger.timestamp() >= expiry`. |
+| `set_min_deposit_amount`| `MinDepositAmount` | Updates global minimum deposit threshold. |
+| `set_max_lock_duration` | `MaxLockDurationSecs` | Updates global maximum lock time. |
+| `set_min_lock_duration` | `MinLockDurationSecs` | Updates global minimum lock time. |
+| `deposit` | `Balance(user)` | Increments user balance after successful token transfer. |
+| `withdraw` | `Balance(user)` | Decrements user balance after successful token transfer. |
+| `lock_funds` | `Balance(user)`, `Lock(user, id)`, `NextLockId(user)` | Debits available balance, writes lock entry, increments ID counter. |
+| `extend_lock` | `Lock(user, id)` | Updates the `unlock_time` of an existing lock entry. |
+| `withdraw_lock` | `Lock(user, id)` | Zeroes out the lock entry amount after maturity and token transfer. |
+| `transfer_admin` | `Admin` | Rotates the administrative address. |
 
 ---
 
-## 3. Mutation Point Mapping
-This section maps each storage key to the functions that modify it:
+## 3. Failure-Path State Expectations
 
-### Instance Storage
-| Function | Modifies |
-|----------|----------|
-| `initialize` | `Admin`, `Initialized`, `Token`, `StorageVersion` |
-| `transfer_admin` | `Admin` |
+The contract employs a **"transfer-then-write"** pattern to ensure atomicity. If a transaction fails at any point, all storage changes are rolled back by the Soroban host environment.
 
-### Persistent Storage
-| Function | Modifies |
-|----------|----------|
-| `deposit` | `Balance(user)` |
-| `withdraw` | `Balance(user)`, `Lock(user, id)` |
-| `lock_funds` | `Balance(user)`, `Lock(user, id)`, `NextLockId(user)` |
-| `withdraw_lock` | `Lock(user, id)` |
+| Failure Scenario | Expected State | Implementation Detail |
+| :--- | :--- | :--- |
+| **Token Transfer Fails** | No mutation to `Balance` or `Lock`. | Token transfer is attempted *before* storage writes in `deposit` and `withdraw`. |
+| **Auth Failure** | No mutation to any key. | `require_auth()` is called at the start of all protected methods. |
+| **Invariant Violation** | Transaction panics; all state reverted. | Invariants are checked at the end of functions or via guards. |
+| **Vault Paused** | `require_not_paused` panics (unless lazy clearing). | Mutations are blocked early in the call stack. |
 
 ---
 
-## 4. Critical Storage Invariants
-These invariants must hold at all times, across all function calls:
+## 4. Invariants and Test Coverage
 
-### Invariant 1: User Available Balance ≥ 0
-- **Description**: `Balance(user)` must never be negative
-- **Enforced By**: `deposit`, `withdraw`, `lock_funds`
-- **Tested By**: `balance_conservation.rs` tests and `property_vault_accounting.rs` proptests
+Core accounting and security invariants are verified through a combination of unit tests and property-based tests.
 
-### Invariant 2: User Lock Entry Amounts ≥ 0
-- **Description**: Every `LockEntry.amount` in `Locks(user)` must be ≥ 0
-- **Enforced By**: `lock_funds`
-- **Tested By**: `balance_conservation.rs` tests
-
-### Invariant 3: NextLockId Is Monotonic
-- **Description**: `NextLockId(user)` must never decrease; only increments by 1 per `lock_funds` call
-- **Enforced By**: `lock_funds`
-- **Tested By**: `lock_read_helpers.rs` tests
-
-### Invariant 4: Lock Entry IDs Are Unique Per User
-- **Description**: No two `LockEntry` in `Locks(user)` share the same `id`
-- **Enforced By**: `lock_funds` (uses `NextLockId` to generate unique IDs)
-- **Tested By**: Implicit via monotonic `NextLockId`
-
-### Invariant 5: Token Custody Invariant
-- **Description**: The sum of all user balances + sum of all user locked balances ≤ SAC balance of the contract
-- **Enforced By**: All functions that perform token transfers (`deposit`, `withdraw`, `withdraw_lock`)
-- **Tested By**: `property_vault_accounting::prop_global_token_custody` (proptest)
-
-### Invariant 6: Initialized Flag Remains True After Initialization
-- **Description**: Once `initialize` has been called, `Initialized` remains `true` forever
-- **Enforced By**: `initialize` (sets flag; no other function modifies it)
-- **Tested By**: `initialization.rs` tests
+| Invariant | Description | Test Reference |
+| :--- | :--- | :--- |
+| **Balance Conservation** | `Available + Locked == Total` for all users at all times. | [balance_conservation.rs](file:///c:/Users/abbat/.trae/GrantFox/pocketpay-contracts/contracts/savings_vault/src/test/balance_conservation.rs) |
+| **Token Custody** | `Contract SAC Balance == Σ(User Balances)`. | [property_fee_invariants.rs](file:///c:/Users/abbat/.trae/GrantFox/pocketpay-contracts/contracts/savings_vault/src/test/property_fee_invariants.rs) |
+| **Atomic Rollback** | Failed transfers must not credit/debit internal accounting. | [token_transfer_rollback.rs](file:///c:/Users/abbat/.trae/GrantFox/pocketpay-contracts/contracts/savings_vault/src/test/token_transfer_rollback.rs) |
+| **Lock Integrity** | `Locked Balance == Σ(Active Lock Entries)`. | [multi_lock_invariants.rs](file:///c:/Users/abbat/.trae/GrantFox/pocketpay-contracts/contracts/savings_vault/src/test/multi_lock_invariants.rs) |
+| **ID Uniqueness** | `NextLockId` must never produce a duplicate ID for a user. | [multi_lock_invariants.rs](file:///c:/Users/abbat/.trae/GrantFox/pocketpay-contracts/contracts/savings_vault/src/test/multi_lock_invariants.rs) |
 
 ---
 
-## 5. TTL Management Guidelines
-See [storage-ttl.md](storage-ttl.md) for full TTL management guidelines!
+## 5. Technical Debt and Audit Notes
 
----
-
-## 6. Storage Upgrade / Migration Plan
-See [upgrade-strategy.md](upgrade-strategy.md) for future upgrade/migration planning!
+- **Unused Storage Variant**: `DataKey::Locks(Address)` should be removed or implemented to avoid confusion during audits.
+- **TTL Management**: The audit currently assumes standard Soroban TTL management for Persistent/Instance storage. A dedicated TTL extension strategy should be documented if custom intervals are required.
+- **Linear Scan Risk**: Functions like `get_balance_snapshot` and `list_locks` iterate over lock IDs. While capped by `MAX_LOCK_PAGE_SIZE`, high lock counts per user could impact gas costs for complex read-aggregations.

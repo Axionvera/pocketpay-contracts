@@ -9,6 +9,7 @@ This index organizes security-relevant documentation for external audit review. 
 | [Contract Specification](contract-specification.md) | Formal specification of the PocketPay Savings Vault contract | ✅ Complete |
 | [API Reference](api-reference.md) | Public API documentation with error codes and behavior | ✅ Complete |
 | [Storage Layout](storage-layout.md) | Storage key structure and access patterns | ✅ Complete |
+| [Storage Audit Map](storage-audit.md) | Comprehensive audit of storage keys and mutation trace | ✅ Complete |
 
 ## Invariants and Safety Properties
 
@@ -82,6 +83,6 @@ This index organizes security-relevant documentation for external audit review. 
 
 ---
 
-**Last Updated**: 2026-01-27  
+**Last Updated**: 2026-07-28  
 **Maintained by**: Core Development Team  
 **Review Cadence**: Updated with each release
