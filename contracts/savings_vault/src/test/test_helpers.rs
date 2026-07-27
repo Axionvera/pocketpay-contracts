@@ -44,15 +44,22 @@ pub fn set_ledger_timestamp(env: &Env, timestamp: u64) {
     env.ledger().set_timestamp(timestamp);
 }
 
-pub fn setup() -> (Env, Address, SavingsVaultClient<'static>) {
+pub fn setup() -> (Env, Address, SavingsVaultClient<'static>, token::Client<'static>, token::StellarAssetClient<'static>) {
     let env = Env::default();
-    // Allow all auth calls in test mode so we can focus on logic
     env.mock_all_auths();
 
     let contract_id = env.register(SavingsVault, ());
     let client = SavingsVaultClient::new(&env, &contract_id);
 
-    (env, contract_id, client)
+    let admin = Address::generate(&env);
+    let token_contract = env.register_stellar_asset_contract_v2(admin.clone());
+    let token_address = token_contract.address();
+    
+    client.initialize(&admin, &token_address);
+    let token_client = token::Client::new(&env, &token_address);
+    let token_admin = token::StellarAssetClient::new(&env, &token_address);
+
+    (env, contract_id, client, token_client, token_admin)
 }
 
 pub fn test_token(

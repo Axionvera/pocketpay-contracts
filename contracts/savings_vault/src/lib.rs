@@ -110,6 +110,12 @@ impl SavingsVault {
             panic!("Deposit amount must be greater than zero");
         }
 
+        let token = env.storage().instance().get(&DataKey::Token).unwrap();
+        let token_client = token::Client::new(&env, &token);
+        let contract_address = env.current_contract_address();
+
+        token_client.transfer(&user, &contract_address, &amount);
+
         // Read current balance (default to 0 if none exists)
         let current_balance: i128 = env
             .storage()
@@ -184,12 +190,6 @@ impl SavingsVault {
             panic!("Insufficient balance");
         }
 
-        let token = env.storage().instance().get(&DataKey::Token).unwrap();
-        let token_client = token::Client::new(&env, &token);
-        let contract_address = env.current_contract_address();
-
-        token_client.transfer(&contract_address, &user, &amount);
-
         // Deduct from deposited balance first, then matured locks
         let mut remaining_to_deduct = amount;
         if remaining_to_deduct <= current_balance {
@@ -229,6 +229,12 @@ impl SavingsVault {
         env.storage()
             .persistent()
             .set(&DataKey::Locks(user.clone()), &locks);
+
+        let token = env.storage().instance().get(&DataKey::Token).unwrap();
+        let token_client = token::Client::new(&env, &token);
+        let contract_address = env.current_contract_address();
+
+        token_client.transfer(&contract_address, &user, &amount);
 
         log!(
             &env,
