@@ -35,6 +35,7 @@ For remaining constraints and open risks, see [Known Limitations](#known-limitat
 See the [Admin Role](docs/admin-role.md) document for details on what the `initialize(admin)` value records, what the admin can and cannot do today, and future admin design considerations.
 See the [Emergency Pause and Admin Misuse Threat Model](docs/admin-pause-threat-model.md) for malicious or compromised admin scenarios, withdrawal impact, recovery assumptions, mitigations, and residual risks.
 See the [Vault Fee Model](docs/vault-fee-model.md) document for clarification on fee assumptions, accounting implications, and user transparency requirements.
+See the [Vault Economic Assumptions and Fee Model Review](docs/economic-assumptions-review.md) for a consolidated look at fees, custody, lock-duration incentives, token behavior risk, admin power, and common user misconceptions.
 
 ## Features
 
@@ -270,6 +271,7 @@ stellar-pocketpay-contracts/
 - [Audit Preparation Checklist](docs/audit-preparation.md) — Checklist of documentation, tests, threat model, and deployment details required before any external security review or audit.
 - [Emergency Pause and Admin Misuse Threat Model](docs/admin-pause-threat-model.md) — Threat scenarios, withdrawal impact, recovery assumptions, mitigations, limitations, and residual risks for admin-controlled pause mechanisms.
 - [Vault Fee Model](docs/vault-fee-model.md) — Clarification of no-fee assumptions, accounting implications, user transparency requirements, design rationale, and framework for potential future fee support.
+- [Vault Economic Assumptions and Fee Model Review](docs/economic-assumptions-review.md) — Consolidated review of fees, custody, lock-duration incentives, token behavior risk, admin power, and common user misconceptions.
 - [Storage Audit](docs/storage-audit.md) — Comprehensive details on the contract's storage layout, keys, mutating functions, and security invariants.
 - [Storage Migration Guide](docs/storage-migration.md) — Safe storage versioning and migration strategy for future contract upgrades.
 - [Deployment Environments](docs/deployment-environments.md) — Network configuration for local, testnet, and future mainnet, including RPC URLs, identities, environment variables, and deployment commands.
