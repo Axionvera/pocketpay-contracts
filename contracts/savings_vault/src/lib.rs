@@ -1273,6 +1273,184 @@ impl SavingsVault {
     }
 
     // -----------------------------------------------------------------------
+    // Matured-Lock Discovery Helpers (issue #414)
+    // -----------------------------------------------------------------------
+
+    /// Returns a paginated list of matured, non-withdrawn lock entries for a user.
+    ///
+    /// A lock is considered "matured" when `env.ledger().timestamp() >= lock.unlock_time`
+    /// and `lock.withdrawn == false`. This helper enables mobile clients to display
+    /// only the locks that are immediately withdrawable, without requiring client-side
+    /// filtering of the full lock list.
+    ///
+    /// # Arguments
+    ///
+    /// * `env` - The Soroban environment
+    /// * `user` - The address of the lock owner
+    /// * `offset` - Number of matured locks to skip from the start (0-indexed)
+    /// * `limit` - Maximum number of matured locks to return; `0` returns an empty list
+    ///
+    /// # Returns
+    ///
+    /// A `Vec<LockEntry>` containing up to `min(limit, MAX_LOCK_PAGE_SIZE)` matured,
+    /// non-withdrawn lock entries in creation order (oldest first).
+    ///
+    /// # Authorization
+    ///
+    /// No authorization required (read-only operation).
+    ///
+    /// # Storage Cost
+    ///
+    /// This function iterates through all of the user's lock entries to filter
+    /// for matured ones. For users with a very large number of locks, this may
+    /// consume significant CPU instructions. The `MAX_LOCK_PAGE_SIZE` cap on
+    /// the returned page limits the response size but not the scan cost.
+    ///
+    /// # Panics
+    ///
+    /// - If the contract has not been initialized
+    pub fn list_matured_locks(env: Env, user: Address, offset: u32, limit: u32) -> Vec<LockEntry> {
+        Self::assert_initialized(&env);
+        Self::try_migrate(&env);
+        Self::assert_supported_storage_version(&env);
+
+        let next_lock_id: u64 = env
+            .storage()
+            .persistent()
+            .get(&DataKey::NextLockId(user.clone()))
+            .unwrap_or(1);
+
+        if limit == 0 {
+            return Vec::new(&env);
+        }
+
+        let page_limit = limit.min(MAX_LOCK_PAGE_SIZE);
+        let current_time = env.ledger().timestamp();
+        let mut skipped: u32 = 0;
+        let mut page = Vec::new(&env);
+
+        for i in 1..next_lock_id {
+            if let Some(lock) = env
+                .storage()
+                .persistent()
+                .get::<_, LockEntry>(&DataKey::Lock(user.clone(), i))
+            {
+                if !lock.withdrawn && current_time >= lock.unlock_time {
+                    if skipped < offset {
+                        skipped += 1;
+                        continue;
+                    }
+                    page.push_back(lock);
+                    if page.len() >= page_limit {
+                        break;
+                    }
+                }
+            }
+        }
+        page
+    }
+
+    /// Returns the number of matured, non-withdrawn locks for a user.
+    ///
+    /// This is a convenience helper that lets mobile clients display a badge
+    /// count (e.g. "3 locks ready to withdraw") without fetching the full
+    /// lock list.
+    ///
+    /// # Arguments
+    ///
+    /// * `env` - The Soroban environment
+    /// * `user` - The address of the lock owner
+    ///
+    /// # Returns
+    ///
+    /// A `u32` count of matured, non-withdrawn locks.
+    ///
+    /// # Authorization
+    ///
+    /// No authorization required (read-only operation).
+    ///
+    /// # Panics
+    ///
+    /// - If the contract has not been initialized
+    pub fn get_matured_lock_count(env: Env, user: Address) -> u32 {
+        Self::assert_initialized(&env);
+        Self::try_migrate(&env);
+        Self::assert_supported_storage_version(&env);
+
+        let next_lock_id: u64 = env
+            .storage()
+            .persistent()
+            .get(&DataKey::NextLockId(user.clone()))
+            .unwrap_or(1);
+
+        let current_time = env.ledger().timestamp();
+        let mut count: u32 = 0;
+
+        for i in 1..next_lock_id {
+            if let Some(lock) = env
+                .storage()
+                .persistent()
+                .get::<_, LockEntry>(&DataKey::Lock(user.clone(), i))
+            {
+                if !lock.withdrawn && current_time >= lock.unlock_time {
+                    count += 1;
+                }
+            }
+        }
+        count
+    }
+
+    /// Returns the total amount of matured, non-withdrawn lock funds for a user.
+    ///
+    /// This helper provides the aggregate withdrawable lock balance, allowing
+    /// mobile clients to display "Total withdrawable: X" without fetching and
+    /// summing individual lock entries.
+    ///
+    /// # Arguments
+    ///
+    /// * `env` - The Soroban environment
+    /// * `user` - The address of the lock owner
+    ///
+    /// # Returns
+    ///
+    /// An `i128` sum of all matured, non-withdrawn lock amounts.
+    ///
+    /// # Authorization
+    ///
+    /// No authorization required (read-only operation).
+    ///
+    /// # Panics
+    ///
+    /// - If the contract has not been initialized
+    pub fn get_matured_balance(env: Env, user: Address) -> i128 {
+        Self::assert_initialized(&env);
+        Self::try_migrate(&env);
+        Self::assert_supported_storage_version(&env);
+
+        let next_lock_id: u64 = env
+            .storage()
+            .persistent()
+            .get(&DataKey::NextLockId(user.clone()))
+            .unwrap_or(1);
+
+        let current_time = env.ledger().timestamp();
+        let mut total: i128 = 0;
+
+        for i in 1..next_lock_id {
+            if let Some(lock) = env
+                .storage()
+                .persistent()
+                .get::<_, LockEntry>(&DataKey::Lock(user.clone(), i))
+            {
+                if !lock.withdrawn && current_time >= lock.unlock_time {
+                    total += lock.amount;
+                }
+            }
+        }
+        total
+    }
+
+    // -----------------------------------------------------------------------
     // Admin Functions
     // -----------------------------------------------------------------------
 
