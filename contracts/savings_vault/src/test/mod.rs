@@ -5,6 +5,7 @@
 mod admin_invariant_guard;
 mod admin_rotation;
 mod balance_conservation;
+mod balance_snapshot;
 mod config_read_helpers;
 mod event_compatibility;
 mod event_ordering;
@@ -17,6 +18,7 @@ mod lock_amount_validation;
 mod lock_id_generation;
 mod lock_maturity_boundary;
 mod lock_read_helpers;
+mod lock_summary;
 mod maximum_amount_boundary;
 mod maximum_lock_duration;
 mod minimum_deposit_amount;
