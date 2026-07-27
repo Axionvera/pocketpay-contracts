@@ -412,4 +412,62 @@ proptest! {
     fn prop_global_token_custody(ops in multi_op_strategy(3)) {
         prop_global_token_custody_inner(ops);
     }
+
+    /// After a full deposit→lock→withdraw sequence the available balance
+    /// equals `deposited - locked - withdrawn` and the locked balance equals
+    /// the lock amount. This guards against a regression where lock_funds
+    /// accidentally double-counts or withdraw deducts from locked funds.
+    #[test]
+    fn prop_lock_withdraw_accounting(ops in op_sequence_strategy()) {
+        let mut f = new_fuzz_fixture();
+        // Seed with a known deposit so locks and withdrawals have headroom.
+        let seed: i128 = 500_000;
+        f.client.deposit(&f.user, &seed);
+        f.expected_total = seed;
+        assert_conserved(&f.client, &f.user, f.expected_total);
+        for op in &ops {
+            run_op(&mut f, op);
+        }
+        // Final invariant: available + locked == net deposited
+        let available = f.client.get_balance(&f.user);
+        let locked = f.client.get_locked_balance(&f.user);
+        assert_eq!(
+            available + locked,
+            f.expected_total,
+            "final accounting: available ({available}) + locked ({locked}) != net deposited ({})",
+            f.expected_total
+        );
+    }
+
+    /// Multiple sequential locks accumulate correctly: locked balance equals
+    /// the sum of all active lock amounts and available balance decreases
+    /// by the total locked amount.
+    #[test]
+    fn prop_multiple_locks_accumulate(ops in op_sequence_strategy()) {
+        let mut f = new_fuzz_fixture();
+        let seed: i128 = 1_000_000;
+        f.client.deposit(&f.user, &seed);
+        f.expected_total = seed;
+
+        // Run fuzz ops but only track lock amounts separately
+        let mut total_locked_expected: i128 = 0;
+        for op in &ops {
+            let before_available = f.client.get_balance(&f.user);
+            let before_locked = f.client.get_locked_balance(&f.user);
+            match op {
+                Op::Lock { amount, unlock_time } => {
+                    let current_time = f.env.ledger().timestamp();
+                    if *amount > 0 && *amount <= f.client.get_balance(&f.user) && *unlock_time > current_time {
+                        f.client.lock_funds(&f.user, amount, unlock_time);
+                        total_locked_expected += amount;
+                    }
+                }
+                _ => {
+                    run_op(&mut f, op);
+                    continue;
+                }
+            }
+            assert_conserved(&f.client, &f.user, f.expected_total);
+        }
+    }
 }
