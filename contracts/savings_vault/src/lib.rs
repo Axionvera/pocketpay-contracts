@@ -82,6 +82,10 @@ pub enum DataKey {
     Paused,
     /// Unix timestamp when the current pause expires and the contract auto-unpauses.
     PauseExpiry,
+    /// Minimum deposit amount rule (issue #342). When set to a value greater
+    /// than zero, `deposit` rejects amounts strictly below it. A value of zero
+    /// (or unset) means no floor is enforced.
+    MinDepositAmount,
 }
 
 pub const STORAGE_VERSION: u64 = 1;
@@ -409,6 +413,46 @@ impl SavingsVault {
         log!(&env, "Unpause: admin={}", admin);
     }
 
+    // -----------------------------------------------------------------------
+    // Minimum deposit amount rule (issue #342)
+    // -----------------------------------------------------------------------
+
+    /// Sets the minimum deposit amount rule. Deposits below `min_amount` are
+    /// rejected. Pass `0` to disable the floor (the contract's base check that
+    /// `amount > 0` still applies).
+    ///
+    /// # Panics
+    ///
+    /// - If the contract has not been initialized
+    /// - If the caller is not the admin
+    pub fn set_min_deposit_amount(env: Env, admin: Address, min_amount: i128) {
+        Self::assert_initialized(&env);
+        admin.require_auth();
+        Self::assert_admin(&env, &admin);
+
+        if min_amount < 0 {
+            panic!("Min deposit amount cannot be negative");
+        }
+
+        env.storage()
+            .instance()
+            .set(&DataKey::MinDepositAmount, &min_amount);
+
+        let topics = (symbol_short!("cfg_min"), admin.clone());
+        env.events().publish(topics, min_amount);
+
+        log!(&env, "Min deposit amount set to {} by admin={}", min_amount, admin);
+    }
+
+    /// Returns the current minimum deposit amount rule. `0` means no floor is
+    /// enforced (only the base `amount > 0` check applies).
+    pub fn get_min_deposit_amount(env: Env) -> i128 {
+        env.storage()
+            .instance()
+            .get(&DataKey::MinDepositAmount)
+            .unwrap_or(0)
+    }
+
     /// Check whether the contract is currently paused.
     ///
     /// Returns `true` when the pause flag is set **and** the pause has not yet
@@ -469,6 +513,15 @@ impl SavingsVault {
 
         if amount <= 0 {
             panic!("Amount must be positive");
+        }
+
+        let min_deposit: i128 = env
+            .storage()
+            .instance()
+            .get(&DataKey::MinDepositAmount)
+            .unwrap_or(0);
+        if min_deposit > 0 && amount < min_deposit {
+            panic!("Amount is below the minimum deposit amount");
         }
 
         let token = env.storage().instance().get(&DataKey::Token).unwrap();
