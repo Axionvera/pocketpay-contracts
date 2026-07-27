@@ -74,7 +74,15 @@ pub fn setup() -> (Env, Address, SavingsVaultClient<'static>) {
     let token = register_token(&env);
     client.initialize(&admin, &token);
 
-    (env, contract_id, client)
+    let admin = Address::generate(&env);
+    let token_contract = env.register_stellar_asset_contract_v2(admin.clone());
+    let token_address = token_contract.address();
+    
+    client.initialize(&admin, &token_address);
+    let token_client = token::Client::new(&env, &token_address);
+    let token_admin = token::StellarAssetClient::new(&env, &token_address);
+
+    (env, contract_id, client, token_client, token_admin)
 }
 
 pub fn test_token(
