@@ -76,3 +76,15 @@ pub fn test_token(
     let token_admin = token::StellarAssetClient::new(&env, &contract_address);
     (env.clone(), admin, client, token_client, token_admin)
 }
+
+/// Returns a default test environment WITHOUT mocking all auths.
+pub fn strict_test_env() -> Env {
+    Env::default()
+}
+
+pub fn strict_setup() -> (Env, Address, SavingsVaultClient<'static>) {
+    let env = Env::default();
+    let contract_id = env.register(SavingsVault, ());
+    let client = SavingsVaultClient::new(&env, &contract_id);
+    (env, contract_id, client)
+}
