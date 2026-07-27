@@ -31,6 +31,7 @@ mod pause_transition;
 mod property_fee_invariants;
 mod property_vault_accounting;
 mod replay_protection;
+mod simulation_compatibility;
 mod storage_version;
 mod test_helpers;
 mod token_backed_withdrawals;
