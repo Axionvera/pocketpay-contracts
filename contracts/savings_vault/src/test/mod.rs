@@ -11,6 +11,7 @@ mod independent_lock_creation;
 mod initialization;
 mod invalid_lock_id;
 mod lock_extension;
+mod lock_atomicity;
 mod lock_id_generation;
 mod lock_maturity_boundary;
 mod lock_read_helpers;
@@ -30,6 +31,7 @@ mod token_backed_withdrawals;
 mod token_transfer_rollback;
 mod unauthorized_access;
 mod withdraw_lock;
+mod withdrawal_invariant;
 mod zero_duration_lock;
 
 use super::*;
