@@ -159,6 +159,53 @@ soroban network reset standalone
 - The sandbox uses a local identity (`default`) that doesn't require funding.
 - Events are not persisted in the same way as on a real network.
 
+## Common Issues
+
+### Build Failures
+
+**Problem:** `cargo build` fails with "linker not found" or similar errors.
+**Solution:** Ensure the WASM target is installed:
+```bash
+rustup target add wasm32-unknown-unknown
+```
+
+**Problem:** Compilation errors about missing Soroban SDK types.
+**Solution:** Update Soroban CLI to the latest version:
+```bash
+cargo install --locked soroban-cli
+```
+
+### Test Failures
+
+**Problem:** Tests fail with "contract not initialized" errors.
+**Solution:** Some tests require contract initialization. Check if the test has a setup function that needs to be called first, or run the full test suite:
+```bash
+cargo test --all
+```
+
+**Problem:** Tests pass individually but fail when run together.
+**Solution:** This usually indicates shared state. The savings vault contract uses static storage, so tests may interfere with each other. Run tests in a single thread:
+```bash
+cargo test -- --test-threads=1
+```
+
+### Sandbox Issues
+
+**Problem:** `soroban network reset standalone` fails or doesn't clear state.
+**Solution:** Manually delete the sandbox data directory:
+```bash
+rm -rf .soroban/
+soroban network start standalone
+```
+
+**Problem:** Contract invocation returns "Contract not found" after redeployment.
+**Solution:** Each deployment generates a new contract ID. Make sure you're using the latest contract ID from the deploy output.
+
+### Time-Based Features
+
+**Problem:** `lock_funds` with a future timestamp doesn't work as expected.
+**Solution:** The local sandbox doesn't advance time automatically. You can't test time-based withdrawals on the sandbox without manually manipulating ledger time. Use testnet for time-sensitive testing or mock time in unit tests.
+
 ## Next Steps
 
 Once you've tested locally and everything works as expected, you can proceed to deploy to testnet using the instructions in the [README](../README.md#deploy-to-testnet).

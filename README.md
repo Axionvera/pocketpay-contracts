@@ -82,6 +82,8 @@ Install the following before you begin:
    rustup target add wasm32-unknown-unknown
    ```
 
+For detailed setup instructions, common issues, and troubleshooting, see the [Local Development Guide](docs/local-development.md).
+
 ---
 
 ## Build
