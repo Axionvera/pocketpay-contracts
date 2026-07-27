@@ -15,6 +15,7 @@ mod lock_read_helpers;
 mod maximum_amount_boundary;
 mod maximum_lock_duration;
 mod minimum_deposit_amount;
+mod minimum_lock_duration;
 mod multi_lock_invariants;
 mod pause;
 mod property_fee_invariants;

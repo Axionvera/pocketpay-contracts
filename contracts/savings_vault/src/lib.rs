@@ -87,10 +87,15 @@ pub enum DataKey {
     /// (or unset) means no floor is enforced.
     MinDepositAmount,
     /// Maximum lock duration rule (issue #343), in seconds. When set to a value
-    /// less than `u64::MAX`, `lock_funds` rejects locks whose duration
+    /// greater than zero, `lock_funds` rejects locks whose duration
     /// (`unlock_time - current_time`) exceeds it. A value of zero (or unset)
-    /// means no upper bound is enforced (unbounded).
+    /// means no upper bound is enforced.
     MaxLockDurationSecs,
+    /// Minimum lock duration rule (issue #344), in seconds. When set to a value
+    /// greater than zero, `lock_funds` rejects locks whose duration
+    /// (`unlock_time - current_time`) is strictly below it. A value of zero
+    /// (or unset) means no lower bound is enforced.
+    MinLockDurationSecs,
 }
 
 pub const STORAGE_VERSION: u64 = 1;
@@ -491,11 +496,53 @@ impl SavingsVault {
     }
 
     /// Returns the current maximum lock duration rule (seconds). `0` means no
-    /// upper bound is enforced (unbounded).
+    /// upper bound is enforced.
     pub fn get_max_lock_duration(env: Env) -> u64 {
         env.storage()
             .instance()
             .get(&DataKey::MaxLockDurationSecs)
+            .unwrap_or(0)
+    }
+
+    // -----------------------------------------------------------------------
+    // Minimum lock duration rule (issue #344)
+    // -----------------------------------------------------------------------
+
+    /// Sets the minimum lock duration rule, in seconds. A `lock_funds` whose
+    /// duration (`unlock_time - current_time`) is strictly below
+    /// `min_duration_secs` is rejected. Pass `0` to disable the lower bound
+    /// (no minimum enforced).
+    ///
+    /// # Panics
+    ///
+    /// - If the contract has not been initialized
+    /// - If the caller is not the admin
+    pub fn set_min_lock_duration(env: Env, admin: Address, min_duration_secs: u64) {
+        Self::assert_initialized(&env);
+        admin.require_auth();
+        Self::assert_admin(&env, &admin);
+
+        env.storage()
+            .instance()
+            .set(&DataKey::MinLockDurationSecs, &min_duration_secs);
+
+        let topics = (symbol_short!("cfg_minlk"), admin.clone());
+        env.events().publish(topics, min_duration_secs);
+
+        log!(
+            &env,
+            "Min lock duration set to {}s by admin={}",
+            min_duration_secs,
+            admin
+        );
+    }
+
+    /// Returns the current minimum lock duration rule (seconds). `0` means no
+    /// lower bound is enforced.
+    pub fn get_min_lock_duration(env: Env) -> u64 {
+        env.storage()
+            .instance()
+            .get(&DataKey::MinLockDurationSecs)
             .unwrap_or(0)
     }
 
@@ -763,6 +810,15 @@ impl SavingsVault {
             .unwrap_or(0);
         if max_duration > 0 && unlock_time - current_time > max_duration {
             panic!("Lock duration exceeds maximum");
+        }
+
+        let min_duration: u64 = env
+            .storage()
+            .instance()
+            .get(&DataKey::MinLockDurationSecs)
+            .unwrap_or(0);
+        if min_duration > 0 && unlock_time - current_time < min_duration {
+            panic!("Lock duration below minimum");
         }
 
         let mut current_balance: i128 = env
