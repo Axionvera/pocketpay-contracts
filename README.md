@@ -247,6 +247,7 @@ stellar-pocketpay-contracts/
     ├── api-reference.md                # Function naming conventions
     ├── architecture.md                 # Architecture overview
     ├── contract-id-handoff.md          # Contract ID handoff guide
+    ├── coverage-tooling.md             # Coverage tooling research note
     ├── deployment-environments.md      # Deployment environment config
     ├── events.md                       # Event schema documentation
     ├── event-privacy-review.md         # Smart contract event privacy review
@@ -295,6 +296,7 @@ stellar-pocketpay-contracts/
 - [Version Metadata](docs/version-metadata.md) — How the `get_version` read-only function works, how SDKs and deployment scripts should use it, and how to bump the version.
 - [Lock Read Helpers](docs/lock-read-helpers.md) — Response shapes and pagination for `get_lock` and `list_locks`.
 - [Test Coverage Summary](docs/test-coverage.md) — Maps initialization, deposit, withdrawal, and locking behaviours to the tests that cover them, plus known test gaps.
+- [Coverage Tooling Research Note](docs/coverage-tooling.md) — Survey of Rust coverage tools, Soroban/Wasm limitations, CI impact, and recommendations for this project.
 - [Failure Mode Catalogue](docs/failure-mode-catalogue.md) — Comprehensive list of all contract failure modes with expected behavior and test coverage.
 - [Test Naming Conventions](docs/testing.md) — Naming pattern for unit tests under `contracts/savings_vault/src/test/`, with good/bad examples and coverage guidance.
 - [Withdrawal Queue Design Note](docs/withdrawal-queue-design.md) — Design covering pending withdrawal state, queue identifiers, cancellation, maturity, storage and accounting implications, and scope decision.
