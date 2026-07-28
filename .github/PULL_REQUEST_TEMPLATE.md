@@ -78,11 +78,19 @@ cargo test --workspace
 
 ---
 
-## Acceptance Criteria Coverage
+## Traceability Table
 
-<!-- Reference the acceptance criteria from the linked issue and confirm each one is met.
-     Delete this section for straightforward bug fixes with no separate acceptance criteria. -->
+<!-- Map every acceptance criterion from the linked issue to the contract functions, tests,
+     and edge cases that satisfy it. See docs/traceability-table.md for the full guide.
 
-| Criterion | Met? | Notes |
-|---|---|---|
-| | | |
+     For documentation-only PRs with no acceptance criteria, replace the table below with:
+     "No acceptance criteria — documentation-only change."
+
+     Example row (delete this comment block before submitting):
+
+     | AC-1 | `extend_lock` rejects extensions exceeding `MaxLockDurationSecs` | `extend_lock` | `test_extend_lock_exceeds_max_duration` (`src/test/lock_extension.rs`) | Extension exactly at max (accepted); 1s over max (rejected) | ✅ Met |
+-->
+
+| Criterion ID | Criterion Text | Changed Function(s) | Test(s) | Edge Cases Covered | Status |
+|---|---|---|---|---|---|
+| | | | | | |
