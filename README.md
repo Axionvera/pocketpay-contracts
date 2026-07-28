@@ -196,6 +196,7 @@ stellar-pocketpay-contracts/
 - [Admin Role](docs/admin-role.md) – Details on the admin address, current capabilities, and future design considerations.
 - [Admin & Emergency Mechanism Threat Model](docs/admin-pause-threat-model.md) – Security analysis of malicious admin, compromised admin, accidental pause, and blocked-withdrawal scenarios.
 - [Failure Mode Catalogue](docs/failure-mode-catalogue.md) – Summary of safe-failure behavior, expected errors, affected functions, and related tests for vault operations.
+- [Traceability Table Guide](docs/traceability-table.md) – Standard format for mapping PR changes to issue acceptance criteria, with worked examples.
 
 ---
 
@@ -255,6 +256,7 @@ Every pull request must use the **[PR template](.github/PULL_REQUEST_TEMPLATE.md
 - A reference to the issue being fixed (`Closes #N`)
 - A list of contract functions added, modified, or removed
 - A description of tests added or updated
+- A **[traceability table](docs/traceability-table.md)** mapping each acceptance criterion to changed functions, tests, and edge cases
 - A security considerations section (with checklist for contract changes)
 - Confirmation that `cargo fmt --check`, `cargo clippy --tests -- -D warnings`, and `cargo test --workspace` all pass
 - CI green before requesting review
