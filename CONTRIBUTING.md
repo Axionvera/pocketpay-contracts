@@ -69,6 +69,8 @@ Run the full workspace test suite:
 cargo test --workspace
 ```
 
+If CI fails, see the **[Test Reproduction Guide](docs/reproducing-test-failures.md)** for instructions on debugging failures, proptest seeds, and snapshot mismatches locally.
+
 Build the optimized contract WASM with the command used by this repository's CI workflow:
 
 ```bash

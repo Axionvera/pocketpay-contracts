@@ -136,7 +136,7 @@ cargo test
 
 All tests run natively (no WASM needed) using the Soroban SDK test utilities.
 
-For an in-depth reference on test structure, Soroban test fixtures, deterministic ledger time simulation, SAC token mocking, and failure scenario testing, see the **[Advanced Local Development and Testing Guide](docs/advanced-development-and-testing.md)**.
+For an in-depth reference on test structure, Soroban test fixtures, deterministic ledger time simulation, SAC token mocking, and failure scenario testing, see the **[Advanced Local Development and Testing Guide](docs/advanced-development-and-testing.md)**. For help with failing CI and reproducing errors locally, see the **[Test Reproduction Guide](docs/reproducing-test-failures.md)**.
 
 ---
 
@@ -241,6 +241,7 @@ stellar-pocketpay-contracts/
     ├── admin-role.md                   # Admin role documentation
     ├── advanced-development-and-testing.md # Advanced dev & testing guide
     ├── simulation-compatibility.md     # Per-function simulateTransaction reference
+    ├── reproducing-test-failures.md    # Local reproduction guide for failing tests
     ├── accounting-invariants.md        # Formal accounting invariants
     ├── api-reference.md                # Function naming conventions
     ├── architecture.md                 # Architecture overview
@@ -293,6 +294,7 @@ stellar-pocketpay-contracts/
 - [Version Metadata](docs/version-metadata.md) — How the `get_version` read-only function works, how SDKs and deployment scripts should use it, and how to bump the version.
 - [Lock Read Helpers](docs/lock-read-helpers.md) — Response shapes and pagination for `get_lock` and `list_locks`.
 - [Test Coverage Summary](docs/test-coverage.md) — Maps initialization, deposit, withdrawal, and locking behaviours to the tests that cover them, plus known test gaps.
+- [Test Reproduction Guide](docs/reproducing-test-failures.md) — How to reproduce failing contract tests and CI errors on your local machine.
 - [Failure Mode Catalogue](docs/failure-mode-catalogue.md) — Comprehensive list of all contract failure modes with expected behavior and test coverage.
 - [Test Naming Conventions](docs/testing.md) — Naming pattern for unit tests under `contracts/savings_vault/src/test/`, with good/bad examples and coverage guidance.
 - [Withdrawal Queue Design Note](docs/withdrawal-queue-design.md) — Design covering pending withdrawal state, queue identifiers, cancellation, maturity, storage and accounting implications, and scope decision.
