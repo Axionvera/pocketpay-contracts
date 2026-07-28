@@ -60,12 +60,15 @@ pub enum DataKey {
     Locks(Address),
     NextLockId(Address),
     Initialized,
+    /// The accepted token contract address configured during initialisation.
     Token,
     StorageVersion,
     /// Global pause flag — when true, deposits and locks are blocked.
     Paused,
     /// Unix timestamp when the current pause expires and the contract auto-unpauses.
     PauseExpiry,
+    /// A single lock entry keyed by (owner, lock_id).
+    Lock(Address, u64),
 }
 
 pub const STORAGE_VERSION: u64 = 1;
@@ -177,7 +180,6 @@ impl SavingsVault {
 
 
     // -----------------------------------------------------------------------
-    // Initialization
     // Initialization
     // -----------------------------------------------------------------------
 
@@ -532,11 +534,15 @@ impl SavingsVault {
             }
         }
 
-        let new_locked: i128 = locks
-            .iter()
-            .filter(|lock| current_time < lock.unlock_time)
-            .map(|lock| lock.amount)
-            .sum();
+        // Recalculate the remaining locked balance after deductions.
+        let mut new_locked: i128 = 0;
+        for i in 1..next_lock_id {
+            if let Some(lock) = env.storage().persistent().get::<_, LockEntry>(&DataKey::Lock(user.clone(), i)) {
+                if !lock.withdrawn && current_time < lock.unlock_time {
+                    new_locked += lock.amount;
+                }
+            }
+        }
 
         env.storage()
             .persistent()
@@ -574,6 +580,11 @@ impl SavingsVault {
             None => panic!("Lock not found"),
         };
 
+        let lock = match env.storage().persistent().get::<_, LockEntry>(&DataKey::Lock(user.clone(), lock_id)) {
+            Some(l) => l,
+            None => panic!("Lock not found"),
+        };
+
         if lock.withdrawn {
             panic!("Lock already withdrawn");
         }
@@ -587,16 +598,25 @@ impl SavingsVault {
         let token_client = token::Client::new(&env, &token);
         let contract_address = env.current_contract_address();
 
-        token_client.transfer(&contract_address, &user, &lock.amount);
+        let withdrawn_amount = lock.amount;
+        token_client.transfer(&contract_address, &user, &withdrawn_amount);
 
-        locks.remove(index as u32);
-
+        // Mark the lock as withdrawn and persist it.
+        let mut updated_lock = lock;
+        updated_lock.withdrawn = true;
+        updated_lock.amount = 0;
         env.storage()
             .persistent()
-            .set(&DataKey::Lock(user.clone(), lock_id), &lock);
+            .set(&DataKey::Lock(user.clone(), lock_id), &updated_lock);
+
+        // Remove from the Locks index vec and persist the updated vec.
+        locks.remove(index as u32);
+        env.storage()
+            .persistent()
+            .set(&DataKey::Locks(user.clone()), &locks);
 
         let topics = (Symbol::new(&env, "withdraw_lock"), user.clone());
-        let payload = (lock_id, lock.amount);
+        let payload = (lock_id, withdrawn_amount);
         env.events().publish(topics, payload);
 
         log!(
@@ -604,7 +624,7 @@ impl SavingsVault {
             "WithdrawLock: user={}, lock_id={}, amount={}",
             user,
             lock_id,
-            lock.amount
+            withdrawn_amount
         );
     }
 
@@ -706,13 +726,32 @@ impl SavingsVault {
             .persistent()
             .set(&DataKey::Lock(user.clone(), next_id), &new_lock);
 
+        locks.push_back(new_lock);
+        env.storage()
+            .persistent()
+            .set(&DataKey::Locks(user.clone()), &locks);
+
         current_balance -= amount;
 
         env.storage()
             .persistent()
             .set(&DataKey::Balance(user.clone()), &current_balance);
 
-        let new_locked: i128 = locks.iter().map(|l| l.amount).sum();
+        // Sum all active (non-withdrawn) locks for the event payload,
+        // including the one just stored above.
+        let next_lock_id_after: u64 = env
+            .storage()
+            .persistent()
+            .get(&DataKey::NextLockId(user.clone()))
+            .unwrap_or(1);
+        let mut new_locked: i128 = 0;
+        for i in 1..next_lock_id_after {
+            if let Some(lk) = env.storage().persistent().get::<_, LockEntry>(&DataKey::Lock(user.clone(), i)) {
+                if !lk.withdrawn {
+                    new_locked += lk.amount;
+                }
+            }
+        }
 
         let topics = (symbol_short!("lock"), user.clone());
         let payload = (amount, unlock_time, current_balance, new_locked);
@@ -835,7 +874,7 @@ impl SavingsVault {
         let old_admin: Address = env.storage().instance().get(&DataKey::Admin).unwrap();
         env.storage().instance().set(&DataKey::Admin, &new_admin);
 
-        let topics = (symbol_short!("xferadmin"), old_admin.clone());
+        let topics = (Symbol::new(&env, "transfer_admin"), old_admin.clone());
         env.events().publish(topics, new_admin.clone());
 
         log!(&env, "Admin transferred from {} to {}", old_admin, new_admin);

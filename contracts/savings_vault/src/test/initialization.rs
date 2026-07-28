@@ -2,109 +2,79 @@ use crate::test::test_helpers::*;
 use crate::{SavingsVault, SavingsVaultClient};
 use soroban_sdk::{testutils::Address as _, Address, Env};
 
-/// Test 1: First initialization succeeds correctly.
-#[test]
-fn test_initialize() {
-    let env = test_env();
-    let (_id, client) = init_contract(&env);
-    let admin = new_user(&env);
-    let token = new_user(&env);
-    // Note: init_contract already initialized it, so calling again will test duplicate guard if desired, 
-    // or test a separate uninitialized instance.
-}
+// ---------------------------------------------------------------------------
+// Successful initialisation
+// ---------------------------------------------------------------------------
 
+/// The first initialisation with valid admin and token addresses must
+/// succeed without panicking and must persist both values.
 #[test]
 fn test_initialize_success() {
     let env = test_env();
     let contract_id = env.register(SavingsVault, ());
     let client = SavingsVaultClient::new(&env, &contract_id);
-    let admin = new_user(&env);
-    let token = new_user(&env);
-
-    let contract_id = env.register(SavingsVault, ());
-    let client = SavingsVaultClient::new(&env, &contract_id);
-
     let admin = Address::generate(&env);
     let token = Address::generate(&env);
 
-    // First initialization should succeed without error.
+    // Should not panic.
     client.initialize(&admin, &token);
 }
 
-/// Test 2: Repeated initialization (idempotency guard) panics.
-/// Ensures the contract rejects subsequent initialization attempts to prevent state overwriting.
+/// The token address passed to `initialize` must be exactly the value
+/// returned by `get_token`. This verifies it is stored correctly.
 #[test]
-#[should_panic(expected = "Contract is already initialized")]
-fn test_initialize_twice_panics() {
-    let env = test_env();
-    let (_id, client) = init_contract(&env); // already initialized by helper
-    let admin = new_user(&env);
-    let token = new_user(&env);
-    client.initialize(&admin, &token);
-}
-
-#[test]
-#[should_panic(expected = "Contract is already initialized")]
-fn test_initialize_fails_on_second_call() {
+fn test_token_is_stored_and_returned_correctly() {
     let env = test_env();
     let contract_id = env.register(SavingsVault, ());
     let client = SavingsVaultClient::new(&env, &contract_id);
-    let admin = new_user(&env);
-    let token = new_user(&env);
-
     let admin = Address::generate(&env);
     let token = Address::generate(&env);
 
-    // First initialization succeeds
     client.initialize(&admin, &token);
 
-    // Second init with different admin
-    let attacker_admin = new_user(&env);
-    client.initialize(&attacker_admin, &token);
+    // get_token must return the exact address that was passed in.
+    assert_eq!(
+        client.get_token(),
+        token,
+        "stored token address must match the one passed to initialize"
+    );
 }
 
+/// Initialising with a different token address on a fresh contract also
+/// stores and returns that specific address — the storage key is not
+/// hard-coded to a particular value.
 #[test]
-#[should_panic(expected = "Contract is not initialized")]
-fn test_deposit_before_initialization_panics() {
-    let env = test_env();
-    let contract_id = env.register(SavingsVault, ());
-    let client = SavingsVaultClient::new(&env, &contract_id);
-    let user = new_user(&env);
-    client.deposit(&user, &100);
+fn test_different_token_addresses_are_each_stored_correctly() {
+    // First contract instance.
+    let env1 = test_env();
+    let contract_id1 = env1.register(SavingsVault, ());
+    let client1 = SavingsVaultClient::new(&env1, &contract_id1);
+    let admin1 = Address::generate(&env1);
+    let token1 = Address::generate(&env1);
+    client1.initialize(&admin1, &token1);
+    assert_eq!(client1.get_token(), token1);
+
+    // Second, independent contract instance with a different token.
+    let env2 = test_env();
+    let contract_id2 = env2.register(SavingsVault, ());
+    let client2 = SavingsVaultClient::new(&env2, &contract_id2);
+    let admin2 = Address::generate(&env2);
+    let token2 = Address::generate(&env2);
+    client2.initialize(&admin2, &token2);
+    assert_eq!(client2.get_token(), token2);
+
+    // The two instances are fully independent.
+    assert_ne!(
+        token1, token2,
+        "test setup must use distinct token addresses"
+    );
 }
 
-#[test]
-#[should_panic(expected = "Contract is not initialized")]
-fn test_withdraw_before_initialization_panics() {
-    let env = test_env();
-    let contract_id = env.register(SavingsVault, ());
-    let client = SavingsVaultClient::new(&env, &contract_id);
-    let user = new_user(&env);
-    client.withdraw(&user, &100);
-}
+// ---------------------------------------------------------------------------
+// get_token read helper
+// ---------------------------------------------------------------------------
 
-#[test]
-#[should_panic(expected = "Contract is not initialized")]
-fn test_lock_funds_before_initialization_panics() {
-    let env = test_env();
-    let contract_id = env.register(SavingsVault, ());
-    let client = SavingsVaultClient::new(&env, &contract_id);
-    let user = new_user(&env);
-    client.lock_funds(&user, &100, &1000);
-}
-
-#[test]
-#[should_panic(expected = "Contract is not initialized")]
-fn test_read_functions_before_initialization() {
-    let env = test_env();
-    let contract_id = env.register(SavingsVault, ());
-    let client = SavingsVaultClient::new(&env, &contract_id);
-    let user = new_user(&env);
-    assert_eq!(client.get_balance(&user), 0);
-    assert_eq!(client.get_locked_balance(&user), 0);
-    assert_eq!(client.can_withdraw(&user), false);
-}
-
+/// `get_token` returns the configured token address after initialisation.
 #[test]
 fn test_get_token_after_initialization() {
     let env = test_env();
@@ -113,13 +83,12 @@ fn test_get_token_after_initialization() {
     let admin = Address::generate(&env);
     let token = Address::generate(&env);
 
-    // Initialize with token
     client.initialize(&admin, &token);
 
-    // Verify we can retrieve the token
     assert_eq!(client.get_token(), token);
 }
 
+/// `get_token` must panic before the contract is initialised.
 #[test]
 #[should_panic(expected = "Contract is not initialized")]
 fn test_get_token_before_initialization_panics() {
@@ -127,6 +96,153 @@ fn test_get_token_before_initialization_panics() {
     let contract_id = env.register(SavingsVault, ());
     let client = SavingsVaultClient::new(&env, &contract_id);
 
-    // This should panic because the contract isn't initialized
     client.get_token();
+}
+
+// ---------------------------------------------------------------------------
+// Repeated-initialisation guard
+// ---------------------------------------------------------------------------
+
+/// The second call to `initialize` must panic with
+/// "Contract is already initialized" regardless of the arguments.
+#[test]
+#[should_panic(expected = "Contract is already initialized")]
+fn test_initialize_twice_panics() {
+    let env = test_env();
+    // init_contract registers and initializes with a generated admin + token.
+    let (_id, client) = init_contract(&env);
+    let admin = Address::generate(&env);
+    let token = Address::generate(&env);
+    // Second call must be rejected.
+    client.initialize(&admin, &token);
+}
+
+/// Even passing the same admin and token on the second call must be rejected —
+/// the guard fires unconditionally.
+#[test]
+#[should_panic(expected = "Contract is already initialized")]
+fn test_initialize_same_params_twice_panics() {
+    let env = test_env();
+    let contract_id = env.register(SavingsVault, ());
+    let client = SavingsVaultClient::new(&env, &contract_id);
+    let admin = Address::generate(&env);
+    let token = Address::generate(&env);
+
+    client.initialize(&admin, &token);
+    // Repeating with identical arguments must still panic.
+    client.initialize(&admin, &token);
+}
+
+/// An attacker cannot overwrite the admin by calling `initialize` again
+/// with a different admin address.
+#[test]
+#[should_panic(expected = "Contract is already initialized")]
+fn test_reinitialize_with_different_admin_panics() {
+    let env = test_env();
+    let contract_id = env.register(SavingsVault, ());
+    let client = SavingsVaultClient::new(&env, &contract_id);
+    let admin = Address::generate(&env);
+    let token = Address::generate(&env);
+
+    client.initialize(&admin, &token);
+
+    // Attacker's address must not replace the stored admin.
+    let attacker = Address::generate(&env);
+    client.initialize(&attacker, &token);
+}
+
+/// After a rejected second initialisation the token address must not change.
+#[test]
+fn test_token_unchanged_after_rejected_reinitialisation() {
+    let env = test_env();
+    let contract_id = env.register(SavingsVault, ());
+    let client = SavingsVaultClient::new(&env, &contract_id);
+    let admin = Address::generate(&env);
+    let token = Address::generate(&env);
+
+    client.initialize(&admin, &token);
+
+    // Attempt a second initialisation with a different token (should panic).
+    let result = client.try_initialize(&admin, &Address::generate(&env));
+    assert!(
+        result.is_err(),
+        "second initialisation must be rejected"
+    );
+
+    // Original token must still be intact.
+    assert_eq!(
+        client.get_token(),
+        token,
+        "token address must not change after a rejected re-initialisation"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Pre-initialisation guards for all entry points
+// ---------------------------------------------------------------------------
+
+/// `deposit` panics when the contract has not been initialised.
+#[test]
+#[should_panic(expected = "Contract is not initialized")]
+fn test_deposit_before_initialization_panics() {
+    let env = test_env();
+    let contract_id = env.register(SavingsVault, ());
+    let client = SavingsVaultClient::new(&env, &contract_id);
+    let user = Address::generate(&env);
+    client.deposit(&user, &100);
+}
+
+/// `withdraw` panics when the contract has not been initialised.
+#[test]
+#[should_panic(expected = "Contract is not initialized")]
+fn test_withdraw_before_initialization_panics() {
+    let env = test_env();
+    let contract_id = env.register(SavingsVault, ());
+    let client = SavingsVaultClient::new(&env, &contract_id);
+    let user = Address::generate(&env);
+    client.withdraw(&user, &100);
+}
+
+/// `lock_funds` panics when the contract has not been initialised.
+#[test]
+#[should_panic(expected = "Contract is not initialized")]
+fn test_lock_funds_before_initialization_panics() {
+    let env = test_env();
+    let contract_id = env.register(SavingsVault, ());
+    let client = SavingsVaultClient::new(&env, &contract_id);
+    let user = Address::generate(&env);
+    client.lock_funds(&user, &100, &1000);
+}
+
+/// `get_balance` panics when the contract has not been initialised.
+#[test]
+#[should_panic(expected = "Contract is not initialized")]
+fn test_get_balance_before_initialization_panics() {
+    let env = test_env();
+    let contract_id = env.register(SavingsVault, ());
+    let client = SavingsVaultClient::new(&env, &contract_id);
+    let user = Address::generate(&env);
+    client.get_balance(&user);
+}
+
+/// `get_locked_balance` panics when the contract has not been initialised.
+#[test]
+#[should_panic(expected = "Contract is not initialized")]
+fn test_get_locked_balance_before_initialization_panics() {
+    let env = test_env();
+    let contract_id = env.register(SavingsVault, ());
+    let client = SavingsVaultClient::new(&env, &contract_id);
+    let user = Address::generate(&env);
+    client.get_locked_balance(&user);
+}
+
+/// `can_withdraw` panics when the contract has not been initialised.
+#[test]
+#[should_panic(expected = "Contract is not initialized")]
+fn test_can_withdraw_before_initialization_panics() {
+    let env = test_env();
+    let contract_id = env.register(SavingsVault, ());
+    let client = SavingsVaultClient::new(&env, &contract_id);
+    let user = Address::generate(&env);
+    client.can_withdraw(&user);
 }
