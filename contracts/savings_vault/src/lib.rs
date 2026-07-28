@@ -1122,10 +1122,7 @@ impl SavingsVault {
         );
     }
 
-    /// Withdraws a specific matured lock entry by its ID.
-    /// Errors with [`ContractError::LockNotFound`] if the lock doesn't exist or
-    /// [`ContractError::LockNotMatured`] if it hasn't matured.
-    pub fn withdraw_lock(env: Env, user: Address, lock_id: u64) {
+    /// Withdraws a specific matured lock entry by its ID.\n    ///\n    /// # Repeated-call behaviour\n    ///\n    /// Each lock created by [`lock_funds`] must be withdrawn independently.\n    /// Calling this function does **not** affect any other locks — each\n    /// `LockEntry` has its own maturity schedule and withdrawal state.\n    /// Once a lock is withdrawn, it is marked as `withdrawn = true` and cannot\n    /// be withdrawn again (errors with\n    /// [`ContractError::LockAlreadyWithdrawn`]).\n    ///\n    /// Errors with [`ContractError::LockNotFound`] if the lock ID doesn't\n    /// exist, [`ContractError::LockNotMatured`] if it hasn't matured yet, or\n    /// [`ContractError::LockAlreadyWithdrawn`] if already withdrawn.\n    pub fn withdraw_lock(env: Env, user: Address, lock_id: u64) {
         Self::assert_initialized(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
         Self::try_migrate(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
         Self::assert_supported_storage_version(&env)
@@ -1368,13 +1365,7 @@ impl SavingsVault {
     // Fund Locking
     // -----------------------------------------------------------------------
 
-    /// Locks a portion of the user's available balance until `unlock_time`.
-    /// Returns the lock ID. Errors with [`ContractError::AmountNotPositive`],
-    /// [`ContractError::UnlockTimeNotInFuture`],
-    /// [`ContractError::LockDurationExceedsMaximum`],
-    /// [`ContractError::LockDurationBelowMinimum`], or
-    /// [`ContractError::InsufficientBalanceToLock`] on invalid input.
-    pub fn lock_funds(env: Env, user: Address, amount: i128, unlock_time: u64) -> u64 {
+    /// Locks a portion of the user's available balance until `unlock_time`.\n    ///\n    /// # Repeated-call behaviour\n    ///\n    /// **Each call creates an independent [`LockEntry`] with a new unique ID.**\n    /// Prior locks are never overwritten — every `lock_funds` invocation\n    /// produces a separate entry stored under its own monotonically-increasing\n    /// lock ID for the user. This means:\n    ///\n    /// - Calling `lock_funds` multiple times creates N independent locks, each\n    ///   with its own `unlock_time`, amount, and maturity schedule.\n    /// - Locks do **not** merge, replace, or invalidate each other.\n    /// - Each lock matures independently. One lock may be withdrawable while\n    ///   another created in the same transaction is still locked.\n    /// - Each lock must be withdrawn individually via [`withdraw_lock`]\n    ///   with its specific lock ID.\n    /// - A lock's unlock time can be extended forward only via\n    ///   [`extend_lock_time`]. There is no way to shorten a lock duration once\n    ///   created.\n    ///\n    /// Returns the lock ID. Errors with [`ContractError::AmountNotPositive`],\n    /// [`ContractError::UnlockTimeNotInFuture`],\n    /// [`ContractError::LockDurationExceedsMaximum`],\n    /// [`ContractError::LockDurationBelowMinimum`], or\n    /// [`ContractError::InsufficientBalanceToLock`] on invalid input.\n    pub fn lock_funds(env: Env, user: Address, amount: i128, unlock_time: u64) -> u64 {
         Self::assert_initialized(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
         Self::try_migrate(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
         Self::assert_supported_storage_version(&env)
