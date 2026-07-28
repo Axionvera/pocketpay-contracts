@@ -136,6 +136,10 @@ follow the [Documentation Style Guide](docs/docs-style-guide.md) for Testnet
 wording, avoiding production claims, placeholder values, command formatting,
 and linking between docs.
 
+## Payment-period conduct
+
+Before raising a payment-status question on an issue or PR, self-review against the **[Contribution Quality Gate](docs/contribution-quality-gate.md)** and confirm your PR template and `make verify` output are complete. See the **[Payment-Period Conduct Guidance](docs/payment-period-conduct.md)** for what to check first, what to avoid (repeated questions across threads, public escalation before self-review), and how this repository's review relates to GrantFox's own evaluation and payment process.
+
 ## Security-sensitive contributions
 
 Changes involving balances, access control, signatures, storage, upgrades, or external calls are security-sensitive. Describe their risks and assumptions clearly in the pull request.

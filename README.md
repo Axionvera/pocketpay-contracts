@@ -214,6 +214,7 @@ stellar-pocketpay-contracts/
 - [Admin & Emergency Mechanism Threat Model](docs/admin-pause-threat-model.md) – Security analysis of malicious admin, compromised admin, accidental pause, and blocked-withdrawal scenarios.
 - [Failure Mode Catalogue](docs/failure-mode-catalogue.md) – Summary of safe-failure behavior, expected errors, affected functions, and related tests for vault operations.
 - [Traceability Table Guide](docs/traceability-table.md) – Standard format for mapping PR changes to issue acceptance criteria, with worked examples.
+- [Payment-Period Conduct Guidance](docs/payment-period-conduct.md) – Expectations for how contributors raise payment-status questions, and how GrantFox's evaluation process relates to this repository's review process.
 
 ---
 
@@ -278,6 +279,8 @@ Every pull request must use the **[PR template](.github/PULL_REQUEST_TEMPLATE.md
 - A security considerations section (with checklist for contract changes)
 - Confirmation that `make verify` passes (or equivalently `cargo fmt --check`, `cargo clippy --tests -- -D warnings`, and `cargo test --workspace`)
 - CI green before requesting review
+
+Before asking about payment status on an issue or PR, read the **[Payment-Period Conduct Guidance](docs/payment-period-conduct.md)** — it explains how to self-review first and how this repository's review process relates to GrantFox's own evaluation process.
 
 Quick start:
 
