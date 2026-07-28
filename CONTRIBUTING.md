@@ -57,6 +57,16 @@ rustup target add wasm32v1-none
 
 ## Build, format, and test
 
+Run all local verification checks in one command:
+
+```bash
+make verify
+```
+
+This runs formatting checks, the full workspace test suite, and builds the optimized contract WASM. Run this command before opening a pull request.
+
+Alternatively, run checks individually:
+
 Check formatting:
 
 ```bash
@@ -75,7 +85,7 @@ Build the optimized contract WASM with the command used by this repository's CI 
 cargo build --release --target wasm32-unknown-unknown
 ```
 
-The artifact is written under `target/wasm32-unknown-unknown/release/`. Run all three commands before opening a pull request. Logic changes must include tests for the changed behavior and relevant failure and edge cases.
+The artifact is written under `target/wasm32-unknown-unknown/release/`. Logic changes must include tests for the changed behavior and relevant failure and edge cases.
 
 Follow the [test naming convention](docs/testing.md) when adding or updating tests under `contracts/savings_vault/src/test/`.
 
