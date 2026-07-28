@@ -250,6 +250,15 @@ See **[CONTRIBUTING.md](CONTRIBUTING.md)** for the full guide, including:
 - How to run the test suite (`cargo test`)
 - PR checklist and commit message conventions
 
+Every pull request must use the **[PR template](.github/PULL_REQUEST_TEMPLATE.md)**, which requires:
+
+- A reference to the issue being fixed (`Closes #N`)
+- A list of contract functions added, modified, or removed
+- A description of tests added or updated
+- A security considerations section (with checklist for contract changes)
+- Confirmation that `cargo fmt --check`, `cargo clippy --tests -- -D warnings`, and `cargo test --workspace` all pass
+- CI green before requesting review
+
 Quick start:
 
 ```bash
