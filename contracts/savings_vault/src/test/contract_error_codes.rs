@@ -1,7 +1,7 @@
 //! Structured contract error code tests.
 //!
 //! Verifies the full `ContractError` enum surface exposed by the contract via
-//! `env.error_contract(variant)`. Each test exercises a single failure path
+//! `panic_with_error!(&env, variant)`. Each test exercises a single failure path
 //! and asserts the panic emitted by the Soroban test harness contains the
 //! exact numeric `u32` code matching the variant's `#[repr(u32)]` discriminant.
 //!
