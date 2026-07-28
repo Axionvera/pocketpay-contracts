@@ -56,7 +56,10 @@ To avoid common pitfalls, here are examples of PRs that do **not** pass the qual
 
 ## 4. How to Use This Gate
 
-1.  **Before Opening a PR**: Review your work against this checklist.
+1.  **Before Opening a PR**: Review your work against this checklist. The
+    **[Contributor Self-Review Template](self-review-template.md)** packages
+    this checklist (plus the security and edge-case checklists) into a single
+    copy-paste worksheet you can fill in before opening the PR.
 2.  **In Your PR Description**: Reference this quality gate and confirm that all items are checked.
 3.  **Reviewers**: Use this checklist as the primary framework for your review. If the gate isn't met, request changes immediately.
 
