@@ -41,6 +41,16 @@ The compiled `.wasm` file will be at:
 target/wasm32-unknown-unknown/release/savings_vault.wasm
 ```
 
+## Local verification
+
+Before opening a pull request, run the single local verification command from the repository root:
+
+```bash
+make verify
+```
+
+This checks formatting, Clippy, the workspace test suite, and the release WASM build. See [CONTRIBUTING.md](../CONTRIBUTING.md#build-format-and-test) and the README [Local verification](../README.md#local-verification) section.
+
 ## Run Unit Tests
 
 The project includes a comprehensive unit test suite that runs natively without needing a network:

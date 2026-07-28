@@ -10,7 +10,10 @@ build-release:
 wasm-size:
 	sh scripts/report-wasm-size.sh "$(WASM_PATH)"
 
-verify: ## Run all local verification checks (format, test, build)
+# Single local gate aligned with PR / CI expectations:
+# format, lint, workspace tests, and release WASM build.
+verify:
 	cargo fmt --check
+	cargo clippy --tests -- -D warnings
 	cargo test --workspace
 	cargo build --release --target $(WASM_TARGET)

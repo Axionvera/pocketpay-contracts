@@ -56,17 +56,17 @@ Closes #<!-- issue number -->
 
 ## Commands Run
 
-<!-- Paste the commands you ran locally and confirm each passed. -->
+<!-- Prefer `make verify` (format, Clippy, workspace tests, release WASM build).
+     Paste the command output summary, or list the individual checks below. -->
 
 ```
-cargo fmt --check
-cargo clippy --tests -- -D warnings
-cargo test --workspace
+make verify
 ```
 
-- [ ] `cargo fmt --check` — passed
-- [ ] `cargo clippy --tests -- -D warnings` — passed
-- [ ] `cargo test --workspace` — passed
+- [ ] `make verify` — passed
+- [ ] (or individually) `cargo fmt --check` — passed
+- [ ] (or individually) `cargo clippy --tests -- -D warnings` — passed
+- [ ] (or individually) `cargo test --workspace` — passed
 
 ---
 

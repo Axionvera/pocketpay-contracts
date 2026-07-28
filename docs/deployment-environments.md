@@ -27,6 +27,9 @@ No RPC URL, network passphrase, or funded account is needed for local developmen
 ### Commands
 
 ```bash
+# Single local verification gate (format, lint, test, release WASM build)
+make verify
+
 # Build
 cargo build --target wasm32-unknown-unknown
 cargo build --target wasm32-unknown-unknown --release

@@ -63,7 +63,7 @@ Run all local verification checks in one command:
 make verify
 ```
 
-This runs formatting checks, the full workspace test suite, and builds the optimized contract WASM. Run this command before opening a pull request.
+This runs formatting checks, Clippy linting (with warnings denied), the full workspace test suite, and builds the optimized contract WASM. Run this command before opening a pull request. The README documents the same entry point under [Local verification](README.md#local-verification).
 
 Alternatively, run checks individually:
 
@@ -71,6 +71,12 @@ Check formatting:
 
 ```bash
 cargo fmt --check
+```
+
+Lint with Clippy (same flags as the PR template):
+
+```bash
+cargo clippy --tests -- -D warnings
 ```
 
 Run the full workspace test suite:
@@ -99,7 +105,7 @@ Every pull request must fill in the **[PR template](.github/PULL_REQUEST_TEMPLAT
 - **Contract functions changed** — a table listing every function added, modified, or removed (write "none" for documentation-only PRs).
 - **Tests added or updated** — names and file paths of new or changed tests, with checkboxes confirming happy-path, failure, and boundary coverage.
 - **Security considerations** — a plain-language description of security impact plus the per-section security checklist for any PR that touches contract logic (see `docs/security-checklist.md`).
-- **Commands run** — confirmation that `cargo fmt --check`, `cargo clippy --tests -- -D warnings`, and `cargo test --workspace` all pass locally.
+- **Commands run** — confirmation that `make verify` passes (format, Clippy, workspace tests, and release WASM build), or equivalently that `cargo fmt --check`, `cargo clippy --tests -- -D warnings`, and `cargo test --workspace` all pass locally.
 - **CI status** — all CI checks green before requesting review.
 
 Additional guidance:
