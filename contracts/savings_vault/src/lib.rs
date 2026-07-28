@@ -159,6 +159,7 @@ pub enum DataKey {
     Lock(Address, u64),
     NextLockId(Address),
     Initialized,
+    /// The accepted token contract address configured during initialisation.
     Token,
     StorageVersion,
     /// Global pause flag — when true, deposits and locks are blocked.
@@ -433,7 +434,6 @@ impl SavingsVault {
     }
 
     // -----------------------------------------------------------------------
-    // Initialization
     // Initialization
     // -----------------------------------------------------------------------
 
@@ -971,7 +971,225 @@ impl SavingsVault {
         user.require_auth();
 
         if amount <= 0 {
-            panic_with_error!(&env, ContractError::AmountNotPositive)
+<<<<<<< HEAD
+            panic!("Withdrawal amount must be greater than zero");
+        }
+
+        let mut current_balance: i128 = env
+            .storage()
+            .persistent()
+            .get(&DataKey::Balance(user.clone()))
+            .unwrap_or(0);
+
+        let next_lock_id: u64 = env
+            .storage()
+            .persistent()
+            .get(&DataKey::NextLockId(user.clone()))
+            .unwrap_or(1);
+
+        let current_time = env.ledger().timestamp();
+        let mut total_matured: i128 = 0;
+        
+        for i in 1..next_lock_id {
+            if let Some(lock) = env.storage().persistent().get::<_, LockEntry>(&DataKey::Lock(user.clone(), i)) {
+                if !lock.withdrawn && current_time >= lock.unlock_time {
+                    total_matured += lock.amount;
+                }
+            }
+        }
+
+        if amount > current_balance + total_matured {
+            panic!("Insufficient balance");
+        }
+
+        let token = env.storage().instance().get(&DataKey::Token).unwrap();
+        let token_client = token::Client::new(&env, &token);
+        let contract_address = env.current_contract_address();
+
+        token_client.transfer(&contract_address, &user, &amount);
+
+        // Deduct from deposited balance first, then matured locks
+        let mut remaining_to_deduct = amount;
+        if remaining_to_deduct <= current_balance {
+            current_balance -= remaining_to_deduct;
+            remaining_to_deduct = 0;
+        } else {
+            remaining_to_deduct -= current_balance;
+            current_balance = 0;
+        }
+
+        if remaining_to_deduct > 0 {
+            for i in 1..next_lock_id {
+                if remaining_to_deduct == 0 {
+                    break;
+                }
+                if let Some(mut lock) = env.storage().persistent().get::<_, LockEntry>(&DataKey::Lock(user.clone(), i)) {
+                    if !lock.withdrawn && current_time >= lock.unlock_time {
+                        if lock.amount <= remaining_to_deduct {
+                            remaining_to_deduct -= lock.amount;
+                            lock.amount = 0;
+                            lock.withdrawn = true;
+                        } else {
+                            lock.amount -= remaining_to_deduct;
+                            remaining_to_deduct = 0;
+                        }
+                        env.storage().persistent().set(&DataKey::Lock(user.clone(), i), &lock);
+                    }
+                }
+            }
+        }
+
+        // Recalculate the remaining locked balance after deductions.
+        let mut new_locked: i128 = 0;
+        for i in 1..next_lock_id {
+            if let Some(lock) = env.storage().persistent().get::<_, LockEntry>(&DataKey::Lock(user.clone(), i)) {
+                if !lock.withdrawn && current_time < lock.unlock_time {
+                    new_locked += lock.amount;
+                }
+            }
+        }
+
+        env.storage()
+            .persistent()
+            .set(&DataKey::Balance(user.clone()), &current_balance);
+
+        let topics = (symbol_short!("withdraw"), user.clone());
+        let payload = (amount, current_balance, new_locked);
+        env.events().publish(topics, payload);
+
+        log!(
+            &env,
+            "Withdraw: user={}, amount={}, new_balance={}, new_locked={}",
+            user,
+            amount,
+            current_balance,
+            new_locked
+        );
+    }
+
+    /// Withdraws a specific matured lock entry by its ID.
+    /// Panics if the lock doesn't exist or hasn't matured.
+    pub fn withdraw_lock(env: Env, user: Address, lock_id: u64) {
+        Self::assert_initialized(&env);
+        Self::try_migrate(&env);
+        Self::assert_supported_storage_version(&env);
+
+        user.require_auth();
+
+        let mut locks = Self::load_locks(&env, user.clone());
+
+        let lock_index = locks.iter().position(|lock| lock.id == lock_id);
+
+        let index = match lock_index {
+            Some(i) => i,
+            None => panic!("Lock not found"),
+        };
+
+        let lock = match env.storage().persistent().get::<_, LockEntry>(&DataKey::Lock(user.clone(), lock_id)) {
+            Some(l) => l,
+            None => panic!("Lock not found"),
+        };
+
+        if lock.withdrawn {
+            panic!("Lock already withdrawn");
+        }
+
+        let current_time = env.ledger().timestamp();
+        if current_time < lock.unlock_time {
+            panic!("Lock has not matured yet");
+        }
+
+        let token = env.storage().instance().get(&DataKey::Token).unwrap();
+        let token_client = token::Client::new(&env, &token);
+        let contract_address = env.current_contract_address();
+
+        let withdrawn_amount = lock.amount;
+        token_client.transfer(&contract_address, &user, &withdrawn_amount);
+
+        // Mark the lock as withdrawn and persist it.
+        let mut updated_lock = lock;
+        updated_lock.withdrawn = true;
+        updated_lock.amount = 0;
+        env.storage()
+            .persistent()
+            .set(&DataKey::Lock(user.clone(), lock_id), &updated_lock);
+
+        // Remove from the Locks index vec and persist the updated vec.
+        locks.remove(index as u32);
+        env.storage()
+            .persistent()
+            .set(&DataKey::Locks(user.clone()), &locks);
+
+        let topics = (Symbol::new(&env, "withdraw_lock"), user.clone());
+        let payload = (lock_id, withdrawn_amount);
+        env.events().publish(topics, payload);
+
+        log!(
+            &env,
+            "WithdrawLock: user={}, lock_id={}, amount={}",
+            user,
+            lock_id,
+            withdrawn_amount
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // Balance Queries
+    // -----------------------------------------------------------------------
+
+    /// Returns the user's available balance: deposited funds + matured locks.
+    pub fn get_balance(env: Env, user: Address) -> i128 {
+        Self::assert_initialized(&env);
+        Self::try_migrate(&env);
+        Self::assert_supported_storage_version(&env);
+        let deposited_balance: i128 = env
+            .storage()
+            .persistent()
+            .get(&DataKey::Balance(user.clone()))
+            .unwrap_or(0);
+
+        let next_lock_id: u64 = env
+            .storage()
+            .persistent()
+            .get(&DataKey::NextLockId(user.clone()))
+            .unwrap_or(1);
+
+        let current_time = env.ledger().timestamp();
+        let mut matured_amount: i128 = 0;
+        
+        for i in 1..next_lock_id {
+            if let Some(lock) = env.storage().persistent().get::<_, LockEntry>(&DataKey::Lock(user.clone(), i)) {
+                if !lock.withdrawn && current_time >= lock.unlock_time {
+                    matured_amount += lock.amount;
+                }
+            }
+        }
+
+        deposited_balance + matured_amount
+    }
+
+    // -----------------------------------------------------------------------
+    // Fund Locking
+    // -----------------------------------------------------------------------
+
+    /// Locks a portion of the user's available balance until `unlock_time`.
+    /// Returns the lock ID. Panics if amount <= 0, exceeds balance, or
+    /// unlock_time is not in the future.
+    pub fn lock_funds(env: Env, user: Address, amount: i128, unlock_time: u64) -> u64 {
+        Self::assert_initialized(&env);
+        Self::try_migrate(&env);
+        Self::assert_supported_storage_version(&env);
+        Self::require_not_paused(&env);
+
+        user.require_auth();
+
+        if amount <= 0 {
+            panic!("Lock amount must be greater than zero");
+        }
+
+        let current_time = env.ledger().timestamp();
+        if unlock_time <= current_time {
+            panic!("Unlock time must be in the future");
         }
 
         let mut current_balance: i128 = env
@@ -1334,12 +1552,20 @@ impl SavingsVault {
             .persistent()
             .set(&DataKey::Lock(user.clone(), next_id), &new_lock);
 
+        locks.push_back(new_lock);
+        env.storage()
+            .persistent()
+            .set(&DataKey::Locks(user.clone()), &locks);
+
         current_balance -= amount;
 
         env.storage()
             .persistent()
             .set(&DataKey::Balance(user.clone()), &current_balance);
 
+<<<<<<< HEAD
+        // Sum all active (non-withdrawn, not-yet-matured) locks for the event payload,
+        // including the one just stored above.
         let mut new_locked: i128 = 0;
         for i in 1..=next_id {
             if let Some(l) = env
@@ -1767,7 +1993,7 @@ impl SavingsVault {
             .unwrap_or_else(|| panic_with_error!(&env, ContractError::RequiredStorageEntryMissing));
         env.storage().instance().set(&DataKey::Admin, &new_admin);
 
-        let topics = (symbol_short!("xferadmin"), old_admin.clone());
+        let topics = (Symbol::new(&env, "transfer_admin"), old_admin.clone());
         env.events().publish(topics, new_admin.clone());
 
         log!(
