@@ -5,7 +5,7 @@
 //! configurable deposit/lock rules without exposing private operational data.
 //! These tests verify each read helper returns the expected value.
 
-use soroban_sdk::{testutils::Address as _, Address, Env};
+use soroban_sdk::{testutils::Address as _, testutils::Ledger, Address, Env};
 
 fn test_env() -> Env {
     let env = Env::default();
