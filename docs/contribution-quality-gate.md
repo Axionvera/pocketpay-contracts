@@ -27,6 +27,7 @@ Every PR must satisfy the following checklist. If any item is missing or incompl
 - [ ] **Formatting**: Code is formatted via `cargo fmt`.
 - [ ] **Lints**: `cargo clippy --tests` passes with no warnings.
 - [ ] **Build**: `make build-release` succeeds and the WASM size remains within acceptable limits.
+- [ ] **Local verification**: `make verify` passes (format, Clippy, tests, and release WASM build).
 
 ---
 

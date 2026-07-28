@@ -67,16 +67,11 @@ Before working with the test suite or compiling contract binaries, ensure your h
 
 ### Using the `Makefile` Task Runner
 
-The repository includes standard Makefile targets to streamline common workflow steps:
+The repository includes Makefile targets to streamline common workflow steps:
 
-- **Run all unit & integration tests:**
+- **Run all local verification checks** (format, Clippy, tests, release WASM build):
   ```bash
-  make test
-  ```
-
-- **Build release WASM binary:**
-  ```bash
-  make build-wasm
+  make verify
   ```
 
 - **Build release WASM and print binary size report:**
@@ -89,13 +84,10 @@ The repository includes standard Makefile targets to streamline common workflow 
   make wasm-size
   ```
 
-- **Clean build artifacts:**
-  ```bash
-  make clean
-  ```
-
 The compiled release WebAssembly artifact is created at:
 `target/wasm32-unknown-unknown/release/savings_vault.wasm`
+
+See also the README [Local verification](../README.md#local-verification) section and [CONTRIBUTING.md](../CONTRIBUTING.md#build-format-and-test).
 
 ---
 

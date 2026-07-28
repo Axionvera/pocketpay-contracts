@@ -95,14 +95,31 @@ All tests run natively (no WASM needed) using the Soroban SDK test utilities.
 
 ---
 
+## Local verification
+
+Before opening a pull request, run the single local verification command:
+
+```bash
+make verify
+```
+
+This runs the same checks contributors are asked to confirm in the PR template:
+
+1. `cargo fmt --check`
+2. `cargo clippy --tests -- -D warnings`
+3. `cargo test --workspace`
+4. `cargo build --release --target wasm32-unknown-unknown`
+
+See [CONTRIBUTING.md](CONTRIBUTING.md#build-format-and-test) for details and for running each step individually.
+
 ## Task Runner
 
 Common tasks are available via `make`:
 
 ```bash
-make test        # Run all tests
-make build-wasm  # Build the contract WASM in release mode
-make clean       # Clean build artifacts
+make verify         # Format, lint, test, and release WASM build
+make build-release  # Optimized WASM build with size report
+make wasm-size      # Report size of an existing release WASM
 ```
 ---
 
@@ -246,9 +263,10 @@ Contributions are welcome! This project is intentionally beginner-friendly.
 
 See **[CONTRIBUTING.md](CONTRIBUTING.md)** for the full guide, including:
 
+- How to run local verification (`make verify`)
 - How to format code (`cargo fmt`)
-- How to lint code (`cargo clippy -- -D warnings`)
-- How to run the test suite (`cargo test`)
+- How to lint code (`cargo clippy --tests -- -D warnings`)
+- How to run the test suite (`cargo test --workspace`)
 - PR checklist and commit message conventions
 
 Every pull request must use the **[PR template](.github/PULL_REQUEST_TEMPLATE.md)**, which requires:
@@ -258,16 +276,14 @@ Every pull request must use the **[PR template](.github/PULL_REQUEST_TEMPLATE.md
 - A description of tests added or updated
 - A **[traceability table](docs/traceability-table.md)** mapping each acceptance criterion to changed functions, tests, and edge cases
 - A security considerations section (with checklist for contract changes)
-- Confirmation that `cargo fmt --check`, `cargo clippy --tests -- -D warnings`, and `cargo test --workspace` all pass
+- Confirmation that `make verify` passes (or equivalently `cargo fmt --check`, `cargo clippy --tests -- -D warnings`, and `cargo test --workspace`)
 - CI green before requesting review
 
 Quick start:
 
 ```bash
-# Fork & clone, then verify everything is green before making changes
-cargo fmt --check
-cargo clippy --tests -- -D warnings
-cargo test
+# Fork & clone, then verify everything is green before opening a PR
+make verify
 ```
 
 ---
