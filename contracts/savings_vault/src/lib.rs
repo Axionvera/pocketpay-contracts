@@ -25,8 +25,8 @@ extern crate alloc;
 extern crate std;
 
 use soroban_sdk::{
-    contract, contracterror, contractimpl, contracttype, log, symbol_short, token, Address, Env,
-    Symbol, Vec,
+    contract, contracterror, contractimpl, contracttype, log, panic_with_error, symbol_short, token,
+    Address, Env, Symbol, Vec,
 };
 
 const MAX_LOCK_PAGE_SIZE: u32 = 50;
@@ -324,7 +324,7 @@ impl SavingsVault {
             .storage()
             .instance()
             .get(&DataKey::Admin)
-            .unwrap_or_else(|| env.error_contract(ContractError::RequiredStorageEntryMissing));
+            .unwrap_or_else(|| panic_with_error!(&env, ContractError::RequiredStorageEntryMissing));
         if admin != &stored_admin {
             Err(ContractError::NotAuthorizedAdmin)
         } else {
@@ -410,11 +410,11 @@ impl SavingsVault {
     /// [`ContractError::AlreadyInitialized`] if called twice.
     pub fn initialize(env: Env, admin: Address, token: Address) {
         if env.storage().instance().has(&DataKey::Initialized) {
-            env.error_contract(ContractError::AlreadyInitialized)
+            panic_with_error!(&env, ContractError::AlreadyInitialized)
         }
 
         // Try migration before initializing
-        Self::try_migrate(&env).unwrap_or_else(|e| env.error_contract(e));
+        Self::try_migrate(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
 
         // Require the admin to have signed this transaction
         admin.require_auth();
@@ -450,9 +450,9 @@ impl SavingsVault {
     pub fn get_version(env: Env) -> soroban_sdk::String {
         // No need to be initialized for version check, but check storage version if possible
         if env.storage().instance().has(&DataKey::Initialized) {
-            Self::try_migrate(&env).unwrap_or_else(|e| env.error_contract(e));
+            Self::try_migrate(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
             Self::assert_supported_storage_version(&env)
-                .unwrap_or_else(|e| env.error_contract(e));
+                .unwrap_or_else(|e| panic_with_error!(&env, e));
         }
         soroban_sdk::String::from_str(&env, "0.1.0")
     }
@@ -487,14 +487,14 @@ impl SavingsVault {
     ///
     /// - [`ContractError::NotInitialized`] – If the contract has not been initialized.
     pub fn get_token(env: Env) -> Address {
-        Self::assert_initialized(&env).unwrap_or_else(|e| env.error_contract(e));
-        Self::try_migrate(&env).unwrap_or_else(|e| env.error_contract(e));
+        Self::assert_initialized(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
+        Self::try_migrate(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
         Self::assert_supported_storage_version(&env)
-            .unwrap_or_else(|e| env.error_contract(e));
+            .unwrap_or_else(|e| panic_with_error!(&env, e));
         env.storage()
             .instance()
             .get(&DataKey::Token)
-            .unwrap_or_else(|| env.error_contract(ContractError::TokenNotConfigured))
+            .unwrap_or_else(|| panic_with_error!(&env, ContractError::TokenNotConfigured))
     }
 
     // -----------------------------------------------------------------------
@@ -535,12 +535,12 @@ impl SavingsVault {
     /// - If the caller is not the admin
     /// - If `duration_secs` is zero
     pub fn pause(env: Env, admin: Address, duration_secs: u64) {
-        Self::assert_initialized(&env).unwrap_or_else(|e| env.error_contract(e));
+        Self::assert_initialized(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
         admin.require_auth();
-        Self::assert_admin(&env, &admin).unwrap_or_else(|e| env.error_contract(e));
+        Self::assert_admin(&env, &admin).unwrap_or_else(|e| panic_with_error!(&env, e));
 
         if duration_secs == 0 {
-            env.error_contract(ContractError::PauseDurationMustBePositive)
+            panic_with_error!(&env, ContractError::PauseDurationMustBePositive)
         }
 
         let expiry = env.ledger().timestamp() + duration_secs;
@@ -592,9 +592,9 @@ impl SavingsVault {
     /// - If the contract has not been initialized
     /// - If the caller is not the admin
     pub fn unpause(env: Env, admin: Address) {
-        Self::assert_initialized(&env).unwrap_or_else(|e| env.error_contract(e));
+        Self::assert_initialized(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
         admin.require_auth();
-        Self::assert_admin(&env, &admin).unwrap_or_else(|e| env.error_contract(e));
+        Self::assert_admin(&env, &admin).unwrap_or_else(|e| panic_with_error!(&env, e));
 
         env.storage().instance().set(&DataKey::Paused, &false);
         env.storage().instance().set(&DataKey::PauseExpiry, &0_u64);
@@ -618,12 +618,12 @@ impl SavingsVault {
     /// - If the contract has not been initialized
     /// - If the caller is not the admin
     pub fn set_min_deposit_amount(env: Env, admin: Address, min_amount: i128) {
-        Self::assert_initialized(&env).unwrap_or_else(|e| env.error_contract(e));
+        Self::assert_initialized(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
         admin.require_auth();
-        Self::assert_admin(&env, &admin).unwrap_or_else(|e| env.error_contract(e));
+        Self::assert_admin(&env, &admin).unwrap_or_else(|e| panic_with_error!(&env, e));
 
         if min_amount < 0 {
-            env.error_contract(ContractError::MinDepositAmountNegative)
+            panic_with_error!(&env, ContractError::MinDepositAmountNegative)
         }
 
         env.storage()
@@ -658,9 +658,9 @@ impl SavingsVault {
     /// - If the contract has not been initialized
     /// - If the caller is not the admin
     pub fn set_max_lock_duration(env: Env, admin: Address, max_duration_secs: u64) {
-        Self::assert_initialized(&env).unwrap_or_else(|e| env.error_contract(e));
+        Self::assert_initialized(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
         admin.require_auth();
-        Self::assert_admin(&env, &admin).unwrap_or_else(|e| env.error_contract(e));
+        Self::assert_admin(&env, &admin).unwrap_or_else(|e| panic_with_error!(&env, e));
 
         env.storage()
             .instance()
@@ -700,9 +700,9 @@ impl SavingsVault {
     /// - If the contract has not been initialized
     /// - If the caller is not the admin
     pub fn set_min_lock_duration(env: Env, admin: Address, min_duration_secs: u64) {
-        Self::assert_initialized(&env).unwrap_or_else(|e| env.error_contract(e));
+        Self::assert_initialized(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
         admin.require_auth();
-        Self::assert_admin(&env, &admin).unwrap_or_else(|e| env.error_contract(e));
+        Self::assert_admin(&env, &admin).unwrap_or_else(|e| panic_with_error!(&env, e));
 
         env.storage()
             .instance()
@@ -747,7 +747,7 @@ impl SavingsVault {
     ///
     /// No authorization required (read-only operation).
     pub fn is_paused(env: Env) -> bool {
-        Self::assert_initialized(&env).unwrap_or_else(|e| env.error_contract(e));
+        Self::assert_initialized(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
 
         let paused: bool = env
             .storage()
@@ -779,16 +779,16 @@ impl SavingsVault {
     /// Transfers tokens from the user into the vault and credits their balance.
     /// Errors with [`ContractError::AmountNotPositive`] if amount <= 0.
     pub fn deposit(env: Env, user: Address, amount: i128) {
-        Self::assert_initialized(&env).unwrap_or_else(|e| env.error_contract(e));
-        Self::try_migrate(&env).unwrap_or_else(|e| env.error_contract(e));
+        Self::assert_initialized(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
+        Self::try_migrate(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
         Self::assert_supported_storage_version(&env)
-            .unwrap_or_else(|e| env.error_contract(e));
-        Self::require_not_paused(&env).unwrap_or_else(|e| env.error_contract(e));
+            .unwrap_or_else(|e| panic_with_error!(&env, e));
+        Self::require_not_paused(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
 
         user.require_auth();
 
         if amount <= 0 {
-            env.error_contract(ContractError::AmountNotPositive)
+            panic_with_error!(&env, ContractError::AmountNotPositive)
         }
 
         let min_deposit: i128 = env
@@ -797,14 +797,14 @@ impl SavingsVault {
             .get(&DataKey::MinDepositAmount)
             .unwrap_or(0);
         if min_deposit > 0 && amount < min_deposit {
-            env.error_contract(ContractError::AmountBelowMinimumDeposit)
+            panic_with_error!(&env, ContractError::AmountBelowMinimumDeposit)
         }
 
         let token = env
             .storage()
             .instance()
             .get(&DataKey::Token)
-            .unwrap_or_else(|| env.error_contract(ContractError::TokenNotConfigured));
+            .unwrap_or_else(|| panic_with_error!(&env, ContractError::TokenNotConfigured));
         let token_client = token::Client::new(&env, &token);
         let contract_address = env.current_contract_address();
 
@@ -843,15 +843,15 @@ impl SavingsVault {
     /// Errors with [`ContractError::AmountNotPositive`] if amount <= 0 or
     /// [`ContractError::InsufficientBalance`] if it exceeds available balance.
     pub fn withdraw(env: Env, user: Address, amount: i128) {
-        Self::assert_initialized(&env).unwrap_or_else(|e| env.error_contract(e));
-        Self::try_migrate(&env).unwrap_or_else(|e| env.error_contract(e));
+        Self::assert_initialized(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
+        Self::try_migrate(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
         Self::assert_supported_storage_version(&env)
-            .unwrap_or_else(|e| env.error_contract(e));
+            .unwrap_or_else(|e| panic_with_error!(&env, e));
 
         user.require_auth();
 
         if amount <= 0 {
-            env.error_contract(ContractError::AmountNotPositive)
+            panic_with_error!(&env, ContractError::AmountNotPositive)
         }
 
         let mut current_balance: i128 = env
@@ -861,14 +861,14 @@ impl SavingsVault {
             .unwrap_or(0);
 
         if amount > current_balance {
-            env.error_contract(ContractError::InsufficientBalance)
+            panic_with_error!(&env, ContractError::InsufficientBalance)
         }
 
         let token = env
             .storage()
             .instance()
             .get(&DataKey::Token)
-            .unwrap_or_else(|| env.error_contract(ContractError::TokenNotConfigured));
+            .unwrap_or_else(|| panic_with_error!(&env, ContractError::TokenNotConfigured));
         let token_client = token::Client::new(&env, &token);
         let contract_address = env.current_contract_address();
 
@@ -897,10 +897,10 @@ impl SavingsVault {
     /// Errors with [`ContractError::LockNotFound`] if the lock doesn't exist or
     /// [`ContractError::LockNotMatured`] if it hasn't matured.
     pub fn withdraw_lock(env: Env, user: Address, lock_id: u64) {
-        Self::assert_initialized(&env).unwrap_or_else(|e| env.error_contract(e));
-        Self::try_migrate(&env).unwrap_or_else(|e| env.error_contract(e));
+        Self::assert_initialized(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
+        Self::try_migrate(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
         Self::assert_supported_storage_version(&env)
-            .unwrap_or_else(|e| env.error_contract(e));
+            .unwrap_or_else(|e| panic_with_error!(&env, e));
 
         user.require_auth();
 
@@ -910,23 +910,23 @@ impl SavingsVault {
             .get::<_, LockEntry>(&DataKey::Lock(user.clone(), lock_id))
         {
             Some(l) => l,
-            None => env.error_contract(ContractError::LockNotFound),
+            None => panic_with_error!(&env, ContractError::LockNotFound),
         };
 
         if lock.withdrawn {
-            env.error_contract(ContractError::LockAlreadyWithdrawn)
+            panic_with_error!(&env, ContractError::LockAlreadyWithdrawn)
         }
 
         let current_time = env.ledger().timestamp();
         if current_time < lock.unlock_time {
-            env.error_contract(ContractError::LockNotMatured)
+            panic_with_error!(&env, ContractError::LockNotMatured)
         }
 
         let token = env
             .storage()
             .instance()
             .get(&DataKey::Token)
-            .unwrap_or_else(|| env.error_contract(ContractError::TokenNotConfigured));
+            .unwrap_or_else(|| panic_with_error!(&env, ContractError::TokenNotConfigured));
         let token_client = token::Client::new(&env, &token);
         let contract_address = env.current_contract_address();
 
@@ -960,10 +960,10 @@ impl SavingsVault {
     /// Returns the user's available balance: only the deposited (unlocked) balance.
     /// Matured locks must be withdrawn via `withdraw_lock`.
     pub fn get_balance(env: Env, user: Address) -> i128 {
-        Self::assert_initialized(&env).unwrap_or_else(|e| env.error_contract(e));
-        Self::try_migrate(&env).unwrap_or_else(|e| env.error_contract(e));
+        Self::assert_initialized(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
+        Self::try_migrate(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
         Self::assert_supported_storage_version(&env)
-            .unwrap_or_else(|e| env.error_contract(e));
+            .unwrap_or_else(|e| panic_with_error!(&env, e));
         let deposited_balance: i128 = env
             .storage()
             .persistent()
@@ -1004,10 +1004,10 @@ impl SavingsVault {
     /// large number of historical locks this may become expensive; consider
     /// off-chain indexing in that case.
     pub fn get_balance_snapshot(env: Env, user: Address) -> BalanceSnapshot {
-        Self::assert_initialized(&env).unwrap_or_else(|e| env.error_contract(e));
-        Self::try_migrate(&env).unwrap_or_else(|e| env.error_contract(e));
+        Self::assert_initialized(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
+        Self::try_migrate(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
         Self::assert_supported_storage_version(&env)
-            .unwrap_or_else(|e| env.error_contract(e));
+            .unwrap_or_else(|e| panic_with_error!(&env, e));
 
         let unlocked: i128 = env
             .storage()
@@ -1079,10 +1079,10 @@ impl SavingsVault {
     /// Same linear-scan caveat as [`get_balance_snapshot`]. For users with
     /// a very large number of historical locks, prefer off-chain indexing.
     pub fn get_lock_summary(env: Env, user: Address) -> LockSummary {
-        Self::assert_initialized(&env).unwrap_or_else(|e| env.error_contract(e));
-        Self::try_migrate(&env).unwrap_or_else(|e| env.error_contract(e));
+        Self::assert_initialized(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
+        Self::try_migrate(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
         Self::assert_supported_storage_version(&env)
-            .unwrap_or_else(|e| env.error_contract(e));
+            .unwrap_or_else(|e| panic_with_error!(&env, e));
 
         let next_lock_id: u64 = env
             .storage()
@@ -1146,21 +1146,21 @@ impl SavingsVault {
     /// [`ContractError::LockDurationBelowMinimum`], or
     /// [`ContractError::InsufficientBalanceToLock`] on invalid input.
     pub fn lock_funds(env: Env, user: Address, amount: i128, unlock_time: u64) -> u64 {
-        Self::assert_initialized(&env).unwrap_or_else(|e| env.error_contract(e));
-        Self::try_migrate(&env).unwrap_or_else(|e| env.error_contract(e));
+        Self::assert_initialized(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
+        Self::try_migrate(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
         Self::assert_supported_storage_version(&env)
-            .unwrap_or_else(|e| env.error_contract(e));
-        Self::require_not_paused(&env).unwrap_or_else(|e| env.error_contract(e));
+            .unwrap_or_else(|e| panic_with_error!(&env, e));
+        Self::require_not_paused(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
 
         user.require_auth();
 
         if amount <= 0 {
-            env.error_contract(ContractError::AmountNotPositive)
+            panic_with_error!(&env, ContractError::AmountNotPositive)
         }
 
         let current_time = env.ledger().timestamp();
         if unlock_time <= current_time {
-            env.error_contract(ContractError::UnlockTimeNotInFuture)
+            panic_with_error!(&env, ContractError::UnlockTimeNotInFuture)
         }
 
         let max_duration: u64 = env
@@ -1169,7 +1169,7 @@ impl SavingsVault {
             .get(&DataKey::MaxLockDurationSecs)
             .unwrap_or(0);
         if max_duration > 0 && unlock_time - current_time > max_duration {
-            env.error_contract(ContractError::LockDurationExceedsMaximum)
+            panic_with_error!(&env, ContractError::LockDurationExceedsMaximum)
         }
 
         let min_duration: u64 = env
@@ -1178,7 +1178,7 @@ impl SavingsVault {
             .get(&DataKey::MinLockDurationSecs)
             .unwrap_or(0);
         if min_duration > 0 && unlock_time - current_time < min_duration {
-            env.error_contract(ContractError::LockDurationBelowMinimum)
+            panic_with_error!(&env, ContractError::LockDurationBelowMinimum)
         }
 
         let mut current_balance: i128 = env
@@ -1188,7 +1188,7 @@ impl SavingsVault {
             .unwrap_or(0);
 
         if amount > current_balance {
-            env.error_contract(ContractError::InsufficientBalanceToLock)
+            panic_with_error!(&env, ContractError::InsufficientBalanceToLock)
         }
 
         let next_id: u64 = env
@@ -1276,11 +1276,11 @@ impl SavingsVault {
     /// - If `new_unlock_time` is not strictly greater than current `lock.unlock_time`.
     /// - If `new_unlock_time` is not in the future (`<= env.ledger().timestamp()`).
     pub fn extend_lock(env: Env, user: Address, lock_id: u64, new_unlock_time: u64) {
-        Self::assert_initialized(&env).unwrap_or_else(|e| env.error_contract(e));
-        Self::try_migrate(&env).unwrap_or_else(|e| env.error_contract(e));
+        Self::assert_initialized(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
+        Self::try_migrate(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
         Self::assert_supported_storage_version(&env)
-            .unwrap_or_else(|e| env.error_contract(e));
-        Self::require_not_paused(&env).unwrap_or_else(|e| env.error_contract(e));
+            .unwrap_or_else(|e| panic_with_error!(&env, e));
+        Self::require_not_paused(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
 
         user.require_auth();
 
@@ -1290,20 +1290,20 @@ impl SavingsVault {
             .get::<_, LockEntry>(&DataKey::Lock(user.clone(), lock_id))
         {
             Some(l) => l,
-            None => env.error_contract(ContractError::LockNotFound),
+            None => panic_with_error!(&env, ContractError::LockNotFound),
         };
 
         if lock.withdrawn {
-            env.error_contract(ContractError::LockAlreadyWithdrawn)
+            panic_with_error!(&env, ContractError::LockAlreadyWithdrawn)
         }
 
         let current_time = env.ledger().timestamp();
         if new_unlock_time <= current_time {
-            env.error_contract(ContractError::UnlockTimeNotInFuture)
+            panic_with_error!(&env, ContractError::UnlockTimeNotInFuture)
         }
 
         if new_unlock_time <= lock.unlock_time {
-            env.error_contract(ContractError::ExtendLockTimeNotIncreased)
+            panic_with_error!(&env, ContractError::ExtendLockTimeNotIncreased)
         }
 
         let old_unlock_time = lock.unlock_time;
@@ -1331,10 +1331,10 @@ impl SavingsVault {
     /// (both matured and immature). Matured locks must be withdrawn via
     /// `withdraw_lock`.
     pub fn get_locked_balance(env: Env, user: Address) -> i128 {
-        Self::assert_initialized(&env).unwrap_or_else(|e| env.error_contract(e));
-        Self::try_migrate(&env).unwrap_or_else(|e| env.error_contract(e));
+        Self::assert_initialized(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
+        Self::try_migrate(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
         Self::assert_supported_storage_version(&env)
-            .unwrap_or_else(|e| env.error_contract(e));
+            .unwrap_or_else(|e| panic_with_error!(&env, e));
         let next_lock_id: u64 = env
             .storage()
             .persistent()
@@ -1358,10 +1358,10 @@ impl SavingsVault {
 
     /// Returns true if the user has at least one matured lock.
     pub fn can_withdraw(env: Env, user: Address) -> bool {
-        Self::assert_initialized(&env).unwrap_or_else(|e| env.error_contract(e));
-        Self::try_migrate(&env).unwrap_or_else(|e| env.error_contract(e));
+        Self::assert_initialized(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
+        Self::try_migrate(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
         Self::assert_supported_storage_version(&env)
-            .unwrap_or_else(|e| env.error_contract(e));
+            .unwrap_or_else(|e| panic_with_error!(&env, e));
         let next_lock_id: u64 = env
             .storage()
             .persistent()
@@ -1386,10 +1386,10 @@ impl SavingsVault {
 
     /// Returns a single lock entry by ID, or None if not found.
     pub fn get_lock(env: Env, user: Address, lock_id: u64) -> Option<LockEntry> {
-        Self::assert_initialized(&env).unwrap_or_else(|e| env.error_contract(e));
-        Self::try_migrate(&env).unwrap_or_else(|e| env.error_contract(e));
+        Self::assert_initialized(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
+        Self::try_migrate(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
         Self::assert_supported_storage_version(&env)
-            .unwrap_or_else(|e| env.error_contract(e));
+            .unwrap_or_else(|e| panic_with_error!(&env, e));
         env.storage()
             .persistent()
             .get(&DataKey::Lock(user.clone(), lock_id))
@@ -1397,10 +1397,10 @@ impl SavingsVault {
 
     /// Returns a paginated list of lock entries for a user (oldest first).
     pub fn list_locks(env: Env, user: Address, offset: u32, limit: u32) -> Vec<LockEntry> {
-        Self::assert_initialized(&env).unwrap_or_else(|e| env.error_contract(e));
-        Self::try_migrate(&env).unwrap_or_else(|e| env.error_contract(e));
+        Self::assert_initialized(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
+        Self::try_migrate(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
         Self::assert_supported_storage_version(&env)
-            .unwrap_or_else(|e| env.error_contract(e));
+            .unwrap_or_else(|e| panic_with_error!(&env, e));
         let next_lock_id: u64 = env
             .storage()
             .persistent()
@@ -1470,9 +1470,10 @@ impl SavingsVault {
     ///
     /// - If the contract has not been initialized
     pub fn list_matured_locks(env: Env, user: Address, offset: u32, limit: u32) -> Vec<LockEntry> {
-        Self::assert_initialized(&env);
-        Self::try_migrate(&env);
-        Self::assert_supported_storage_version(&env);
+        Self::assert_initialized(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
+        Self::try_migrate(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
+        Self::assert_supported_storage_version(&env)
+            .unwrap_or_else(|e| panic_with_error!(&env, e));
 
         let next_lock_id: u64 = env
             .storage()
@@ -1533,9 +1534,10 @@ impl SavingsVault {
     ///
     /// - If the contract has not been initialized
     pub fn get_matured_lock_count(env: Env, user: Address) -> u32 {
-        Self::assert_initialized(&env);
-        Self::try_migrate(&env);
-        Self::assert_supported_storage_version(&env);
+        Self::assert_initialized(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
+        Self::try_migrate(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
+        Self::assert_supported_storage_version(&env)
+            .unwrap_or_else(|e| panic_with_error!(&env, e));
 
         let next_lock_id: u64 = env
             .storage()
@@ -1583,9 +1585,10 @@ impl SavingsVault {
     ///
     /// - If the contract has not been initialized
     pub fn get_matured_balance(env: Env, user: Address) -> i128 {
-        Self::assert_initialized(&env);
-        Self::try_migrate(&env);
-        Self::assert_supported_storage_version(&env);
+        Self::assert_initialized(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
+        Self::try_migrate(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
+        Self::assert_supported_storage_version(&env)
+            .unwrap_or_else(|e| panic_with_error!(&env, e));
 
         let next_lock_id: u64 = env
             .storage()
@@ -1616,32 +1619,32 @@ impl SavingsVault {
 
     /// Returns the admin address set during initialization.
     pub fn get_admin(env: Env) -> Address {
-        Self::assert_initialized(&env).unwrap_or_else(|e| env.error_contract(e));
+        Self::assert_initialized(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
         env.storage()
             .instance()
             .get(&DataKey::Admin)
-            .unwrap_or_else(|| env.error_contract(ContractError::RequiredStorageEntryMissing))
+            .unwrap_or_else(|| panic_with_error!(&env, ContractError::RequiredStorageEntryMissing))
     }
 
     /// Transfers admin privileges to a new address. Only the current admin
     /// can call this.
     pub fn transfer_admin(env: Env, admin: Address, new_admin: Address) {
-        Self::assert_initialized(&env).unwrap_or_else(|e| env.error_contract(e));
+        Self::assert_initialized(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
         admin.require_auth();
-        Self::assert_admin(&env, &admin).unwrap_or_else(|e| env.error_contract(e));
+        Self::assert_admin(&env, &admin).unwrap_or_else(|e| panic_with_error!(&env, e));
 
         if admin == new_admin {
-            env.error_contract(ContractError::CannotTransferAdminToSelf)
+            panic_with_error!(&env, ContractError::CannotTransferAdminToSelf)
         }
         if new_admin == env.current_contract_address() {
-            env.error_contract(ContractError::CannotTransferAdminToContractAddress)
+            panic_with_error!(&env, ContractError::CannotTransferAdminToContractAddress)
         }
 
         let old_admin: Address = env
             .storage()
             .instance()
             .get(&DataKey::Admin)
-            .unwrap_or_else(|| env.error_contract(ContractError::RequiredStorageEntryMissing));
+            .unwrap_or_else(|| panic_with_error!(&env, ContractError::RequiredStorageEntryMissing));
         env.storage().instance().set(&DataKey::Admin, &new_admin);
 
         let topics = (symbol_short!("xferadmin"), old_admin.clone());

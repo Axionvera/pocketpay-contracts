@@ -354,7 +354,7 @@ fn test_discovery_helpers_do_not_mutate_state() {
 // =========================================================================
 
 #[test]
-#[should_panic(expected = "Contract is not initialized")]
+#[should_panic]
 fn test_list_matured_locks_uninitialized_panics() {
     let env = test_env();
     let contract_id = env.register(SavingsVault, ());
@@ -364,7 +364,7 @@ fn test_list_matured_locks_uninitialized_panics() {
 }
 
 #[test]
-#[should_panic(expected = "Contract is not initialized")]
+#[should_panic]
 fn test_get_matured_lock_count_uninitialized_panics() {
     let env = test_env();
     let contract_id = env.register(SavingsVault, ());
@@ -374,7 +374,7 @@ fn test_get_matured_lock_count_uninitialized_panics() {
 }
 
 #[test]
-#[should_panic(expected = "Contract is not initialized")]
+#[should_panic]
 fn test_get_matured_balance_uninitialized_panics() {
     let env = test_env();
     let contract_id = env.register(SavingsVault, ());

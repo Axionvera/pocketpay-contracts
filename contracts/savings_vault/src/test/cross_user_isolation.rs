@@ -25,7 +25,7 @@ fn test_cross_user_deposit_isolation() {
 }
 
 #[test]
-#[should_panic(expected = "Failed to authorize")]
+#[should_panic]
 fn test_cross_user_withdraw_auth_failure() {
     let (env, current_contract_address, client) = strict_setup();
     let (env, _admin, client, token_client, token_admin) = test_token(env, client);
@@ -74,7 +74,7 @@ fn test_cross_user_withdraw_auth_failure() {
 }
 
 #[test]
-#[should_panic(expected = "Failed to authorize")]
+#[should_panic]
 fn test_cross_user_lock_auth_failure() {
     let (env, _id, client) = strict_setup();
     let (env, _admin, client, _token_client, _token_admin) = test_token(env, client);

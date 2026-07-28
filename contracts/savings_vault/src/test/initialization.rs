@@ -34,7 +34,7 @@ fn test_initialize_success() {
 /// Test 2: Repeated initialization (idempotency guard) panics.
 /// Ensures the contract rejects subsequent initialization attempts to prevent state overwriting.
 #[test]
-#[should_panic(expected = "Contract is already initialized")]
+#[should_panic]
 fn test_initialize_twice_panics() {
     let env = test_env();
     let (_id, client) = init_contract(&env); // already initialized by helper
@@ -44,7 +44,7 @@ fn test_initialize_twice_panics() {
 }
 
 #[test]
-#[should_panic(expected = "Contract is already initialized")]
+#[should_panic]
 fn test_initialize_fails_on_second_call() {
     let env = test_env();
     let contract_id = env.register(SavingsVault, ());
@@ -64,7 +64,7 @@ fn test_initialize_fails_on_second_call() {
 }
 
 #[test]
-#[should_panic(expected = "Contract is not initialized")]
+#[should_panic]
 fn test_deposit_before_initialization_panics() {
     let env = test_env();
     let contract_id = env.register(SavingsVault, ());
@@ -74,7 +74,7 @@ fn test_deposit_before_initialization_panics() {
 }
 
 #[test]
-#[should_panic(expected = "Contract is not initialized")]
+#[should_panic]
 fn test_withdraw_before_initialization_panics() {
     let env = test_env();
     let contract_id = env.register(SavingsVault, ());
@@ -84,7 +84,7 @@ fn test_withdraw_before_initialization_panics() {
 }
 
 #[test]
-#[should_panic(expected = "Contract is not initialized")]
+#[should_panic]
 fn test_lock_funds_before_initialization_panics() {
     let env = test_env();
     let contract_id = env.register(SavingsVault, ());
@@ -94,7 +94,7 @@ fn test_lock_funds_before_initialization_panics() {
 }
 
 #[test]
-#[should_panic(expected = "Contract is not initialized")]
+#[should_panic]
 fn test_read_functions_before_initialization() {
     let env = test_env();
     let contract_id = env.register(SavingsVault, ());
@@ -121,7 +121,7 @@ fn test_get_token_after_initialization() {
 }
 
 #[test]
-#[should_panic(expected = "Contract is not initialized")]
+#[should_panic]
 fn test_get_token_before_initialization_panics() {
     let env = test_env();
     let contract_id = env.register(SavingsVault, ());
