@@ -26,6 +26,7 @@ For remaining constraints and open risks, see [Known Limitations](#known-limitat
 
 ## Documentation
 
+- [Contract Release Checklist](docs/contract-release-checklist.md) — repeatable pre-release checklist for maintainers covering tests, storage, events, errors, documentation, SDK and mobile compatibility, and audit notes.
 - [Storage TTL Review](docs/storage-ttl.md) — notes on the current instance and persistent storage usage, TTL-sensitive entries, and renewal expectations for the vault contract.
 
 ## Security Considerations
@@ -247,6 +248,7 @@ stellar-pocketpay-contracts/
     ├── api-reference.md                # Function naming conventions
     ├── architecture.md                 # Architecture overview
     ├── contract-id-handoff.md          # Contract ID handoff guide
+    ├── contract-release-checklist.md   # Pre-release checklist for maintainers
     ├── coverage-tooling.md             # Coverage tooling research note
     ├── deployment-environments.md      # Deployment environment config
     ├── events.md                       # Event schema documentation
@@ -275,6 +277,7 @@ stellar-pocketpay-contracts/
 - [Event Privacy Review](docs/event-privacy-review.md) — Event privacy risks, minimum payload guidance, data exposure boundaries, and indexing utility guidelines.
 - [Ledger Time and Lock Maturity Guide](docs/ledger-time-locks.md) — How the contract uses ledger timestamps for time-locking, maturity validation, boundary conditions, and testing.
 - [Contract Upgradeability](docs/upgradeability.md) — Current upgrade posture (non-upgradeable), trust model, storage migration impact, and future options.
+- **[Contract Release Checklist](docs/contract-release-checklist.md)** — Repeatable checklist to run before releasing or redeploying the contract: tests, storage compatibility, event and error compatibility, documentation, SDK and mobile compatibility, audit notes, and testnet deployment verification.
 - [Audit Preparation Checklist](docs/audit-preparation.md) — Checklist of documentation, tests, threat model, and deployment details required before any external security review or audit.
 - [Emergency Pause and Admin Misuse Threat Model](docs/admin-pause-threat-model.md) — Threat scenarios, withdrawal impact, recovery assumptions, mitigations, limitations, and residual risks for admin-controlled pause mechanisms.
 - [Vault Misuse Threat Model](docs/threat-model.md) — Assets, trust assumptions, and misuse scenarios covering users, malicious callers, compromised keys, incorrect contract IDs, lock manipulation, misleading UI, and future SAC transfer risks.
