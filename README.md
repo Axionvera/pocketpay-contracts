@@ -244,6 +244,7 @@ stellar-pocketpay-contracts/
     ├── reproducing-test-failures.md    # Local reproduction guide for failing tests
     ├── accounting-invariants.md        # Formal accounting invariants
     ├── api-reference.md                # Function naming conventions
+    ├── contribution-quality-gate.md    # Contribution quality gate checklist
     ├── architecture.md                 # Architecture overview
     ├── contract-id-handoff.md          # Contract ID handoff guide
     ├── deployment-environments.md      # Deployment environment config
@@ -297,6 +298,7 @@ stellar-pocketpay-contracts/
 - [Test Reproduction Guide](docs/reproducing-test-failures.md) — How to reproduce failing contract tests and CI errors on your local machine.
 - [Failure Mode Catalogue](docs/failure-mode-catalogue.md) — Comprehensive list of all contract failure modes with expected behavior and test coverage.
 - [Test Naming Conventions](docs/testing.md) — Naming pattern for unit tests under `contracts/savings_vault/src/test/`, with good/bad examples and coverage guidance.
+- [Contribution Quality Gate](docs/contribution-quality-gate.md) — Objective criteria for payment-ready work, including implementation, testing, and CI expectations.
 - [Withdrawal Queue Design Note](docs/withdrawal-queue-design.md) — Design covering pending withdrawal state, queue identifiers, cancellation, maturity, storage and accounting implications, and scope decision.
 
 ---

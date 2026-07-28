@@ -83,6 +83,8 @@ Follow the [test naming convention](docs/testing.md) when adding or updating tes
 
 ## Pull request expectations
 
+Every pull request must pass the **[Contribution Quality Gate](docs/contribution-quality-gate.md)** before approval.
+
 - Keep each pull request focused on one issue or related change.
 - Reference the issue number, for example `Closes #3`.
 - Explain what changed and why.
