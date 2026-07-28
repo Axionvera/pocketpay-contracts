@@ -27,6 +27,7 @@ mod maximum_lock_duration;
 mod minimum_deposit_amount;
 mod minimum_lock_duration;
 mod multi_lock_invariants;
+mod negative_paths;
 mod pause;
 mod pause_state_read;
 mod pause_transition;
@@ -1480,6 +1481,34 @@ fn test_withdraw_emits_event() {
         (amount, new_balance),
         (50_i128, 50_i128)
     );
+}
+
+#[test]
+fn test_withdraw_lock_emits_event() {
+    use soroban_sdk::{symbol_short, TryIntoVal};
+
+    let env = test_env();
+    let (contract_id, client) = init_contract(&env);
+    let (env, _admin, client, _token_client, token_admin) = test_token(env, contract_id, client);
+
+    let user = new_user(&env);
+    token_admin.mint(&user, &1000);
+    set_ledger_timestamp(&env, 1_000);
+
+    deposit_balance(&client, &user, 500);
+    let id = client.lock_funds(&user, &200, &2_000);
+    
+    set_ledger_timestamp(&env, 2_000);
+    client.withdraw_lock(&user, &id);
+
+    let events = env.events().all();
+    let (_contract, topics, data) = events.get(events.len() - 1).unwrap();
+    let topic0: soroban_sdk::Symbol = topics.get(0).unwrap().try_into_val(&env).unwrap();
+    let topic1: Address = topics.get(1).unwrap().try_into_val(&env).unwrap();
+    let (amount, new_balance): (i128, i128) = data.try_into_val(&env).unwrap();
+    assert_eq!(topic0, symbol_short!("wdr_lock"));
+    assert_eq!(topic1, user);
+    assert_eq!((amount, new_balance), (200_i128, 300_i128));
 }
 
 #[test]

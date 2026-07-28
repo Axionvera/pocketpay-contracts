@@ -7,7 +7,22 @@ new tests. It is a coverage **map**, not a line-coverage report — see
 
 Source: `contracts/savings_vault/src/test/` (`mod.rs`, `initialization.rs`,
 `balance_conservation.rs`, `withdraw_lock.rs`, `maximum_amount_boundary.rs`,
-`unauthorized_access.rs`, `lock_read_helpers.rs`, `replay_protection.rs`).
+`unauthorized_access.rs`, `lock_read_helpers.rs`, `replay_protection.rs`, `negative_paths.rs`).
+
+## Negative Path & Error States
+
+This section explicitly maps tests for invalid inputs, unauthorized access, and lifecycle violations (issue #442).
+
+| Category | Behaviour | Status | Test(s) |
+|---|---|---|---|
+| **Auth** | Unauthorized user calls state-changing functions | Covered | `test_unauthorized_deposit_fails`, `test_unauthorized_withdraw_fails`, `test_unauthorized_lock_fails`, `test_unauthorized_withdraw_lock_fails`, `test_unauthorized_extend_lock_fails` |
+| **Auth** | Non-admin user calls admin-gated functions | Covered | `test_unauthorized_pause_fails`, `test_unauthorized_unpause_fails`, `test_unauthorized_set_min_deposit_amount_fails`, `test_transfer_admin_not_authorized_panics` |
+| **Lifecycle** | Calling functions before `initialize` | Covered | `test_uninitialized_deposit_panics`, `test_uninitialized_withdraw_panics`, `test_uninitialized_lock_funds_panics`, `test_uninitialized_pause_panics`, `test_get_admin_before_initialization_panics` |
+| **Validation** | Invalid deposit amounts (zero, negative, below floor) | Covered | `test_deposit_zero_panics`, `test_deposit_negative_panics`, `test_invalid_deposit_amounts_fail`, `test_deposit_below_minimum_fails` |
+| **Validation** | Invalid lock durations (past time, min/max violation) | Covered | `test_lock_past_time_panics`, `test_lock_duration_boundary_failures` |
+| **Lock State** | Withdrawing immature locks (early withdrawal) | Covered | `test_withdraw_immature_lock_fails`, `test_early_lock_withdrawal_fails`, `test_can_withdraw_before_unlock` |
+| **Lock State** | Extending or withdrawing a spent lock | Covered | `test_withdraw_repeated_lock_fails`, `test_extend_withdrawn_lock_fails`, `error_code_5002_lock_already_withdrawn` |
+| **Rollback** | State remains unchanged after any contract error | Covered | `test_state_remains_consistent_after_failed_lock`, `test_state_consistency_after_failed_token_transfer`, `test_failed_withdraw_does_not_change_available_balance_panics` |
 
 ## Initialization
 
@@ -43,7 +58,7 @@ Source: `contracts/savings_vault/src/test/` (`mod.rs`, `initialization.rs`,
 | `withdraw` emits an event | Covered | `test_withdraw_emits_event` |
 | Withdrawals near `i128::MAX` don't overflow | Covered | `test_withdraw_i128_max_after_deposit_succeeds`, `test_withdraw_over_large_balance_does_not_mutate`, `test_withdraw_partial_from_large_balance_preserves_remainder`, `test_large_withdraw_spans_available_and_matured_locks` |
 | `withdraw_lock` (withdraw a single matured lock by ID) | Covered | `test_withdraw_matured_lock_success`, `test_withdraw_immature_lock_fails`, `test_withdraw_nonexistent_lock_fails`, `test_withdraw_repeated_lock_fails`, `test_withdraw_wrong_user_lock_fails`, `test_unauthorized_withdraw_lock_fails` |
-| `withdraw_lock` emits an event | **Gap** | No dedicated `test_withdraw_lock_emits_event`-style test, unlike `deposit`/`withdraw`/`lock_funds`. The event is emitted in `lib.rs` but not asserted. |
+| `withdraw_lock` emits an event | Covered | `test_withdraw_lock_emits_event` |
 
 ## Locking
 
@@ -80,14 +95,8 @@ Source: `contracts/savings_vault/src/test/` (`mod.rs`, `initialization.rs`,
 
 ## Known Test Gaps
 
-- **`withdraw_lock` event emission is not asserted.** `deposit`, `withdraw`,
-  `lock_funds`, and `initialize` each have a `*_emits_event` test; `withdraw_lock`
-  does not, even though `lib.rs` publishes an event for it.
 - **`list_locks` pagination edge cases.** Zero-limit and out-of-range-offset
   behaviour for `list_locks` isn't explicitly covered.
-- **No fuzz/property-based tests.** Coverage relies on hand-written cases
-  (including a table-driven test in `balance_conservation.rs`) rather than
-  randomized or property-based testing.
 
 ## Additional Notes
 
