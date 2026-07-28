@@ -1,0 +1,67 @@
+From 883b4370e42247eafe10aafe8ef02c30efe48501 Mon Sep 17 00:00:00 2001
+From: JesseJohn7 <JesseJohn7@users.noreply.github.com>
+Date: Sat, 18 Jul 2026 10:50:50 +0000
+Subject: [PATCH] test: use set_ledger_timestamp helper consistently in
+ savings_vault tests
+
+- Replace remaining raw env.ledger().with_mut() timestamp mutation in
+  test_failed_withdraw_does_not_change_locked_balance with the existing
+  set_ledger_timestamp() helper, so all time-based lock/withdraw tests
+  share one clear, consistent way to set ledger time.
+- Clarify the helper's doc comment so its time assumption is explicit,
+  and drop a stale commented-out line.
+- Remove now-unused testutils::Ledger import from test/mod.rs.
+
+No production code changed. Addresses #76.
+---
+ contracts/savings_vault/src/test/mod.rs          | 6 ++----
+ contracts/savings_vault/src/test/test_helpers.rs | 8 ++++++--
+ 2 files changed, 8 insertions(+), 6 deletions(-)
+
+diff --git a/contracts/savings_vault/src/test/mod.rs b/contracts/savings_vault/src/test/mod.rs
+index c37ebda..50a8b99 100644
+--- a/contracts/savings_vault/src/test/mod.rs
++++ b/contracts/savings_vault/src/test/mod.rs
+@@ -5,7 +5,7 @@
+ mod test_helpers;
+ 
+ use super::*;
+-use soroban_sdk::{testutils::Address as _, testutils::Ledger, Address};
++use soroban_sdk::{testutils::Address as _, Address};
+ 
+ use test_helpers::*;
+ 
+@@ -241,9 +241,7 @@ fn test_failed_withdraw_does_not_change_locked_balance() {
+     let (env, _id, client) = setup();
+     let user = Address::generate(&env);
+ 
+-    env.ledger().with_mut(|li| {
+-        li.timestamp = 1_000;
+-    });
++    set_ledger_timestamp(&env, 1_000);
+ 
+     client.deposit(&user, &500);
+     // Lock 300, leaving 200 available
+diff --git a/contracts/savings_vault/src/test/test_helpers.rs b/contracts/savings_vault/src/test/test_helpers.rs
+index c1d2588..83fcca1 100644
+--- a/contracts/savings_vault/src/test/test_helpers.rs
++++ b/contracts/savings_vault/src/test/test_helpers.rs
+@@ -34,9 +34,13 @@ pub fn seed_balances(client: &SavingsVaultClient, user: &Address, amounts: &[i12
+     }
+ }
+ 
+-/// Sets the ledger timestamp.
++/// Sets the ledger's current timestamp (in unix seconds) for tests that
++/// simulate time-based behaviour, such as lock/unlock schedules.
++///
++/// Use this instead of mutating `env.ledger()` directly so that every
++/// time-based test makes its ledger time assumption explicit and easy
++/// to spot at a glance.
+ pub fn set_ledger_timestamp(env: &Env, timestamp: u64) {
+-    // env.ledger().with_mut(|li| li.timestamp = timestamp);
+     env.ledger().set_timestamp(timestamp);
+ }
+ 
+-- 
+2.43.0
+

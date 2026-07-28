@@ -4,6 +4,8 @@
 //! on-chain interactions in an isolated environment.
 // mod test_helpers;
 
+extern crate std;
+
 use super::*;
 use soroban_sdk::{testutils::Address as _, testutils::Ledger, Address};
 
@@ -122,6 +124,35 @@ fn test_withdraw_entire_balance() {
 
     client.withdraw(&user, &deposit_amount);
     assert_eq!(client.get_balance(&user), 0);
+}
+
+#[test]
+fn test_withdraw_transfer_failure_preserves_accounting() {
+    // AC: A failed token transfer during withdrawal must not corrupt accounting.
+    // The contract has recorded the user's balance internally, but the underlying
+    // asset transfer is expected to fail because the contract does not hold those
+    // tokens. In that case, the user's recorded balance and token balances must
+    // remain unchanged.
+    let (env, current_contract_address, client) = setup();
+    let (env, _admin, client, token_client, token_admin) = test_token(env, client);
+    let user = Address::generate(&env);
+    let deposit_amount = 100;
+
+    token_admin.mint(&user, &10000);
+    client.deposit(&user, &deposit_amount);
+
+    let contract_balance_before = token_client.balance(&current_contract_address);
+    let user_balance_before = token_client.balance(&user);
+    let recorded_balance_before = client.get_balance(&user);
+
+    let withdrawal_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        client.withdraw(&user, &deposit_amount);
+    }));
+
+    assert!(withdrawal_result.is_err(), "withdrawal should fail");
+    assert_eq!(client.get_balance(&user), recorded_balance_before);
+    assert_eq!(token_client.balance(&current_contract_address), contract_balance_before);
+    assert_eq!(token_client.balance(&user), user_balance_before);
 }
 
 #[test]
