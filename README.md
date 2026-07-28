@@ -9,12 +9,41 @@ This project is currently intended for development, learning, and Stellar testne
 The savings vault now uses internal balance tracking and real token transfers: `deposit` transfers tokens from the user to the contract, `withdraw` transfers tokens from the contract to the user, and locking operations manage which tokens are available to withdraw.
 
 See [Known Limitations](#known-limitations) for other current constraints.
+
+## Release Readiness
+
+Quick maturity summary for casual visitors. This contract is **experimental** and meant for educational / testnet use — do not treat it as production software.
+
+| Area | Status | Notes |
+| --- | --- | --- |
+| Maturity | Experimental | Development and learning project; APIs and behaviour may change |
+| Network target | Testnet only | Deploy and invoke on Stellar **testnet**; mainnet is not supported |
+| External audit | Not audited | No third-party security audit report is published; see [audit readiness](docs/audit-readiness.md) |
+| Real token transfers | Supported on testnet | SAC-backed `deposit` / `withdraw` / `withdraw_lock` move configured tokens; not a claim of mainnet safety |
+| Production / mainnet | Not ready | Not production-ready; missing items include structured errors, multi-sig admin, and an upgrade path |
+
+For remaining constraints and open risks, see [Known Limitations](#known-limitations).
+
+## Documentation
+
+- [Contributor Security Checklist](docs/security-checklist.md) — practical PR-review checklist covering balance/accounting invariants, lock state, token transfer atomicity, authorisation, storage migration, event compatibility, error codes, and required tests for any vault contract change.
+- [Contract Release Checklist](docs/contract-release-checklist.md) — repeatable pre-release checklist for maintainers covering tests, storage, events, errors, documentation, SDK and mobile compatibility, and audit notes.
+- [Storage TTL Review](docs/storage-ttl.md) — notes on the current instance and persistent storage usage, TTL-sensitive entries, and renewal expectations for the vault contract.
+
 ## Security Considerations
 
 > **This contract is for educational and testnet use.** Review the following before any mainnet deployment.
 
+Contributors changing contract logic should work through the
+[Contributor Security Checklist](docs/security-checklist.md) before opening a
+PR; maintainers use it during review.
+
+**[Audit Evidence Index](docs/audit-evidence-index.md)**: A comprehensive directory linking all security-relevant vault documentation, tests, threat models, and known audit gaps.
+
 See the [Admin Role](docs/admin-role.md) document for details on what the `initialize(admin)` value records, what the admin can and cannot do today, and future admin design considerations.
 See the [Emergency Pause and Admin Misuse Threat Model](docs/admin-pause-threat-model.md) for malicious or compromised admin scenarios, withdrawal impact, recovery assumptions, mitigations, and residual risks.
+See the [Vault Fee Model](docs/vault-fee-model.md) document for clarification on fee assumptions, accounting implications, and user transparency requirements.
+See the [Vault Economic Assumptions and Fee Model Review](docs/economic-assumptions-review.md) for a consolidated look at fees, custody, lock-duration incentives, token behavior risk, admin power, and common user misconceptions.
 
 ## Features
 
@@ -61,6 +90,8 @@ Install the following before you begin:
    ```bash
    rustup target add wasm32-unknown-unknown
    ```
+
+For detailed setup instructions, common issues, and troubleshooting, see the [Local Development Guide](docs/local-development.md).
 
 ---
 
@@ -112,6 +143,8 @@ cargo test
 ```
 
 All tests run natively (no WASM needed) using the Soroban SDK test utilities.
+
+For an in-depth reference on test structure, Soroban test fixtures, deterministic ledger time simulation, SAC token mocking, and failure scenario testing, see the **[Advanced Local Development and Testing Guide](docs/advanced-development-and-testing.md)**.
 
 ---
 
@@ -167,7 +200,11 @@ soroban contract invoke \
   --network testnet \
   -- \
   initialize \
-  --admin deployer
+  --admin deployer \
+  --token YOUR_SAC_TOKEN_ADDRESS
+```
+
+Replace `YOUR_SAC_TOKEN_ADDRESS` with the Stellar Asset Contract address the vault should custody.
 ```
 
 ### 5. Invoke Functions
@@ -210,25 +247,49 @@ stellar-pocketpay-contracts/
             └── test.rs                 # Unit tests
 └── docs/
     ├── admin-role.md                   # Admin role documentation
+    ├── advanced-development-and-testing.md # Advanced dev & testing guide
+    ├── simulation-compatibility.md     # Per-function simulateTransaction reference
+    ├── accounting-invariants.md        # Formal accounting invariants
+    ├── api-reference.md                # Function naming conventions
     ├── architecture.md                 # Architecture overview
     ├── contract-id-handoff.md          # Contract ID handoff guide
+    ├── contract-release-checklist.md   # Pre-release checklist for maintainers
+    ├── coverage-tooling.md             # Coverage tooling research note
     ├── deployment-environments.md      # Deployment environment config
-    ├── error-codes.md                  # Error code reference
     ├── events.md                       # Event schema documentation
+    ├── event-privacy-review.md         # Smart contract event privacy review
     ├── state-machine.md                # Vault state machine documentation
+    ├── state-changing-invocations.md   # State-changing function CLI examples
     ├── pause-design.md                 # Pause / emergency stop research
-    ├── admin-pause-threat-model.md    # Emergency pause and admin misuse threat model
+    ├── admin-pause-threat-model.md     # Emergency pause and admin misuse threat model
+    ├── security-checklist.md           # Contributor security checklist for PR review
     ├── storage-migration.md            # Storage versioning and migration guide
     ├── storage-ttl.md                  # Storage TTL guide
+    ├── testing.md                      # Test naming conventions
+    ├── threat-model.md                  # Vault misuse threat model
+    ├── ledger-time-locks.md            # Ledger time and lock maturity guide
     ├── troubleshooting.md              # Troubleshooting guide
-    └── upgrade-strategy.md             # Upgrade strategy research
+    ├── upgrade-strategy.md             # Upgrade strategy research
+    └── withdrawal-queue-design.md      # Withdrawal queue design note
 ```
 
 ---
+
 ## Documentation
 
+- **[Advanced Local Development and Testing Guide](docs/advanced-development-and-testing.md)** — Comprehensive guide for building, running, extending, and debugging advanced contract tests, Soroban test fixtures, deterministic ledger time, SAC token mocking, and failure scenario rollbacks.
+- **[Contract Simulation Compatibility](docs/simulation-compatibility.md)** — Per-function reference for SDK integrators: which calls need a signature, which are safe to simulate speculatively, matured-withdrawal prediction via read helpers, and deterministic error/unsupported-call fixtures.
+- **[Audit Evidence Index](docs/audit-evidence-index.md)** — Comprehensive index of security documentation, invariants, test coverage, and threat models for auditors.
+- [Event Privacy Review](docs/event-privacy-review.md) — Event privacy risks, minimum payload guidance, data exposure boundaries, and indexing utility guidelines.
+- [Ledger Time and Lock Maturity Guide](docs/ledger-time-locks.md) — How the contract uses ledger timestamps for time-locking, maturity validation, boundary conditions, and testing.
+- [Contract Upgradeability](docs/upgradeability.md) — Current upgrade posture (non-upgradeable), trust model, storage migration impact, and future options.
+- **[Contributor Security Checklist](docs/security-checklist.md)** — Practical PR-review checklist for any vault contract change: balance/accounting invariants, lock state, token transfer atomicity, authorisation, storage migration, event compatibility, error codes, and required test coverage.
+- **[Contract Release Checklist](docs/contract-release-checklist.md)** — Repeatable checklist to run before releasing or redeploying the contract: tests, storage compatibility, event and error compatibility, documentation, SDK and mobile compatibility, audit notes, and testnet deployment verification.
 - [Audit Preparation Checklist](docs/audit-preparation.md) — Checklist of documentation, tests, threat model, and deployment details required before any external security review or audit.
 - [Emergency Pause and Admin Misuse Threat Model](docs/admin-pause-threat-model.md) — Threat scenarios, withdrawal impact, recovery assumptions, mitigations, limitations, and residual risks for admin-controlled pause mechanisms.
+- [Vault Misuse Threat Model](docs/threat-model.md) — Assets, trust assumptions, and misuse scenarios covering users, malicious callers, compromised keys, incorrect contract IDs, lock manipulation, misleading UI, and future SAC transfer risks.
+- [Vault Fee Model](docs/vault-fee-model.md) — Clarification of no-fee assumptions, accounting implications, user transparency requirements, design rationale, and framework for potential future fee support.
+- [Vault Economic Assumptions and Fee Model Review](docs/economic-assumptions-review.md) — Consolidated review of fees, custody, lock-duration incentives, token behavior risk, admin power, and common user misconceptions.
 - [Storage Audit](docs/storage-audit.md) — Comprehensive details on the contract's storage layout, keys, mutating functions, and security invariants.
 - [Storage Migration Guide](docs/storage-migration.md) — Safe storage versioning and migration strategy for future contract upgrades.
 - [Deployment Environments](docs/deployment-environments.md) — Network configuration for local, testnet, and future mainnet, including RPC URLs, identities, environment variables, and deployment commands.
@@ -236,17 +297,23 @@ stellar-pocketpay-contracts/
 - [SDK Error Mapping Guide](docs/sdk-error-mapping-guide.md) — Maps contract errors to SDK handling expectations with user-facing and developer-facing examples.
 - [State Machine Documentation](docs/state-machine.md) — Contract lifecycle, user account states, valid and invalid transitions, and error states.
 - [Architecture Documentation](docs/architecture.md) – Overview of project structure, state management, storage, SDK integration, and future extension points.
+- [API Reference: Function Naming Conventions](docs/api-reference.md) — Naming convention for `SavingsVault`'s public functions (commands, single-value queries, collection queries, capability and state queries), with the full function list and category for each.
 - [SDK ↔ Contract Sequence Diagrams](docs/sdk-contract-sequence.md) – Mermaid sequence diagrams for balance query, deposit, withdraw, and error paths across mobile, SDK, Soroban RPC, and the vault contract.
 - [Event Schema Documentation](docs/events.md) – Overview of event names, topics, payload schemas, and JSON examples for vault actions.
 - [Vault Contract ID Handoff](docs/contract-id-handoff.md) - How to pass a deployed vault contract ID safely to SDK configuration and the mobile app.
 - [Documentation Style Guide](docs/docs-style-guide.md) — Conventions for Testnet wording, avoiding production claims, placeholders, command formatting, and linking related docs.
 - [Sample Vault Interaction Walkthrough](docs/walkthrough.md) — End-to-end deploy, deposit, lock, query, and withdraw example with expected state changes and current limitations.
 - [CLI Smoke Test Guide](docs/cli-smoke-test.md) — Quick post-deployment verification flow using the Soroban CLI to confirm every contract function responds correctly on testnet or a local sandbox.
-- [Balance Reconciliation Design Note](docs/balance-reconciliation.md) — How internal accounting should reconcile with real token balances once SAC integration is implemented, including failure modes and invariants tests must enforce.
+- [State-Changing Function Invocations](docs/state-changing-invocations.md) — Copy-paste ready Soroban CLI examples for `initialize`, `deposit`, `withdraw`, `lock_funds`, `withdraw_lock`, `pause`, `unpause`, and `transfer_admin`.
+- [Balance Reconciliation Design Note](docs/balance-reconciliation.md) — How internal accounting reconciles with real token balances under the current SAC integration, including failure modes and invariants tests must enforce.
+- [Formal Accounting Invariants](docs/accounting-invariants.md) - Audit-oriented invariants for available balances, locks, withdrawals, token custody, user isolation, failed operations, and identified test gaps.
 - [Version Metadata](docs/version-metadata.md) — How the `get_version` read-only function works, how SDKs and deployment scripts should use it, and how to bump the version.
 - [Lock Read Helpers](docs/lock-read-helpers.md) — Response shapes and pagination for `get_lock` and `list_locks`.
 - [Test Coverage Summary](docs/test-coverage.md) — Maps initialization, deposit, withdrawal, and locking behaviours to the tests that cover them, plus known test gaps.
+- [Coverage Tooling Research Note](docs/coverage-tooling.md) — Survey of Rust coverage tools, Soroban/Wasm limitations, CI impact, and recommendations for this project.
 - [Failure Mode Catalogue](docs/failure-mode-catalogue.md) — Comprehensive list of all contract failure modes with expected behavior and test coverage.
+- [Test Naming Conventions](docs/testing.md) — Naming pattern for unit tests under `contracts/savings_vault/src/test/`, with good/bad examples and coverage guidance.
+- [Withdrawal Queue Design Note](docs/withdrawal-queue-design.md) — Design covering pending withdrawal state, queue identifiers, cancellation, maturity, storage and accounting implications, and scope decision.
 
 ---
 
@@ -279,23 +346,17 @@ stellar-pocketpay-contracts/
 - Admin and initialization flags use **instance** storage (tied to contract lifetime).
 
 ### Known Limitations
-- **No admin recovery**: There is no mechanism for the admin to recover or migrate funds.
+- **No admin recovery**: There is no mechanism for the admin to recover or migrate user funds.
 - **No upgrade mechanism**: The contract does not implement `upgrade()`. See
   [docs/upgrade-strategy.md](docs/upgrade-strategy.md) for research into possible upgrade paths.
-- **No on-chain events**: No events are emitted for state changes (deposit, withdraw, lock, unlock). See [docs/events.md](docs/events.md) for planned event schemas.
-- **No custom error enum**: Contract uses panic strings instead of a structured error enum for off-chain callers.
-
-- **No custom error enum**: Contract uses panic strings instead of a structured error enum for off-chain callers.
-
-- **No custom error enum**: Contract uses panic strings instead of a structured error enum for off-chain callers.
-
-- **No custom error enum**: Contract uses panic strings instead of a structured error enum for off-chain callers.
-
-- **No custom error enum**: Contract uses panic strings instead of a structured error enum for off-chain callers.
-
-- **No custom error enum**: Contract uses panic strings instead of a structured error enum for off-chain callers.
+- **No custom error enum**: Contract uses panic strings instead of a structured `#[contracterror]` enum for off-chain callers. See [docs/error-codes.md](docs/error-codes.md).
+- **No external audit**: No third-party security audit report is published for this repository. See [docs/audit-readiness.md](docs/audit-readiness.md).
+- **Single-key admin**: Pause and admin transfer rely on one address; multi-sig is recommended before any mainnet use.
+- **Operational TTL dependency**: Persistent storage entries must be extended manually; see [docs/storage-ttl.md](docs/storage-ttl.md).
 
 ---
+## Security & Audit
+- **Audit Readiness Review:** Detailed analysis of high-risk areas and test gaps can be found in [docs/AUDIT_READINESS.md](./docs/audit-readiness.md).
 
 ## Deployment Notes
 

@@ -50,10 +50,7 @@ fn stored_admin(env: &Env, contract_id: &Address) -> Address {
 }
 
 /// Returns every event whose first topic equals the given symbol.
-fn events_with_topic0(
-    env: &Env,
-    expected: &Symbol,
-) -> std::vec::Vec<(Address, Vec<Val>, Val)> {
+fn events_with_topic0(env: &Env, expected: &Symbol) -> std::vec::Vec<(Address, Vec<Val>, Val)> {
     let all = env.events().all();
     let mut out = std::vec::Vec::new();
     for i in 0..all.len() {
@@ -152,7 +149,7 @@ fn test_deposit_event_reflects_running_balance() {
 
 // ---------------------------------------------------------------------------
 // withdraw — topics: (Symbol("withdraw"), user),
-//            data: (amount, new_balance, new_locked)
+//            data: (amount, new_balance)
 // ---------------------------------------------------------------------------
 
 #[test]
@@ -173,17 +170,14 @@ fn test_withdraw_event_schema() {
     let topic1_user: Address = topics.get(1).unwrap().try_into_val(&env).unwrap();
     assert_eq!(topic1_user, user);
 
-    let (amount, new_balance, new_locked): (i128, i128, i128) =
-        data.try_into_val(&env).unwrap();
+    let (amount, new_balance): (i128, i128) = data.try_into_val(&env).unwrap();
     assert_eq!(amount, 200);
     assert_eq!(new_balance, 300);
-    assert_eq!(new_locked, 0);
 }
 
 #[test]
-fn test_withdraw_event_carries_locked_balance() {
-    // With an active lock in place, the third payload field must reflect the
-    // *unmatured* locked total, not just the deposited-balance delta.
+fn test_withdraw_event_carries_available_balance() {
+    // Withdraw only affects the available balance, not locked funds.
     let (env, cid, client) = setup();
     let (env, _a, client, _tc, ta) = test_token(env, cid, client);
     let user = Address::generate(&env);
@@ -196,11 +190,33 @@ fn test_withdraw_event_carries_locked_balance() {
 
     let matches = events_with_topic0(&env, &symbol_short!("withdraw"));
     let (_c, _t, d) = matches.last().unwrap();
-    let (amount, new_balance, new_locked): (i128, i128, i128) =
-        d.try_into_val(&env).unwrap();
+    let (amount, new_balance): (i128, i128) = d.try_into_val(&env).unwrap();
     assert_eq!(amount, 100);
     assert_eq!(new_balance, 200);
-    assert_eq!(new_locked, 200);
+}
+
+fn test_withdraw_event_reflects_running_balance() {
+    // Guards against a subtle regression where a future refactor emits the
+    // withdraw `amount` in the `new_balance` slot instead of the post-withdraw
+    // running total.
+    let (env, cid, client) = setup();
+    let (env, _a, client, _tc, ta) = test_token(env, cid, client);
+    let user = Address::generate(&env);
+    ta.mint(&user, &2_000);
+    client.deposit(&user, &1_000);
+
+    client.withdraw(&user, &300);
+    client.withdraw(&user, &200);
+
+    let matches = events_with_topic0(&env, &symbol_short!("withdraw"));
+    assert!(!matches.is_empty());
+    let (_c, _t, d) = matches.last().unwrap();
+    let (amount, new_balance): (i128, i128) = d.try_into_val(&env).unwrap();
+    assert_eq!(amount, 200, "amount slot carries the withdraw amount");
+    assert_eq!(
+        new_balance, 500,
+        "new_balance slot carries the running total after withdraw"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -340,6 +356,29 @@ fn test_transfer_admin_event_schema() {
     assert_eq!(emitted_new_admin, new_admin);
 }
 
+fn test_withdraw_lock_event_reflects_correct_amount() {
+    // Guards against a regression where withdraw_lock emits the wrong amount
+    // or lock_id.
+    let (env, cid, client) = setup();
+    let (env, _a, client, _tc, ta) = test_token(env, cid, client);
+    let user = Address::generate(&env);
+    ta.mint(&user, &2_000);
+    set_ledger_timestamp(&env, 1_000);
+    client.deposit(&user, &1_000);
+    let lid1 = client.lock_funds(&user, &300, &3_000);
+    let lid2 = client.lock_funds(&user, &500, &4_000);
+    set_ledger_timestamp(&env, 5_000);
+
+    client.withdraw_lock(&user, &lid2);
+
+    let matches = events_with_topic0(&env, &Symbol::new(&env, "withdraw_lock"));
+    assert!(!matches.is_empty());
+    let (_c, _t, d) = matches.last().unwrap();
+    let (emitted_lock_id, amount): (u64, i128) = d.try_into_val(&env).unwrap();
+    assert_eq!(emitted_lock_id, lid2);
+    assert_eq!(amount, 500);
+}
+
 // ---------------------------------------------------------------------------
 // Revert paths must not leak events.
 // ---------------------------------------------------------------------------
@@ -356,5 +395,8 @@ fn test_reverted_deposit_emits_no_event() {
     let before = events_with_topic0(&env, &symbol_short!("deposit")).len();
     let _ = client.try_deposit(&user, &100);
     let after = events_with_topic0(&env, &symbol_short!("deposit")).len();
-    assert_eq!(before, after, "failed deposit must not emit a deposit event");
+    assert_eq!(
+        before, after,
+        "failed deposit must not emit a deposit event"
+    );
 }

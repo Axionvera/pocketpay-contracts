@@ -16,7 +16,7 @@
 4. [Abuse Risks](#abuse-risks)
 5. [Recovery Process](#recovery-process)
 6. [Alternatives to a Pause](#alternatives-to-a-pause)
-7. [Design Sketch (Reference)](#design-sketch-reference)
+7. [Implementation Reference](#implementation-reference)
 8. [Open Questions](#open-questions)
 9. [Recommendation](#recommendation)
 
@@ -24,7 +24,7 @@
 
 ## Motivation
 
-The Savings Vault currently has **no emergency stop capability**. If a critical bug is discovered, there is no way for the admin to halt contract operations while the issue is investigated and resolved. This is common in early-stage DeFi contracts but becomes a liability as real value accumulates.
+The Savings Vault now has an emergency pause capability. If a critical bug is discovered, the admin can halt inbound contract operations while the issue is investigated and resolved. The design follows a "withdraw-only" safety model: users can always exit, but no new funds or locks can enter a potentially compromised contract.
 
 ### Scenarios where a pause could be useful
 
@@ -210,10 +210,10 @@ Rely on off-chain communication: if a bug is found, ask users to stop interactin
 
 ---
 
-## Design Sketch (Reference)
+## Implementation Reference
 
-The design below has been implemented in the Savings Vault contract. See
-`contracts/savings_vault/src/lib.rs` for the current source and
+The model below is live in the Savings Vault contract. See
+`contracts/savings_vault/src/lib.rs` for the full source and
 `contracts/savings_vault/src/test/pause.rs` for the test suite.
 
 ```rust

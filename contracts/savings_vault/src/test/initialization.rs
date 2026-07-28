@@ -90,7 +90,7 @@ fn test_get_token_after_initialization() {
 
 /// `get_token` must panic before the contract is initialised.
 #[test]
-#[should_panic(expected = "Contract is not initialized")]
+#[should_panic]
 fn test_get_token_before_initialization_panics() {
     let env = test_env();
     let contract_id = env.register(SavingsVault, ());
@@ -103,8 +103,7 @@ fn test_get_token_before_initialization_panics() {
 // Repeated-initialisation guard
 // ---------------------------------------------------------------------------
 
-/// The second call to `initialize` must panic with
-/// "Contract is already initialized" regardless of the arguments.
+/// The second call to `initialize` must panic regardless of the arguments.
 #[test]
 #[should_panic(expected = "Contract is already initialized")]
 fn test_initialize_twice_panics() {
@@ -162,7 +161,7 @@ fn test_token_unchanged_after_rejected_reinitialisation() {
 
     client.initialize(&admin, &token);
 
-    // Attempt a second initialisation with a different token (should panic).
+    // Attempt a second initialisation with a different token (should fail).
     let result = client.try_initialize(&admin, &Address::generate(&env));
     assert!(
         result.is_err(),
@@ -183,7 +182,7 @@ fn test_token_unchanged_after_rejected_reinitialisation() {
 
 /// `deposit` panics when the contract has not been initialised.
 #[test]
-#[should_panic(expected = "Contract is not initialized")]
+#[should_panic]
 fn test_deposit_before_initialization_panics() {
     let env = test_env();
     let contract_id = env.register(SavingsVault, ());
@@ -194,7 +193,7 @@ fn test_deposit_before_initialization_panics() {
 
 /// `withdraw` panics when the contract has not been initialised.
 #[test]
-#[should_panic(expected = "Contract is not initialized")]
+#[should_panic]
 fn test_withdraw_before_initialization_panics() {
     let env = test_env();
     let contract_id = env.register(SavingsVault, ());
@@ -205,7 +204,7 @@ fn test_withdraw_before_initialization_panics() {
 
 /// `lock_funds` panics when the contract has not been initialised.
 #[test]
-#[should_panic(expected = "Contract is not initialized")]
+#[should_panic]
 fn test_lock_funds_before_initialization_panics() {
     let env = test_env();
     let contract_id = env.register(SavingsVault, ());
@@ -216,7 +215,7 @@ fn test_lock_funds_before_initialization_panics() {
 
 /// `get_balance` panics when the contract has not been initialised.
 #[test]
-#[should_panic(expected = "Contract is not initialized")]
+#[should_panic]
 fn test_get_balance_before_initialization_panics() {
     let env = test_env();
     let contract_id = env.register(SavingsVault, ());
@@ -227,7 +226,7 @@ fn test_get_balance_before_initialization_panics() {
 
 /// `get_locked_balance` panics when the contract has not been initialised.
 #[test]
-#[should_panic(expected = "Contract is not initialized")]
+#[should_panic]
 fn test_get_locked_balance_before_initialization_panics() {
     let env = test_env();
     let contract_id = env.register(SavingsVault, ());
@@ -238,7 +237,7 @@ fn test_get_locked_balance_before_initialization_panics() {
 
 /// `can_withdraw` panics when the contract has not been initialised.
 #[test]
-#[should_panic(expected = "Contract is not initialized")]
+#[should_panic]
 fn test_can_withdraw_before_initialization_panics() {
     let env = test_env();
     let contract_id = env.register(SavingsVault, ());

@@ -4,6 +4,18 @@
 //! time-based unlock mechanism. Balances are tracked on-chain and all
 //! state-changing operations require the user's authorization.
 //!
+//! # Emergency Pause
+//!
+//! The contract implements a time-bounded emergency pause model. When active,
+//! `deposit` and `lock_funds` are blocked so no new funds can enter a
+//! potentially compromised vault. Withdrawals (`withdraw`, `withdraw_lock`)
+//! and all read-only helpers remain unaffected, ensuring users can always
+//! exit. Only the stored admin can activate or deactivate a pause.
+//!
+//! See [`docs/pause-design.md`](../../docs/pause-design.md) for the full
+//! design rationale and [`implementation.md`](../../implementation.md) for
+//! the acceptance-criteria breakdown.
+//!
 //! See [`docs/state-machine.md`](../../docs/state-machine.md) for the
 //! contract's state transitions and error paths.
 
@@ -13,7 +25,8 @@ extern crate alloc;
 extern crate std;
 
 use soroban_sdk::{
-    contract, contractimpl, contracttype, log, symbol_short, token, Address, Env, Symbol, Vec,
+    contract, contracterror, contractimpl, contracttype, log, panic_with_error, symbol_short, token,
+    Address, Env, Symbol, Vec,
 };
 
 const MAX_LOCK_PAGE_SIZE: u32 = 50;
@@ -34,6 +47,88 @@ pub struct LockEntry {
     pub withdrawn: bool,
 }
 
+/// A point-in-time snapshot of a user's balance state, suitable for SDK and
+/// mobile display without additional off-chain computation.
+///
+/// # Fields
+///
+/// * `unlocked` – Available (deposited) balance that can be withdrawn
+///   immediately via `withdraw`.
+/// * `locked` – Sum of all non-withdrawn lock amounts (both matured and
+///   immature). Matured locks must be withdrawn individually via
+///   `withdraw_lock`.
+/// * `total` – `unlocked + locked`. Represents the user's total principal
+///   held by the vault (excluding already-withdrawn locks).
+/// * `withdrawable` – Sum of matured, non-withdrawn lock amounts. These
+///   locks can be released via `withdraw_lock`.
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct BalanceSnapshot {
+    pub unlocked: i128,
+    pub locked: i128,
+    pub total: i128,
+    pub withdrawable: i128,
+}
+
+/// Aggregated summary of a user's lock entries, designed to give SDK and
+/// mobile clients a quick overview without paginating through individual
+/// locks.
+///
+/// # Fields
+///
+/// * `active_count` – Number of non-withdrawn locks (both matured and
+///   immature).
+/// * `total_locked_amount` – Sum of amounts across all non-withdrawn locks.
+/// * `matured_count` – Number of non-withdrawn locks whose `unlock_time`
+///   has been reached.
+/// * `withdrawable_amount` – Sum of amounts across matured, non-withdrawn
+///   locks.
+/// * `earliest_unlock` – The smallest `unlock_time` among immature,
+///   non-withdrawn locks (0 if none exist).
+/// * `latest_unlock` – The largest `unlock_time` among immature,
+///   non-withdrawn locks (0 if none exist).
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct LockSummary {
+    pub active_count: u32,
+    pub total_locked_amount: i128,
+    pub matured_count: u32,
+    pub withdrawable_amount: i128,
+    pub earliest_unlock: u64,
+    pub latest_unlock: u64,
+}
+
+/// Full contract configuration returned by [`SavingsVault::get_config`].
+///
+/// Aggregates every read-only configuration field into a single response
+/// so SDK and mobile clients can fetch all contract settings in one RPC
+/// call instead of issuing separate queries for each field.
+///
+/// # Fields
+///
+/// * `token` - Address of the accepted Stellar Asset Contract (SAC).
+/// * `admin` - Address of the contract admin.
+/// * `version` - Hard-coded semantic version of the deployed WASM.
+/// * `paused` - Whether the emergency pause is currently active.
+/// * `pause_expiry` - Unix timestamp when the current pause expires (0 = no
+///   active pause or no expiry set).
+/// * `min_deposit_amount` - Minimum deposit floor (0 = no floor enforced).
+/// * `max_lock_duration` - Maximum lock duration in seconds (0 = unbounded).
+/// * `min_lock_duration` - Minimum lock duration in seconds (0 = no lower
+///   bound enforced).
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ContractConfig {
+    pub token: Address,
+    pub admin: Address,
+    pub version: soroban_sdk::String,
+    pub paused: bool,
+    pub pause_expiry: u64,
+    pub min_deposit_amount: i128,
+    pub max_lock_duration: u64,
+    pub min_lock_duration: u64,
+}
+
 // ---------------------------------------------------------------------------
 // Storage Keys
 // ---------------------------------------------------------------------------
@@ -46,7 +141,8 @@ pub struct LockEntry {
 /// # Variants
 /// * `Admin` - The address of the contract admin (set once during initialization)
 /// * `Balance(Address)` - Available (unlocked) balance for a specific user
-/// * `Locks(Address)` - Vector of lock entries for a specific user
+/// * `Locks(Address)` - Vec of lock entries per user (kept for load_locks helper)
+/// * `Lock(Address, u64)` - Individual lock entry keyed by owner and lock ID
 /// * `NextLockId(Address)` - Counter for generating unique lock IDs per user
 /// * `Initialized` - Boolean flag indicating contract initialization status
 /// * `Token` - The token contract address used for real token transfers
@@ -58,6 +154,9 @@ pub enum DataKey {
     Admin,
     Balance(Address),
     Locks(Address),
+    /// Individual lock entry stored by (owner, lock_id). This is the primary
+    /// storage for lock data; each lock is written and read via this key.
+    Lock(Address, u64),
     NextLockId(Address),
     Initialized,
     /// The accepted token contract address configured during initialisation.
@@ -67,11 +166,134 @@ pub enum DataKey {
     Paused,
     /// Unix timestamp when the current pause expires and the contract auto-unpauses.
     PauseExpiry,
-    /// A single lock entry keyed by (owner, lock_id).
-    Lock(Address, u64),
+    /// Minimum deposit amount rule (issue #342). When set to a value greater
+    /// than zero, `deposit` rejects amounts strictly below it. A value of zero
+    /// (or unset) means no floor is enforced.
+    MinDepositAmount,
+    /// Maximum lock duration rule (issue #343), in seconds. When set to a value
+    /// greater than zero, `lock_funds` rejects locks whose duration
+    /// (`unlock_time - current_time`) exceeds it. A value of zero (or unset)
+    /// means no upper bound is enforced.
+    MaxLockDurationSecs,
+    /// Minimum lock duration rule (issue #344), in seconds. When set to a value
+    /// greater than zero, `lock_funds` rejects locks whose duration
+    /// (`unlock_time - current_time`) is strictly below it. A value of zero
+    /// (or unset) means no lower bound is enforced.
+    MinLockDurationSecs,
 }
 
 pub const STORAGE_VERSION: u64 = 1;
+
+// ---------------------------------------------------------------------------
+// Error Codes
+// ---------------------------------------------------------------------------
+/// Structured contract errors exposed via Soroban's `#[contracterror]`
+/// mechanism. Every variant maps to a stable `u32` error code that SDK and
+/// mobile consumers can rely on for deterministic user-facing messaging
+/// and cross-repo compatibility.
+///
+/// # Category Ranges
+///
+/// | Range     | Category     | Primary Concern                                 |
+/// |-----------|--------------|-------------------------------------------------|
+/// | 1000–1099 | Validation   | Input argument sanity (sign, magnitude, range)  |
+/// | 2000–2099 | Authorisation| Role and signature enforcement                  |
+/// | 3000–3099 | Lifecycle    | Initialize / pause / storage-version states     |
+/// | 4000–4099 | Accounting   | Balance sufficiency / deposit minimums          |
+/// | 5000–5099 | Lock         | Lock lookup / state / maturity / durations      |
+/// | 6000–6099 | Storage      | Migration / storage layout / unwrap safety      |
+/// | 7000–7099 | Token        | SAC transfer / accepted-token configuration     |
+/// | 8000–8099 | Admin        | Admin rotation rules                            |
+///
+/// The gaps inside each range allow new variants to be added without
+/// renumbering existing codes, which would be a breaking change for
+/// downstream SDKs.
+#[contracterror]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+#[repr(u32)]
+pub enum ContractError {
+    // ---- 1000s: Validation ------------------------------------------------
+    /// `amount` argument was `0` or negative. `deposit`, `withdraw`,
+    /// `lock_funds` all require strictly positive amounts.
+    AmountNotPositive = 1001,
+    /// Attempted to create or extend a lock with `unlock_time` in the
+    /// past or equal to the current ledger timestamp.
+    UnlockTimeNotInFuture = 1002,
+    /// `lock_funds` duration (`unlock_time - ledger_timestamp`) exceeds
+    /// the configured `MaxLockDurationSecs`.
+    LockDurationExceedsMaximum = 1003,
+    /// `lock_funds` duration (`unlock_time - ledger_timestamp`) is
+    /// strictly below the configured `MinLockDurationSecs`.
+    LockDurationBelowMinimum = 1004,
+    /// `deposit` amount is strictly below the configured
+    /// `MinDepositAmount` floor.
+    AmountBelowMinimumDeposit = 1005,
+    /// `pause(admin, duration_secs)` called with `duration_secs == 0`.
+    PauseDurationMustBePositive = 1006,
+    /// `set_min_deposit_amount` called with a negative value.
+    MinDepositAmountNegative = 1007,
+
+    // ---- 2000s: Authorisation --------------------------------------------
+    /// Caller is not the stored admin (failed `assert_admin` check inside
+    /// an admin-gated function).
+    NotAuthorizedAdmin = 2001,
+
+    // ---- 3000s: Lifecycle / State ----------------------------------------
+    /// `initialize` called a second time on an already-initialized
+    /// contract.
+    AlreadyInitialized = 3001,
+    /// Function requiring `initialize()` to have run was called before
+    /// initialization completed.
+    NotInitialized = 3002,
+    /// Deposit or lock attempted while the emergency pause is active and
+    /// not yet expired.
+    ContractPaused = 3003,
+
+    // ---- 4000s: Accounting ------------------------------------------------
+    /// `withdraw` or `lock_funds` requested an amount strictly greater
+    /// than the caller's available `Balance`.
+    InsufficientBalance = 4001,
+    /// Semantic twin of `InsufficientBalance` used specifically by
+    /// `lock_funds` so SDKs can map the two contexts to different copy.
+    InsufficientBalanceToLock = 4002,
+
+    // ---- 5000s: Locks ----------------------------------------------------
+    /// `get_lock`, `withdraw_lock` or `extend_lock` referenced a lock id
+    /// that does not exist for the given owner.
+    LockNotFound = 5001,
+    /// `withdraw_lock` or `extend_lock` called on a lock whose
+    /// `withdrawn` flag is already true.
+    LockAlreadyWithdrawn = 5002,
+    /// `withdraw_lock` attempted before `unlock_time <= ledger_timestamp`.
+    LockNotMatured = 5003,
+    /// `extend_lock` attempted with a `new_unlock_time` that does not
+    /// exceed the lock's current `unlock_time`.
+    ExtendLockTimeNotIncreased = 5004,
+
+    // ---- 6000s: Storage / Migration --------------------------------------
+    /// `try_migrate` read a `StorageVersion` greater than
+    /// `STORAGE_VERSION` compiled into the running WASM (would be a
+    /// downgrade with potential data loss – blocked).
+    StorageVersionUnsupported = 6001,
+    /// Storage read for an instance key that must always be set after
+    /// initialization (e.g. `Admin`, `Token`) unexpectedly returned
+    /// `None`.
+    RequiredStorageEntryMissing = 6002,
+
+    // ---- 7000s: Token / SAC ----------------------------------------------
+    /// Accepted-token configuration missing at transfer time (should
+    /// never happen after `initialize`; guarded by `assert_initialized`
+    /// at every public entrypoint that reaches a transfer).
+    TokenNotConfigured = 7001,
+
+    // ---- 8000s: Admin Rotation -------------------------------------------
+    /// `transfer_admin` called with the current admin as new_admin
+    /// (no-op self-transfer blocked to preserve audit trail).
+    CannotTransferAdminToSelf = 8001,
+    /// `transfer_admin` called with the contract's own address as
+    /// new_admin (tokens and admin access would become unrecoverable).
+    CannotTransferAdminToContractAddress = 8002,
+}
 
 // ---------------------------------------------------------------------------
 // Contract Definition
@@ -86,13 +308,15 @@ impl SavingsVault {
     // Helpers
     // -----------------------------------------------------------------------
 
-    fn assert_initialized(env: &Env) {
+    fn assert_initialized(env: &Env) -> Result<(), ContractError> {
         if !env.storage().instance().has(&DataKey::Initialized) {
-            panic!("Contract is not initialized");
+            Err(ContractError::NotInitialized)
+        } else {
+            Ok(())
         }
     }
 
-    fn try_migrate(env: &Env) {
+    fn try_migrate(env: &Env) -> Result<(), ContractError> {
         let current_version: u64 = env
             .storage()
             .instance()
@@ -100,7 +324,7 @@ impl SavingsVault {
             .unwrap_or(0);
 
         if current_version == STORAGE_VERSION {
-            return;
+            return Ok(());
         }
 
         // Migrate from older versions to newer versions incrementally!
@@ -110,28 +334,55 @@ impl SavingsVault {
                 // migrate them directly to v1!
                 // Since v0 and v1 have same storage layout (just added version marker),
                 // no changes needed except setting the version!
-                env.storage().instance().set(&DataKey::StorageVersion, &STORAGE_VERSION);
-                log!(&env, "Migrated storage from version 0 to version {}", STORAGE_VERSION);
+                env.storage()
+                    .instance()
+                    .set(&DataKey::StorageVersion, &STORAGE_VERSION);
+                log!(
+                    &env,
+                    "Migrated storage from version 0 to version {}",
+                    STORAGE_VERSION
+                );
+                Ok(())
             }
             _ => {
-                // If current version > STORAGE_VERSION, panic to prevent downgrades!
-                panic!("Unsupported storage version: {}", current_version);
+                // If current version > STORAGE_VERSION, error to prevent downgrades!
+                Err(ContractError::StorageVersionUnsupported)
             }
         }
     }
 
-    fn assert_admin(env: &Env, admin: &Address) {
-        let stored_admin: Address = env.storage().instance().get(&DataKey::Admin).unwrap();
+    fn assert_admin(env: &Env, admin: &Address) -> Result<(), ContractError> {
+        let stored_admin: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::Admin)
+            .unwrap_or_else(|| panic_with_error!(&env, ContractError::RequiredStorageEntryMissing));
         if admin != &stored_admin {
-            panic!("Not authorized");
+            Err(ContractError::NotAuthorizedAdmin)
+        } else {
+            Ok(())
         }
     }
 
+    #[allow(dead_code)]
     fn load_locks(env: &Env, user: Address) -> Vec<LockEntry> {
-        env.storage()
+        let next_lock_id: u64 = env
+            .storage()
             .persistent()
-            .get(&DataKey::Locks(user))
-            .unwrap_or_else(|| Vec::new(env))
+            .get(&DataKey::NextLockId(user.clone()))
+            .unwrap_or(1);
+
+        let mut locks = Vec::new(env);
+        for i in 1..next_lock_id {
+            if let Some(lock) = env
+                .storage()
+                .persistent()
+                .get::<_, LockEntry>(&DataKey::Lock(user.clone(), i))
+            {
+                locks.push_back(lock);
+            }
+        }
+        locks
     }
 
     /// Assert the contract is not paused (or that the pause has expired).
@@ -140,11 +391,11 @@ impl SavingsVault {
     /// is automatically cleared so callers do not need to invoke `unpause`
     /// explicitly after a time-bounded pause expires.
     ///
-    /// # Panics
+    /// # Errors
     ///
-    /// Panics with `"Contract is paused"` when the pause is active and has not
+    /// Returns [`ContractError::ContractPaused`] when the pause is active and has not
     /// expired.
-    fn require_not_paused(env: &Env) {
+    fn require_not_paused(env: &Env) -> Result<(), ContractError> {
         let paused: bool = env
             .storage()
             .instance()
@@ -161,36 +412,40 @@ impl SavingsVault {
             if expiry != 0 && env.ledger().timestamp() >= expiry {
                 env.storage().instance().set(&DataKey::Paused, &false);
                 env.storage().instance().set(&DataKey::PauseExpiry, &0_u64);
-                return;
+                return Ok(());
             }
-            panic!("Contract is paused");
+            Err(ContractError::ContractPaused)
+        } else {
+            Ok(())
         }
     }
 
-    fn assert_supported_storage_version(env: &Env) {
+    fn assert_supported_storage_version(env: &Env) -> Result<(), ContractError> {
         let stored_version: u64 = env
             .storage()
             .instance()
             .get(&DataKey::StorageVersion)
             .unwrap_or(0);
         if stored_version != STORAGE_VERSION {
-            panic!("Unsupported storage version");
+            Err(ContractError::StorageVersionUnsupported)
+        } else {
+            Ok(())
         }
     }
-
 
     // -----------------------------------------------------------------------
     // Initialization
     // -----------------------------------------------------------------------
 
-    /// One-time setup. Records admin and token addresses. Panics if called twice.
+    /// One-time setup. Records admin and token addresses. Errors with
+    /// [`ContractError::AlreadyInitialized`] if called twice.
     pub fn initialize(env: Env, admin: Address, token: Address) {
         if env.storage().instance().has(&DataKey::Initialized) {
-            panic!("Contract is already initialized");
+            panic_with_error!(&env, ContractError::AlreadyInitialized)
         }
 
         // Try migration before initializing
-        Self::try_migrate(&env);
+        Self::try_migrate(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
 
         // Require the admin to have signed this transaction
         admin.require_auth();
@@ -198,7 +453,9 @@ impl SavingsVault {
         env.storage().instance().set(&DataKey::Admin, &admin);
         env.storage().instance().set(&DataKey::Initialized, &true);
         env.storage().instance().set(&DataKey::Token, &token);
-        env.storage().instance().set(&DataKey::StorageVersion, &1_u64);
+        env.storage()
+            .instance()
+            .set(&DataKey::StorageVersion, &1_u64);
 
         // Emit a single initialize event. Topic tuple `(Symbol("initialize"), admin)`
         // with the token address as the data payload. The prior redundant
@@ -208,7 +465,12 @@ impl SavingsVault {
         let topics = (Symbol::new(&env, "initialize"), admin.clone());
         env.events().publish(topics, token.clone());
 
-        log!(&env, "Savings Vault initialized with admin: {}, storage version: {}", admin, STORAGE_VERSION);
+        log!(
+            &env,
+            "Savings Vault initialized with admin: {}, storage version: {}",
+            admin,
+            STORAGE_VERSION
+        );
     }
 
     // -----------------------------------------------------------------------
@@ -219,8 +481,9 @@ impl SavingsVault {
     pub fn get_version(env: Env) -> soroban_sdk::String {
         // No need to be initialized for version check, but check storage version if possible
         if env.storage().instance().has(&DataKey::Initialized) {
-            Self::try_migrate(&env);
-            Self::assert_supported_storage_version(&env);
+            Self::try_migrate(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
+            Self::assert_supported_storage_version(&env)
+                .unwrap_or_else(|e| panic_with_error!(&env, e));
         }
         soroban_sdk::String::from_str(&env, "0.1.0")
     }
@@ -234,6 +497,11 @@ impl SavingsVault {
     /// Returns the address of the Stellar Asset Contract (SAC) that the vault
     /// uses for deposits and withdrawals.
     ///
+    /// # Authorisation Rules
+    /// - **Required Signer:** `user` (enforced via `user.require_auth()`).
+    /// - **Caller Expectation:** The vault owner depositing funds for themselves.
+    /// - **Known Assumptions:** Arbitrary accounts cannot deposit on behalf of unconsenting users.
+    ///
     /// # Arguments
     ///
     /// * `env` - The Soroban environment
@@ -246,14 +514,18 @@ impl SavingsVault {
     ///
     /// No authorization required (read-only operation).
     ///
-    /// # Panics
+    /// # Errors
     ///
-    /// - If the contract has not been initialized.
+    /// - [`ContractError::NotInitialized`] – If the contract has not been initialized.
     pub fn get_token(env: Env) -> Address {
-        Self::assert_initialized(&env);
-        Self::try_migrate(&env);
-        Self::assert_supported_storage_version(&env);
-        env.storage().instance().get(&DataKey::Token).unwrap()
+        Self::assert_initialized(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
+        Self::try_migrate(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
+        Self::assert_supported_storage_version(&env)
+            .unwrap_or_else(|e| panic_with_error!(&env, e));
+        env.storage()
+            .instance()
+            .get(&DataKey::Token)
+            .unwrap_or_else(|| panic_with_error!(&env, ContractError::TokenNotConfigured))
     }
 
     // -----------------------------------------------------------------------
@@ -294,30 +566,22 @@ impl SavingsVault {
     /// - If the caller is not the admin
     /// - If `duration_secs` is zero
     pub fn pause(env: Env, admin: Address, duration_secs: u64) {
-        Self::assert_initialized(&env);
+        Self::assert_initialized(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
         admin.require_auth();
-        Self::assert_admin(&env, &admin);
+        Self::assert_admin(&env, &admin).unwrap_or_else(|e| panic_with_error!(&env, e));
 
         if duration_secs == 0 {
-            panic!("Pause duration must be greater than zero");
+            panic_with_error!(&env, ContractError::PauseDurationMustBePositive)
         }
 
         let expiry = env.ledger().timestamp() + duration_secs;
         env.storage().instance().set(&DataKey::Paused, &true);
-        env
-            .storage()
-            .instance()
-            .set(&DataKey::PauseExpiry, &expiry);
+        env.storage().instance().set(&DataKey::PauseExpiry, &expiry);
 
         let topics = (symbol_short!("pause"), admin.clone());
         env.events().publish(topics, expiry);
 
-        log!(
-            &env,
-            "Pause: admin={}, expiry={}",
-            admin,
-            expiry
-        );
+        log!(&env, "Pause: admin={}, expiry={}", admin, expiry);
     }
 
     /// Deactivate an active pause.
@@ -325,6 +589,18 @@ impl SavingsVault {
     /// Immediately clears the pause flag and expiry, re-enabling deposits and
     /// locks. Can be called by the admin even before the pause expires, allowing
     /// early restoration of normal operations after an incident is resolved.
+    ///
+    /// # Authorisation Rules
+    /// - **Required Signer:** `user` (enforced via `user.require_auth()`).
+    /// - **Caller Expectation:** The vault owner depositing funds for themselves.
+    /// - **Known Assumptions:** Arbitrary accounts cannot deposit on behalf of unconsenting users.
+    ///
+    /// ## Amount Normalisation & Units
+    /// * **Units:** `amount` is specified as an integer `i128` representing raw atomic base units
+    ///   (e.g., 1 stroop for XLM, where 1 XLM = 10,000,000 stroops).
+    /// * **Minimum Amount:** Must be strictly greater than zero (`amount >= 1` atomic unit).
+    /// * **Precision:** Determined by the configured Stellar Asset Contract (SAC) token decimals
+    ///   (typically 7 decimals for native XLM). Fractional values smaller than 1 atomic unit are not supported.
     ///
     /// # Arguments
     ///
@@ -347,9 +623,9 @@ impl SavingsVault {
     /// - If the contract has not been initialized
     /// - If the caller is not the admin
     pub fn unpause(env: Env, admin: Address) {
-        Self::assert_initialized(&env);
+        Self::assert_initialized(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
         admin.require_auth();
-        Self::assert_admin(&env, &admin);
+        Self::assert_admin(&env, &admin).unwrap_or_else(|e| panic_with_error!(&env, e));
 
         env.storage().instance().set(&DataKey::Paused, &false);
         env.storage().instance().set(&DataKey::PauseExpiry, &0_u64);
@@ -358,6 +634,129 @@ impl SavingsVault {
         env.events().publish(topics, ());
 
         log!(&env, "Unpause: admin={}", admin);
+    }
+
+    // -----------------------------------------------------------------------
+    // Minimum deposit amount rule (issue #342)
+    // -----------------------------------------------------------------------
+
+    /// Sets the minimum deposit amount rule. Deposits below `min_amount` are
+    /// rejected. Pass `0` to disable the floor (the contract's base check that
+    /// `amount > 0` still applies).
+    ///
+    /// # Panics
+    ///
+    /// - If the contract has not been initialized
+    /// - If the caller is not the admin
+    pub fn set_min_deposit_amount(env: Env, admin: Address, min_amount: i128) {
+        Self::assert_initialized(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
+        admin.require_auth();
+        Self::assert_admin(&env, &admin).unwrap_or_else(|e| panic_with_error!(&env, e));
+
+        if min_amount < 0 {
+            panic_with_error!(&env, ContractError::MinDepositAmountNegative)
+        }
+
+        env.storage()
+            .instance()
+            .set(&DataKey::MinDepositAmount, &min_amount);
+
+        let topics = (symbol_short!("cfg_min"), admin.clone());
+        env.events().publish(topics, min_amount);
+
+        log!(&env, "Min deposit amount set to {} by admin={}", min_amount, admin);
+    }
+
+    /// Returns the current minimum deposit amount rule. `0` means no floor is
+    /// enforced (only the base `amount > 0` check applies).
+    pub fn get_min_deposit_amount(env: Env) -> i128 {
+        env.storage()
+            .instance()
+            .get(&DataKey::MinDepositAmount)
+            .unwrap_or(0)
+    }
+
+    // -----------------------------------------------------------------------
+    // Maximum lock duration rule (issue #343)
+    // -----------------------------------------------------------------------
+
+    /// Sets the maximum lock duration rule, in seconds. A `lock_funds` whose
+    /// duration (`unlock_time - current_time`) exceeds `max_duration_secs` is
+    /// rejected. Pass `0` to disable the upper bound (unbounded).
+    ///
+    /// # Panics
+    ///
+    /// - If the contract has not been initialized
+    /// - If the caller is not the admin
+    pub fn set_max_lock_duration(env: Env, admin: Address, max_duration_secs: u64) {
+        Self::assert_initialized(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
+        admin.require_auth();
+        Self::assert_admin(&env, &admin).unwrap_or_else(|e| panic_with_error!(&env, e));
+
+        env.storage()
+            .instance()
+            .set(&DataKey::MaxLockDurationSecs, &max_duration_secs);
+
+        let topics = (symbol_short!("cfg_maxlk"), admin.clone());
+        env.events().publish(topics, max_duration_secs);
+
+        log!(
+            &env,
+            "Max lock duration set to {}s by admin={}",
+            max_duration_secs,
+            admin
+        );
+    }
+
+    /// Returns the current maximum lock duration rule (seconds). `0` means no
+    /// upper bound is enforced.
+    pub fn get_max_lock_duration(env: Env) -> u64 {
+        env.storage()
+            .instance()
+            .get(&DataKey::MaxLockDurationSecs)
+            .unwrap_or(0)
+    }
+
+    // -----------------------------------------------------------------------
+    // Minimum lock duration rule (issue #344)
+    // -----------------------------------------------------------------------
+
+    /// Sets the minimum lock duration rule, in seconds. A `lock_funds` whose
+    /// duration (`unlock_time - current_time`) is strictly below
+    /// `min_duration_secs` is rejected. Pass `0` to disable the lower bound
+    /// (no minimum enforced).
+    ///
+    /// # Panics
+    ///
+    /// - If the contract has not been initialized
+    /// - If the caller is not the admin
+    pub fn set_min_lock_duration(env: Env, admin: Address, min_duration_secs: u64) {
+        Self::assert_initialized(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
+        admin.require_auth();
+        Self::assert_admin(&env, &admin).unwrap_or_else(|e| panic_with_error!(&env, e));
+
+        env.storage()
+            .instance()
+            .set(&DataKey::MinLockDurationSecs, &min_duration_secs);
+
+        let topics = (symbol_short!("cfg_minlk"), admin.clone());
+        env.events().publish(topics, min_duration_secs);
+
+        log!(
+            &env,
+            "Min lock duration set to {}s by admin={}",
+            min_duration_secs,
+            admin
+        );
+    }
+
+    /// Returns the current minimum lock duration rule (seconds). `0` means no
+    /// lower bound is enforced.
+    pub fn get_min_lock_duration(env: Env) -> u64 {
+        env.storage()
+            .instance()
+            .get(&DataKey::MinLockDurationSecs)
+            .unwrap_or(0)
     }
 
     /// Check whether the contract is currently paused.
@@ -379,7 +778,7 @@ impl SavingsVault {
     ///
     /// No authorization required (read-only operation).
     pub fn is_paused(env: Env) -> bool {
-        Self::assert_initialized(&env);
+        Self::assert_initialized(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
 
         let paused: bool = env
             .storage()
@@ -405,24 +804,127 @@ impl SavingsVault {
     }
 
     // -----------------------------------------------------------------------
+    // Configuration Read API
+    // -----------------------------------------------------------------------
+
+    /// Returns the full contract configuration in a single call.
+    ///
+    /// Aggregates all read-only configuration fields — accepted token, admin,
+    /// version, pause state, and configurable limits — into a
+    /// [`ContractConfig`] struct. This eliminates the need for SDK and mobile
+    /// clients to issue multiple separate RPC queries to assemble the
+    /// contract's configuration.
+    ///
+    /// # Arguments
+    ///
+    /// * `env` - The Soroban environment
+    ///
+    /// # Returns
+    ///
+    /// A [`ContractConfig`] containing every configuration field.
+    ///
+    /// # Authorization
+    ///
+    /// No authorization required (read-only operation).
+    ///
+    /// # Errors
+    ///
+    /// - [`ContractError::NotInitialized`] - If the contract has not been initialized.
+    /// - [`ContractError::StorageVersionUnsupported`] - If the stored version does not match.
+    /// - [`ContractError::TokenNotConfigured`] - If the token address is missing.
+    /// - [`ContractError::RequiredStorageEntryMissing`] - If the admin address is missing.
+    pub fn get_config(env: Env) -> ContractConfig {
+        Self::assert_initialized(&env).unwrap_or_else(|e| env.error_contract(e));
+        Self::try_migrate(&env).unwrap_or_else(|e| env.error_contract(e));
+        Self::assert_supported_storage_version(&env)
+            .unwrap_or_else(|e| env.error_contract(e));
+
+        let paused: bool = env
+            .storage()
+            .instance()
+            .get(&DataKey::Paused)
+            .unwrap_or(false);
+        let pause_expiry: u64 = env
+            .storage()
+            .instance()
+            .get(&DataKey::PauseExpiry)
+            .unwrap_or(0);
+
+        // Respect expiry: if the pause has lapsed, report not-paused.
+        let effective_paused =
+            if paused && pause_expiry != 0 && env.ledger().timestamp() >= pause_expiry {
+                false
+            } else {
+                paused
+            };
+
+        ContractConfig {
+            token: env
+                .storage()
+                .instance()
+                .get(&DataKey::Token)
+                .unwrap_or_else(|| env.error_contract(ContractError::TokenNotConfigured)),
+            admin: env
+                .storage()
+                .instance()
+                .get(&DataKey::Admin)
+                .unwrap_or_else(|| {
+                    env.error_contract(ContractError::RequiredStorageEntryMissing)
+                }),
+            version: soroban_sdk::String::from_str(&env, "0.1.0"),
+            paused: effective_paused,
+            pause_expiry,
+            min_deposit_amount: env
+                .storage()
+                .instance()
+                .get(&DataKey::MinDepositAmount)
+                .unwrap_or(0),
+            max_lock_duration: env
+                .storage()
+                .instance()
+                .get(&DataKey::MaxLockDurationSecs)
+                .unwrap_or(0),
+            min_lock_duration: env
+                .storage()
+                .instance()
+                .get(&DataKey::MinLockDurationSecs)
+                .unwrap_or(0),
+        }
+    }
+
+    // -----------------------------------------------------------------------
     // Deposits
     // -----------------------------------------------------------------------
 
     /// Transfers tokens from the user into the vault and credits their balance.
-    /// Panics if amount <= 0.
+    /// Errors with [`ContractError::AmountNotPositive`] if amount <= 0.
     pub fn deposit(env: Env, user: Address, amount: i128) {
-        Self::assert_initialized(&env);
-        Self::try_migrate(&env);
-        Self::assert_supported_storage_version(&env);
-        Self::require_not_paused(&env);
+        Self::assert_initialized(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
+        Self::try_migrate(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
+        Self::assert_supported_storage_version(&env)
+            .unwrap_or_else(|e| panic_with_error!(&env, e));
+        Self::require_not_paused(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
 
         user.require_auth();
 
         if amount <= 0 {
-            panic!("Deposit amount must be greater than zero");
+            panic_with_error!(&env, ContractError::AmountNotPositive)
         }
 
-        let token = env.storage().instance().get(&DataKey::Token).unwrap();
+        let min_deposit: i128 = env
+            .storage()
+            .instance()
+            .get(&DataKey::MinDepositAmount)
+            .unwrap_or(0);
+        if min_deposit > 0 && amount < min_deposit {
+            panic_with_error!(&env, ContractError::AmountBelowMinimumDeposit)
+        }
+
+        let token = env
+            .storage()
+            .instance()
+            .get(&DataKey::Token)
+            .unwrap_or_else(|| panic_with_error!(&env, ContractError::TokenNotConfigured));
         let token_client = token::Client::new(&env, &token);
         let contract_address = env.current_contract_address();
 
@@ -456,17 +958,20 @@ impl SavingsVault {
     // Withdrawals
     // -----------------------------------------------------------------------
 
-    /// Withdraws available funds from the user's vault. Satisfies the
-    /// withdrawal from the deposited balance first, then from matured locks.
-    /// Panics if amount <= 0 or exceeds available balance.
+    /// Withdraws available funds from the user's vault.
+    /// Only touches the deposited balance (not matured locks).
+    /// Errors with [`ContractError::AmountNotPositive`] if amount <= 0 or
+    /// [`ContractError::InsufficientBalance`] if it exceeds available balance.
     pub fn withdraw(env: Env, user: Address, amount: i128) {
-        Self::assert_initialized(&env);
-        Self::try_migrate(&env);
-        Self::assert_supported_storage_version(&env);
+        Self::assert_initialized(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
+        Self::try_migrate(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
+        Self::assert_supported_storage_version(&env)
+            .unwrap_or_else(|e| panic_with_error!(&env, e));
 
         user.require_auth();
 
         if amount <= 0 {
+<<<<<<< HEAD
             panic!("Withdrawal amount must be greater than zero");
         }
 
@@ -694,7 +1199,334 @@ impl SavingsVault {
             .unwrap_or(0);
 
         if amount > current_balance {
-            panic!("Insufficient balance to lock");
+            panic_with_error!(&env, ContractError::InsufficientBalance)
+        }
+
+        let token = env
+            .storage()
+            .instance()
+            .get(&DataKey::Token)
+            .unwrap_or_else(|| panic_with_error!(&env, ContractError::TokenNotConfigured));
+        let token_client = token::Client::new(&env, &token);
+        let contract_address = env.current_contract_address();
+
+        token_client.transfer(&contract_address, &user, &amount);
+
+        current_balance -= amount;
+
+        env.storage()
+            .persistent()
+            .set(&DataKey::Balance(user.clone()), &current_balance);
+
+        let topics = (symbol_short!("withdraw"), user.clone());
+        let payload = (amount, current_balance);
+        env.events().publish(topics, payload);
+
+        log!(
+            &env,
+            "Withdraw: user={}, amount={}, new_balance={}",
+            user,
+            amount,
+            current_balance
+        );
+    }
+
+    /// Withdraws a specific matured lock entry by its ID.
+    /// Errors with [`ContractError::LockNotFound`] if the lock doesn't exist or
+    /// [`ContractError::LockNotMatured`] if it hasn't matured.
+    pub fn withdraw_lock(env: Env, user: Address, lock_id: u64) {
+        Self::assert_initialized(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
+        Self::try_migrate(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
+        Self::assert_supported_storage_version(&env)
+            .unwrap_or_else(|e| panic_with_error!(&env, e));
+
+        user.require_auth();
+
+        let mut lock: LockEntry = match env
+            .storage()
+            .persistent()
+            .get::<_, LockEntry>(&DataKey::Lock(user.clone(), lock_id))
+        {
+            Some(l) => l,
+            None => panic_with_error!(&env, ContractError::LockNotFound),
+        };
+
+        if lock.withdrawn {
+            panic_with_error!(&env, ContractError::LockAlreadyWithdrawn)
+        }
+
+        let current_time = env.ledger().timestamp();
+        if current_time < lock.unlock_time {
+            panic_with_error!(&env, ContractError::LockNotMatured)
+        }
+
+        let token = env
+            .storage()
+            .instance()
+            .get(&DataKey::Token)
+            .unwrap_or_else(|| panic_with_error!(&env, ContractError::TokenNotConfigured));
+        let token_client = token::Client::new(&env, &token);
+        let contract_address = env.current_contract_address();
+
+        let withdrawn_amount = lock.amount;
+        token_client.transfer(&contract_address, &user, &withdrawn_amount);
+
+        lock.withdrawn = true;
+        lock.amount = 0;
+
+        env.storage()
+            .persistent()
+            .set(&DataKey::Lock(user.clone(), lock_id), &lock);
+
+        let topics = (Symbol::new(&env, "withdraw_lock"), user.clone());
+        let payload = (lock_id, withdrawn_amount);
+        env.events().publish(topics, payload);
+
+        log!(
+            &env,
+            "WithdrawLock: user={}, lock_id={}, amount={}",
+            user,
+            lock_id,
+            withdrawn_amount
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // Balance Queries
+    // -----------------------------------------------------------------------
+
+    /// Returns the user's available balance: only the deposited (unlocked) balance.
+    /// Matured locks must be withdrawn via `withdraw_lock`.
+    pub fn get_balance(env: Env, user: Address) -> i128 {
+        Self::assert_initialized(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
+        Self::try_migrate(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
+        Self::assert_supported_storage_version(&env)
+            .unwrap_or_else(|e| panic_with_error!(&env, e));
+        let deposited_balance: i128 = env
+            .storage()
+            .persistent()
+            .get(&DataKey::Balance(user.clone()))
+            .unwrap_or(0);
+
+        deposited_balance
+    }
+
+    /// Returns a point-in-time snapshot of the user's balance state.
+    ///
+    /// This is a convenience read helper designed for SDK and mobile clients
+    /// that need to display unlocked, locked, total, and withdrawable
+    /// amounts in a single call rather than issuing several queries.
+    ///
+    /// # Arguments
+    ///
+    /// * `env` - The Soroban environment
+    /// * `user` - The user address to query
+    ///
+    /// # Returns
+    ///
+    /// A [`BalanceSnapshot`] containing:
+    /// - `unlocked` – deposited balance available for immediate withdrawal
+    /// - `locked` – sum of all non-withdrawn lock amounts
+    /// - `total` – `unlocked + locked`
+    /// - `withdrawable` – sum of matured, non-withdrawn lock amounts
+    ///
+    /// # Authorization
+    ///
+    /// No authorization required (read-only operation).
+    ///
+    /// # Storage Iteration
+    ///
+    /// Iterates over all lock IDs `1..next_lock_id` for the user. On-chain
+    /// cost grows linearly with the number of locks ever created (including
+    /// withdrawn ones whose storage key was kept). For users with a very
+    /// large number of historical locks this may become expensive; consider
+    /// off-chain indexing in that case.
+    pub fn get_balance_snapshot(env: Env, user: Address) -> BalanceSnapshot {
+        Self::assert_initialized(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
+        Self::try_migrate(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
+        Self::assert_supported_storage_version(&env)
+            .unwrap_or_else(|e| panic_with_error!(&env, e));
+
+        let unlocked: i128 = env
+            .storage()
+            .persistent()
+            .get(&DataKey::Balance(user.clone()))
+            .unwrap_or(0);
+
+        let next_lock_id: u64 = env
+            .storage()
+            .persistent()
+            .get(&DataKey::NextLockId(user.clone()))
+            .unwrap_or(1);
+
+        let current_time = env.ledger().timestamp();
+        let mut locked: i128 = 0;
+        let mut withdrawable: i128 = 0;
+
+        for i in 1..next_lock_id {
+            if let Some(lock) = env
+                .storage()
+                .persistent()
+                .get::<_, LockEntry>(&DataKey::Lock(user.clone(), i))
+            {
+                if !lock.withdrawn {
+                    locked += lock.amount;
+                    if current_time >= lock.unlock_time {
+                        withdrawable += lock.amount;
+                    }
+                }
+            }
+        }
+
+        BalanceSnapshot {
+            unlocked,
+            locked,
+            total: unlocked + locked,
+            withdrawable,
+        }
+    }
+
+    /// Returns an aggregated summary of the user's lock entries.
+    ///
+    /// This is a convenience read helper designed for SDK and mobile clients
+    /// that need a quick overview of a user's locks (counts, totals,
+    /// matured amounts, and the unlock-time window) in a single call.
+    ///
+    /// # Arguments
+    ///
+    /// * `env` - The Soroban environment
+    /// * `user` - The user address to query
+    ///
+    /// # Returns
+    ///
+    /// A [`LockSummary`] containing:
+    /// - `active_count` – number of non-withdrawn locks
+    /// - `total_locked_amount` – sum of amounts across non-withdrawn locks
+    /// - `matured_count` – number of matured, non-withdrawn locks
+    /// - `withdrawable_amount` – sum of amounts across matured,
+    ///   non-withdrawn locks
+    /// - `earliest_unlock` – smallest immature unlock time (0 if none)
+    /// - `latest_unlock` – largest immature unlock time (0 if none)
+    ///
+    /// # Authorization
+    ///
+    /// No authorization required (read-only operation).
+    ///
+    /// # Storage Iteration
+    ///
+    /// Same linear-scan caveat as [`get_balance_snapshot`]. For users with
+    /// a very large number of historical locks, prefer off-chain indexing.
+    pub fn get_lock_summary(env: Env, user: Address) -> LockSummary {
+        Self::assert_initialized(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
+        Self::try_migrate(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
+        Self::assert_supported_storage_version(&env)
+            .unwrap_or_else(|e| panic_with_error!(&env, e));
+
+        let next_lock_id: u64 = env
+            .storage()
+            .persistent()
+            .get(&DataKey::NextLockId(user.clone()))
+            .unwrap_or(1);
+
+        let current_time = env.ledger().timestamp();
+        let mut active_count: u32 = 0;
+        let mut total_locked_amount: i128 = 0;
+        let mut matured_count: u32 = 0;
+        let mut withdrawable_amount: i128 = 0;
+        let mut earliest_unlock: u64 = 0;
+        let mut latest_unlock: u64 = 0;
+
+        for i in 1..next_lock_id {
+            if let Some(lock) = env
+                .storage()
+                .persistent()
+                .get::<_, LockEntry>(&DataKey::Lock(user.clone(), i))
+            {
+                if !lock.withdrawn {
+                    active_count += 1;
+                    total_locked_amount += lock.amount;
+
+                    if current_time >= lock.unlock_time {
+                        // Matured lock
+                        matured_count += 1;
+                        withdrawable_amount += lock.amount;
+                    } else {
+                        // Immature lock — track unlock-time window
+                        if earliest_unlock == 0 || lock.unlock_time < earliest_unlock {
+                            earliest_unlock = lock.unlock_time;
+                        }
+                        if lock.unlock_time > latest_unlock {
+                            latest_unlock = lock.unlock_time;
+                        }
+                    }
+                }
+            }
+        }
+
+        LockSummary {
+            active_count,
+            total_locked_amount,
+            matured_count,
+            withdrawable_amount,
+            earliest_unlock,
+            latest_unlock,
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Fund Locking
+    // -----------------------------------------------------------------------
+
+    /// Locks a portion of the user's available balance until `unlock_time`.
+    /// Returns the lock ID. Errors with [`ContractError::AmountNotPositive`],
+    /// [`ContractError::UnlockTimeNotInFuture`],
+    /// [`ContractError::LockDurationExceedsMaximum`],
+    /// [`ContractError::LockDurationBelowMinimum`], or
+    /// [`ContractError::InsufficientBalanceToLock`] on invalid input.
+    pub fn lock_funds(env: Env, user: Address, amount: i128, unlock_time: u64) -> u64 {
+        Self::assert_initialized(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
+        Self::try_migrate(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
+        Self::assert_supported_storage_version(&env)
+            .unwrap_or_else(|e| panic_with_error!(&env, e));
+        Self::require_not_paused(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
+
+        user.require_auth();
+
+        if amount <= 0 {
+            panic_with_error!(&env, ContractError::AmountNotPositive)
+        }
+
+        let current_time = env.ledger().timestamp();
+        if unlock_time <= current_time {
+            panic_with_error!(&env, ContractError::UnlockTimeNotInFuture)
+        }
+
+        let max_duration: u64 = env
+            .storage()
+            .instance()
+            .get(&DataKey::MaxLockDurationSecs)
+            .unwrap_or(0);
+        if max_duration > 0 && unlock_time - current_time > max_duration {
+            panic_with_error!(&env, ContractError::LockDurationExceedsMaximum)
+        }
+
+        let min_duration: u64 = env
+            .storage()
+            .instance()
+            .get(&DataKey::MinLockDurationSecs)
+            .unwrap_or(0);
+        if min_duration > 0 && unlock_time - current_time < min_duration {
+            panic_with_error!(&env, ContractError::LockDurationBelowMinimum)
+        }
+
+        let mut current_balance: i128 = env
+            .storage()
+            .persistent()
+            .get(&DataKey::Balance(user.clone()))
+            .unwrap_or(0);
+
+        if amount > current_balance {
+            panic_with_error!(&env, ContractError::InsufficientBalanceToLock)
         }
 
         let next_id: u64 = env
@@ -706,12 +1538,6 @@ impl SavingsVault {
         env.storage()
             .persistent()
             .set(&DataKey::NextLockId(user.clone()), &(next_id + 1));
-
-        let mut locks: Vec<LockEntry> = env
-            .storage()
-            .persistent()
-            .get(&DataKey::Locks(user.clone()))
-            .unwrap_or_else(|| Vec::new(&env));
 
         let new_lock = LockEntry {
             id: next_id,
@@ -737,18 +1563,18 @@ impl SavingsVault {
             .persistent()
             .set(&DataKey::Balance(user.clone()), &current_balance);
 
-        // Sum all active (non-withdrawn) locks for the event payload,
+<<<<<<< HEAD
+        // Sum all active (non-withdrawn, not-yet-matured) locks for the event payload,
         // including the one just stored above.
-        let next_lock_id_after: u64 = env
-            .storage()
-            .persistent()
-            .get(&DataKey::NextLockId(user.clone()))
-            .unwrap_or(1);
         let mut new_locked: i128 = 0;
-        for i in 1..next_lock_id_after {
-            if let Some(lk) = env.storage().persistent().get::<_, LockEntry>(&DataKey::Lock(user.clone(), i)) {
-                if !lk.withdrawn {
-                    new_locked += lk.amount;
+        for i in 1..=next_id {
+            if let Some(l) = env
+                .storage()
+                .persistent()
+                .get::<_, LockEntry>(&DataKey::Lock(user.clone(), i))
+            {
+                if !l.withdrawn && current_time < l.unlock_time {
+                    new_locked += l.amount;
                 }
             }
         }
@@ -770,22 +1596,105 @@ impl SavingsVault {
         next_id
     }
 
-    /// Returns the sum of all active (unmatured) lock amounts.
+    /// Extends the unlock duration of an active (non-withdrawn) lock to a further future timestamp.
+    ///
+    /// # Arguments
+    /// * `env` - The Soroban environment
+    /// * `user` - Lock owner address (must authorize transaction)
+    /// * `lock_id` - ID of the lock entry to extend
+    /// * `new_unlock_time` - New Unix timestamp (seconds) when the lock will mature
+    ///
+    /// # Authorization Rules
+    /// - Requires `user.require_auth()`. Only the lock owner can extend lock duration.
+    ///
+    /// # Accounting Impact
+    /// - Available balance (`Balance(user)`) remains unchanged.
+    /// - Total locked principal remains unchanged.
+    /// - SAC token balances held in contract custody remain unchanged.
+    /// - Only the maturity date `unlock_time` of the specified `LockEntry` is updated.
+    ///
+    /// # Panics
+    /// - If the contract is not initialized or unsupported storage version.
+    /// - If contract is emergency paused.
+    /// - If caller is unauthorized.
+    /// - If lock is not found.
+    /// - If lock is already withdrawn.
+    /// - If `new_unlock_time` is not strictly greater than current `lock.unlock_time`.
+    /// - If `new_unlock_time` is not in the future (`<= env.ledger().timestamp()`).
+    pub fn extend_lock(env: Env, user: Address, lock_id: u64, new_unlock_time: u64) {
+        Self::assert_initialized(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
+        Self::try_migrate(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
+        Self::assert_supported_storage_version(&env)
+            .unwrap_or_else(|e| panic_with_error!(&env, e));
+        Self::require_not_paused(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
+
+        user.require_auth();
+
+        let mut lock: LockEntry = match env
+            .storage()
+            .persistent()
+            .get::<_, LockEntry>(&DataKey::Lock(user.clone(), lock_id))
+        {
+            Some(l) => l,
+            None => panic_with_error!(&env, ContractError::LockNotFound),
+        };
+
+        if lock.withdrawn {
+            panic_with_error!(&env, ContractError::LockAlreadyWithdrawn)
+        }
+
+        let current_time = env.ledger().timestamp();
+        if new_unlock_time <= current_time {
+            panic_with_error!(&env, ContractError::UnlockTimeNotInFuture)
+        }
+
+        if new_unlock_time <= lock.unlock_time {
+            panic_with_error!(&env, ContractError::ExtendLockTimeNotIncreased)
+        }
+
+        let old_unlock_time = lock.unlock_time;
+        lock.unlock_time = new_unlock_time;
+
+        env.storage()
+            .persistent()
+            .set(&DataKey::Lock(user.clone(), lock_id), &lock);
+
+        let topics = (Symbol::new(&env, "extend_lock"), user.clone());
+        let payload = (lock_id, old_unlock_time, new_unlock_time, lock.amount);
+        env.events().publish(topics, payload);
+
+        log!(
+            &env,
+            "ExtendLock: user={}, lock_id={}, old_unlock_time={}, new_unlock_time={}",
+            user,
+            lock_id,
+            old_unlock_time,
+            new_unlock_time
+        );
+    }
+
+    /// Returns the sum of all lock amounts that have not been withdrawn yet
+    /// (both matured and immature). Matured locks must be withdrawn via
+    /// `withdraw_lock`.
     pub fn get_locked_balance(env: Env, user: Address) -> i128 {
-        Self::assert_initialized(&env);
-        Self::try_migrate(&env);
-        Self::assert_supported_storage_version(&env);
+        Self::assert_initialized(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
+        Self::try_migrate(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
+        Self::assert_supported_storage_version(&env)
+            .unwrap_or_else(|e| panic_with_error!(&env, e));
         let next_lock_id: u64 = env
             .storage()
             .persistent()
             .get(&DataKey::NextLockId(user.clone()))
             .unwrap_or(1);
 
-        let current_time = env.ledger().timestamp();
         let mut total_locked: i128 = 0;
         for i in 1..next_lock_id {
-            if let Some(lock) = env.storage().persistent().get::<_, LockEntry>(&DataKey::Lock(user.clone(), i)) {
-                if !lock.withdrawn && current_time < lock.unlock_time {
+            if let Some(lock) = env
+                .storage()
+                .persistent()
+                .get::<_, LockEntry>(&DataKey::Lock(user.clone(), i))
+            {
+                if !lock.withdrawn {
                     total_locked += lock.amount;
                 }
             }
@@ -795,9 +1704,10 @@ impl SavingsVault {
 
     /// Returns true if the user has at least one matured lock.
     pub fn can_withdraw(env: Env, user: Address) -> bool {
-        Self::assert_initialized(&env);
-        Self::try_migrate(&env);
-        Self::assert_supported_storage_version(&env);
+        Self::assert_initialized(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
+        Self::try_migrate(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
+        Self::assert_supported_storage_version(&env)
+            .unwrap_or_else(|e| panic_with_error!(&env, e));
         let next_lock_id: u64 = env
             .storage()
             .persistent()
@@ -806,7 +1716,11 @@ impl SavingsVault {
 
         let current_time = env.ledger().timestamp();
         for i in 1..next_lock_id {
-            if let Some(lock) = env.storage().persistent().get::<_, LockEntry>(&DataKey::Lock(user.clone(), i)) {
+            if let Some(lock) = env
+                .storage()
+                .persistent()
+                .get::<_, LockEntry>(&DataKey::Lock(user.clone(), i))
+            {
                 if !lock.withdrawn && current_time >= lock.unlock_time {
                     return true;
                 }
@@ -818,17 +1732,21 @@ impl SavingsVault {
 
     /// Returns a single lock entry by ID, or None if not found.
     pub fn get_lock(env: Env, user: Address, lock_id: u64) -> Option<LockEntry> {
-        Self::assert_initialized(&env);
-        Self::try_migrate(&env);
-        Self::assert_supported_storage_version(&env);
-        env.storage().persistent().get(&DataKey::Lock(user.clone(), lock_id))
+        Self::assert_initialized(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
+        Self::try_migrate(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
+        Self::assert_supported_storage_version(&env)
+            .unwrap_or_else(|e| panic_with_error!(&env, e));
+        env.storage()
+            .persistent()
+            .get(&DataKey::Lock(user.clone(), lock_id))
     }
 
     /// Returns a paginated list of lock entries for a user (oldest first).
     pub fn list_locks(env: Env, user: Address, offset: u32, limit: u32) -> Vec<LockEntry> {
-        Self::assert_initialized(&env);
-        Self::try_migrate(&env);
-        Self::assert_supported_storage_version(&env);
+        Self::assert_initialized(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
+        Self::try_migrate(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
+        Self::assert_supported_storage_version(&env)
+            .unwrap_or_else(|e| panic_with_error!(&env, e));
         let next_lock_id: u64 = env
             .storage()
             .persistent()
@@ -841,17 +1759,204 @@ impl SavingsVault {
         }
 
         let page_limit = limit.min(MAX_LOCK_PAGE_SIZE);
-        let end = (offset as usize).saturating_add(page_limit as usize).min(total);
+        let end = (offset as usize)
+            .saturating_add(page_limit as usize)
+            .min(total);
         let mut page = Vec::new(&env);
 
         // Locks are 1-indexed (ids from 1 to next_lock_id - 1)
         // offset 0 means start at id 1
         for i in (offset as u64 + 1)..=(end as u64) {
-            if let Some(lock) = env.storage().persistent().get::<_, LockEntry>(&DataKey::Lock(user.clone(), i)) {
+            if let Some(lock) = env
+                .storage()
+                .persistent()
+                .get::<_, LockEntry>(&DataKey::Lock(user.clone(), i))
+            {
                 page.push_back(lock);
             }
         }
         page
+    }
+
+    // -----------------------------------------------------------------------
+    // Matured-Lock Discovery Helpers (issue #414)
+    // -----------------------------------------------------------------------
+
+    /// Returns a paginated list of matured, non-withdrawn lock entries for a user.
+    ///
+    /// A lock is considered "matured" when `env.ledger().timestamp() >= lock.unlock_time`
+    /// and `lock.withdrawn == false`. This helper enables mobile clients to display
+    /// only the locks that are immediately withdrawable, without requiring client-side
+    /// filtering of the full lock list.
+    ///
+    /// # Arguments
+    ///
+    /// * `env` - The Soroban environment
+    /// * `user` - The address of the lock owner
+    /// * `offset` - Number of matured locks to skip from the start (0-indexed)
+    /// * `limit` - Maximum number of matured locks to return; `0` returns an empty list
+    ///
+    /// # Returns
+    ///
+    /// A `Vec<LockEntry>` containing up to `min(limit, MAX_LOCK_PAGE_SIZE)` matured,
+    /// non-withdrawn lock entries in creation order (oldest first).
+    ///
+    /// # Authorization
+    ///
+    /// No authorization required (read-only operation).
+    ///
+    /// # Storage Cost
+    ///
+    /// This function iterates through all of the user's lock entries to filter
+    /// for matured ones. For users with a very large number of locks, this may
+    /// consume significant CPU instructions. The `MAX_LOCK_PAGE_SIZE` cap on
+    /// the returned page limits the response size but not the scan cost.
+    ///
+    /// # Panics
+    ///
+    /// - If the contract has not been initialized
+    pub fn list_matured_locks(env: Env, user: Address, offset: u32, limit: u32) -> Vec<LockEntry> {
+        Self::assert_initialized(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
+        Self::try_migrate(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
+        Self::assert_supported_storage_version(&env)
+            .unwrap_or_else(|e| panic_with_error!(&env, e));
+
+        let next_lock_id: u64 = env
+            .storage()
+            .persistent()
+            .get(&DataKey::NextLockId(user.clone()))
+            .unwrap_or(1);
+
+        if limit == 0 {
+            return Vec::new(&env);
+        }
+
+        let page_limit = limit.min(MAX_LOCK_PAGE_SIZE);
+        let current_time = env.ledger().timestamp();
+        let mut skipped: u32 = 0;
+        let mut page = Vec::new(&env);
+
+        for i in 1..next_lock_id {
+            if let Some(lock) = env
+                .storage()
+                .persistent()
+                .get::<_, LockEntry>(&DataKey::Lock(user.clone(), i))
+            {
+                if !lock.withdrawn && current_time >= lock.unlock_time {
+                    if skipped < offset {
+                        skipped += 1;
+                        continue;
+                    }
+                    page.push_back(lock);
+                    if page.len() >= page_limit {
+                        break;
+                    }
+                }
+            }
+        }
+        page
+    }
+
+    /// Returns the number of matured, non-withdrawn locks for a user.
+    ///
+    /// This is a convenience helper that lets mobile clients display a badge
+    /// count (e.g. "3 locks ready to withdraw") without fetching the full
+    /// lock list.
+    ///
+    /// # Arguments
+    ///
+    /// * `env` - The Soroban environment
+    /// * `user` - The address of the lock owner
+    ///
+    /// # Returns
+    ///
+    /// A `u32` count of matured, non-withdrawn locks.
+    ///
+    /// # Authorization
+    ///
+    /// No authorization required (read-only operation).
+    ///
+    /// # Panics
+    ///
+    /// - If the contract has not been initialized
+    pub fn get_matured_lock_count(env: Env, user: Address) -> u32 {
+        Self::assert_initialized(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
+        Self::try_migrate(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
+        Self::assert_supported_storage_version(&env)
+            .unwrap_or_else(|e| panic_with_error!(&env, e));
+
+        let next_lock_id: u64 = env
+            .storage()
+            .persistent()
+            .get(&DataKey::NextLockId(user.clone()))
+            .unwrap_or(1);
+
+        let current_time = env.ledger().timestamp();
+        let mut count: u32 = 0;
+
+        for i in 1..next_lock_id {
+            if let Some(lock) = env
+                .storage()
+                .persistent()
+                .get::<_, LockEntry>(&DataKey::Lock(user.clone(), i))
+            {
+                if !lock.withdrawn && current_time >= lock.unlock_time {
+                    count += 1;
+                }
+            }
+        }
+        count
+    }
+
+    /// Returns the total amount of matured, non-withdrawn lock funds for a user.
+    ///
+    /// This helper provides the aggregate withdrawable lock balance, allowing
+    /// mobile clients to display "Total withdrawable: X" without fetching and
+    /// summing individual lock entries.
+    ///
+    /// # Arguments
+    ///
+    /// * `env` - The Soroban environment
+    /// * `user` - The address of the lock owner
+    ///
+    /// # Returns
+    ///
+    /// An `i128` sum of all matured, non-withdrawn lock amounts.
+    ///
+    /// # Authorization
+    ///
+    /// No authorization required (read-only operation).
+    ///
+    /// # Panics
+    ///
+    /// - If the contract has not been initialized
+    pub fn get_matured_balance(env: Env, user: Address) -> i128 {
+        Self::assert_initialized(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
+        Self::try_migrate(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
+        Self::assert_supported_storage_version(&env)
+            .unwrap_or_else(|e| panic_with_error!(&env, e));
+
+        let next_lock_id: u64 = env
+            .storage()
+            .persistent()
+            .get(&DataKey::NextLockId(user.clone()))
+            .unwrap_or(1);
+
+        let current_time = env.ledger().timestamp();
+        let mut total: i128 = 0;
+
+        for i in 1..next_lock_id {
+            if let Some(lock) = env
+                .storage()
+                .persistent()
+                .get::<_, LockEntry>(&DataKey::Lock(user.clone(), i))
+            {
+                if !lock.withdrawn && current_time >= lock.unlock_time {
+                    total += lock.amount;
+                }
+            }
+        }
+        total
     }
 
     // -----------------------------------------------------------------------
@@ -860,24 +1965,43 @@ impl SavingsVault {
 
     /// Returns the admin address set during initialization.
     pub fn get_admin(env: Env) -> Address {
-        Self::assert_initialized(&env);
-        env.storage().instance().get(&DataKey::Admin).unwrap()
+        Self::assert_initialized(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
+        env.storage()
+            .instance()
+            .get(&DataKey::Admin)
+            .unwrap_or_else(|| panic_with_error!(&env, ContractError::RequiredStorageEntryMissing))
     }
 
     /// Transfers admin privileges to a new address. Only the current admin
     /// can call this.
     pub fn transfer_admin(env: Env, admin: Address, new_admin: Address) {
-        Self::assert_initialized(&env);
+        Self::assert_initialized(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
         admin.require_auth();
-        Self::assert_admin(&env, &admin);
+        Self::assert_admin(&env, &admin).unwrap_or_else(|e| panic_with_error!(&env, e));
 
-        let old_admin: Address = env.storage().instance().get(&DataKey::Admin).unwrap();
+        if admin == new_admin {
+            panic_with_error!(&env, ContractError::CannotTransferAdminToSelf)
+        }
+        if new_admin == env.current_contract_address() {
+            panic_with_error!(&env, ContractError::CannotTransferAdminToContractAddress)
+        }
+
+        let old_admin: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::Admin)
+            .unwrap_or_else(|| panic_with_error!(&env, ContractError::RequiredStorageEntryMissing));
         env.storage().instance().set(&DataKey::Admin, &new_admin);
 
         let topics = (Symbol::new(&env, "transfer_admin"), old_admin.clone());
         env.events().publish(topics, new_admin.clone());
 
-        log!(&env, "Admin transferred from {} to {}", old_admin, new_admin);
+        log!(
+            &env,
+            "Admin transferred from {} to {}",
+            old_admin,
+            new_admin
+        );
     }
 }
 
@@ -887,6 +2011,3 @@ impl SavingsVault {
 
 #[cfg(test)]
 mod test;
-#[cfg(test)]
-#[path = "test/test_helpers.rs"]
-mod test_helpers;

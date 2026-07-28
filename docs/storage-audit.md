@@ -31,7 +31,7 @@ The contract uses two Soroban storage layers:
 | Key | Type | Default | Initialization | Mutation Points | Invariants |
 |-----|------|---------|----------------|-----------------|------------|
 | `DataKey::Balance(Address)` | `i128` | `0` (implicit) | Not set at initialization | `deposit`, `withdraw`, `lock_funds` | - ≥ 0 at all times; represents available balance |
-| `DataKey::Locks(Address)` | `Vec<LockEntry>` | Empty `Vec` | Not set at initialization | `lock_funds`, `withdraw`, `withdraw_lock` | - All `LockEntry.amount` ≥ 0; `LockEntry.id` unique for user; `LockEntry.unlock_time` ≥ 0 |
+| `DataKey::Lock(Address, u64)` | `LockEntry` | None | Not set at initialization | `lock_funds`, `withdraw`, `withdraw_lock` | - `LockEntry.amount` ≥ 0; `LockEntry.id` unique for user; `LockEntry.unlock_time` ≥ 0 |
 | `DataKey::NextLockId(Address)` | `u64` | `1` (implicit) | Not set at initialization | `lock_funds` | - Strictly increasing (monotonic); never decreases |
 
 ---
@@ -49,9 +49,9 @@ This section maps each storage key to the functions that modify it:
 | Function | Modifies |
 |----------|----------|
 | `deposit` | `Balance(user)` |
-| `withdraw` | `Balance(user)`, `Locks(user)` |
-| `lock_funds` | `Balance(user)`, `Locks(user)`, `NextLockId(user)` |
-| `withdraw_lock` | `Locks(user)` |
+| `withdraw` | `Balance(user)`, `Lock(user, id)` |
+| `lock_funds` | `Balance(user)`, `Lock(user, id)`, `NextLockId(user)` |
+| `withdraw_lock` | `Lock(user, id)` |
 
 ---
 

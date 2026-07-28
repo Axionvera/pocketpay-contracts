@@ -53,11 +53,10 @@ Emitted when a user withdraws available tokens from their vault.
 |----------|----------|------------------------------------------------|
 | topic[0] | Symbol   | `"withdraw"`                                   |
 | topic[1] | Address  | User address                                   |
-| payload  | `(i128, i128, i128)` | `(amount, new_balance, new_locked)` |
+| payload  | `(i128, i128)` | `(amount, new_balance)`                |
 
 - `amount`: Tokens withdrawn in this transaction
 - `new_balance`: User's available balance after withdrawal
-- `new_locked`: User's total locked balance after withdrawal
 
 ---
 

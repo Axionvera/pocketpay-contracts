@@ -271,35 +271,42 @@ fn test_large_lock_keeps_available_and_locked_consistent() {
     assert!(locked >= 0, "locked balance must not be negative");
 }
 
-/// A withdrawal that spans both available and matured locked funds at very
-/// large scale must reduce both balances correctly and never leave a negative
-/// remainder.
-#[test]
-fn test_large_withdraw_spans_available_and_matured_locks() {
-    let (env, contract_id, client) = setup();
-    let (env, _admin, client, token_client, token_admin) =
-        test_token(env, contract_id.clone(), client);
-    let user = Address::generate(&env);
-    set_ledger_timestamp(&env, 1_000);
+/// A withdrawal of only the available balance at very large scale must succeed
+    /// and never leave a negative remainder. Matured locks must be withdrawn
+    /// separately via `withdraw_lock`.
+    #[test]
+    fn test_large_withdraw_spans_available_and_matured_locks() {
+        let (env, contract_id, client) = setup();
+        let (env, _admin, client, token_client, token_admin) =
+            test_token(env, contract_id.clone(), client);
+        let user = Address::generate(&env);
+        set_ledger_timestamp(&env, 1_000);
 
-    let total_deposited = I128_MAX_HALF;
-    token_admin.mint(&user, &total_deposited);
-    client.deposit(&user, &total_deposited);
+        let total_deposited = I128_MAX_HALF;
+        token_admin.mint(&user, &total_deposited);
+        client.deposit(&user, &total_deposited);
 
-    // Lock half, mature it immediately.
-    let lock_amount = total_deposited / 2;
-    let unlock_time = env.ledger().timestamp() + 10_000;
-    client.lock_funds(&user, &lock_amount, &unlock_time);
+        // Lock half, mature it immediately.
+        let lock_amount = total_deposited / 2;
+        let unlock_time = env.ledger().timestamp() + 10_000;
+        let lock_id = client.lock_funds(&user, &lock_amount, &unlock_time);
 
-    // Advance time so the lock matures.
-    set_ledger_timestamp(&env, unlock_time + 1);
+        // Advance time so the lock matures.
+        set_ledger_timestamp(&env, unlock_time + 1);
 
-    // Withdraw everything: available + matured lock.
-    client.withdraw(&user, &total_deposited);
+        // Withdraw only the available balance (half of deposited).
+        let available = total_deposited - lock_amount;
+        client.withdraw(&user, &available);
 
-    assert_eq!(client.get_balance(&user), 0);
-    assert_eq!(client.get_locked_balance(&user), 0);
-}
+        assert_eq!(client.get_balance(&user), 0);
+        assert_eq!(client.get_locked_balance(&user), lock_amount);
+
+        // Withdraw matured lock via withdraw_lock.
+        client.withdraw_lock(&user, &lock_id);
+
+        assert_eq!(client.get_balance(&user), 0);
+        assert_eq!(client.get_locked_balance(&user), 0);
+    }
 
 // ---------------------------------------------------------------------------
 // Boundary value documentation

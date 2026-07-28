@@ -77,6 +77,8 @@ cargo build --release --target wasm32-unknown-unknown
 
 The artifact is written under `target/wasm32-unknown-unknown/release/`. Run all three commands before opening a pull request. Logic changes must include tests for the changed behavior and relevant failure and edge cases.
 
+Follow the [test naming convention](docs/testing.md) when adding or updating tests under `contracts/savings_vault/src/test/`.
+
 ## Pull request expectations
 
 - Keep each pull request focused on one issue or related change.
@@ -121,4 +123,4 @@ Changes involving balances, access control, signatures, storage, upgrades, or ex
 - Report vulnerabilities privately to the maintainers rather than publishing exploitable details in a public issue.
 
 Before pushing, review the staged diff for credentials and unrelated files.
-- Review the [security checklist](docs/security-checklist.md) for auth, storage, token transfer, locks, and admin behavior.
+- Review the [contributor security checklist](docs/security-checklist.md) covering accounting invariants, lock state, token transfer atomicity, authorisation, storage migration, event compatibility, error codes, and required tests.

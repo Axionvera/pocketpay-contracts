@@ -26,7 +26,10 @@ fn op_sequence_strategy() -> impl Strategy<Value = StdVec<FeeOp>> {
             (1i128..=1_000_000i128).prop_map(FeeOp::Deposit),
             (1i128..=500_000i128).prop_map(FeeOp::Withdraw),
             ((1i128..=500_000i128), (1_001u64..=50_000u64)).prop_map(|(amount, unlock_time)| {
-                FeeOp::Lock { amount, unlock_time }
+                FeeOp::Lock {
+                    amount,
+                    unlock_time,
+                }
             }),
         ],
         1..=20usize,
