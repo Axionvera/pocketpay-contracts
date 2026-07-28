@@ -26,12 +26,17 @@ For remaining constraints and open risks, see [Known Limitations](#known-limitat
 
 ## Documentation
 
+- [Contributor Security Checklist](docs/security-checklist.md) — practical PR-review checklist covering balance/accounting invariants, lock state, token transfer atomicity, authorisation, storage migration, event compatibility, error codes, and required tests for any vault contract change.
 - [Contract Release Checklist](docs/contract-release-checklist.md) — repeatable pre-release checklist for maintainers covering tests, storage, events, errors, documentation, SDK and mobile compatibility, and audit notes.
 - [Storage TTL Review](docs/storage-ttl.md) — notes on the current instance and persistent storage usage, TTL-sensitive entries, and renewal expectations for the vault contract.
 
 ## Security Considerations
 
 > **This contract is for educational and testnet use.** Review the following before any mainnet deployment.
+
+Contributors changing contract logic should work through the
+[Contributor Security Checklist](docs/security-checklist.md) before opening a
+PR; maintainers use it during review.
 
 **[Audit Evidence Index](docs/audit-evidence-index.md)**: A comprehensive directory linking all security-relevant vault documentation, tests, threat models, and known audit gaps.
 
@@ -257,6 +262,7 @@ stellar-pocketpay-contracts/
     ├── state-changing-invocations.md   # State-changing function CLI examples
     ├── pause-design.md                 # Pause / emergency stop research
     ├── admin-pause-threat-model.md     # Emergency pause and admin misuse threat model
+    ├── security-checklist.md           # Contributor security checklist for PR review
     ├── storage-migration.md            # Storage versioning and migration guide
     ├── storage-ttl.md                  # Storage TTL guide
     ├── testing.md                      # Test naming conventions
@@ -277,6 +283,7 @@ stellar-pocketpay-contracts/
 - [Event Privacy Review](docs/event-privacy-review.md) — Event privacy risks, minimum payload guidance, data exposure boundaries, and indexing utility guidelines.
 - [Ledger Time and Lock Maturity Guide](docs/ledger-time-locks.md) — How the contract uses ledger timestamps for time-locking, maturity validation, boundary conditions, and testing.
 - [Contract Upgradeability](docs/upgradeability.md) — Current upgrade posture (non-upgradeable), trust model, storage migration impact, and future options.
+- **[Contributor Security Checklist](docs/security-checklist.md)** — Practical PR-review checklist for any vault contract change: balance/accounting invariants, lock state, token transfer atomicity, authorisation, storage migration, event compatibility, error codes, and required test coverage.
 - **[Contract Release Checklist](docs/contract-release-checklist.md)** — Repeatable checklist to run before releasing or redeploying the contract: tests, storage compatibility, event and error compatibility, documentation, SDK and mobile compatibility, audit notes, and testnet deployment verification.
 - [Audit Preparation Checklist](docs/audit-preparation.md) — Checklist of documentation, tests, threat model, and deployment details required before any external security review or audit.
 - [Emergency Pause and Admin Misuse Threat Model](docs/admin-pause-threat-model.md) — Threat scenarios, withdrawal impact, recovery assumptions, mitigations, limitations, and residual risks for admin-controlled pause mechanisms.
