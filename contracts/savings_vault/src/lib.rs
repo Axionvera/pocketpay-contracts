@@ -834,10 +834,10 @@ impl SavingsVault {
     /// - [`ContractError::TokenNotConfigured`] - If the token address is missing.
     /// - [`ContractError::RequiredStorageEntryMissing`] - If the admin address is missing.
     pub fn get_config(env: Env) -> ContractConfig {
-        Self::assert_initialized(&env).unwrap_or_else(|e| env.error_contract(e));
-        Self::try_migrate(&env).unwrap_or_else(|e| env.error_contract(e));
+        Self::assert_initialized(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
+        Self::try_migrate(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
         Self::assert_supported_storage_version(&env)
-            .unwrap_or_else(|e| env.error_contract(e));
+            .unwrap_or_else(|e| panic_with_error!(&env, e));
 
         let paused: bool = env
             .storage()
@@ -863,13 +863,13 @@ impl SavingsVault {
                 .storage()
                 .instance()
                 .get(&DataKey::Token)
-                .unwrap_or_else(|| env.error_contract(ContractError::TokenNotConfigured)),
+                .unwrap_or_else(|| panic_with_error!(&env, ContractError::TokenNotConfigured)),
             admin: env
                 .storage()
                 .instance()
                 .get(&DataKey::Admin)
                 .unwrap_or_else(|| {
-                    env.error_contract(ContractError::RequiredStorageEntryMissing)
+                    panic_with_error!(&env, ContractError::RequiredStorageEntryMissing)
                 }),
             version: soroban_sdk::String::from_str(&env, "0.1.0"),
             paused: effective_paused,
