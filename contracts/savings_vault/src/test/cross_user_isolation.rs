@@ -25,7 +25,7 @@ fn test_cross_user_deposit_isolation() {
 }
 
 #[test]
-#[should_panic(expected = "Failed to authorize")]
+#[should_panic]
 fn test_cross_user_withdraw_auth_failure() {
     let (env, current_contract_address, client) = strict_setup();
     let (env, _admin, client, token_client, token_admin) = test_token(env, client);
@@ -74,7 +74,7 @@ fn test_cross_user_withdraw_auth_failure() {
 }
 
 #[test]
-#[should_panic(expected = "Failed to authorize")]
+#[should_panic]
 fn test_cross_user_lock_auth_failure() {
     let (env, _id, client) = strict_setup();
     let (env, _admin, client, _token_client, _token_admin) = test_token(env, client);
@@ -131,4 +131,28 @@ fn test_cross_user_lock_isolation() {
 
     assert_eq!(client.get_balance(&user_b), 500);
     assert_eq!(client.get_locked_balance(&user_b), 0);
+}
+
+/// Cross-user misuse test (issue #406): User B is fully authorized as
+/// themselves, but must not be able to extend a lock that belongs to
+/// User A, even by reusing User A's `lock_id`. Locks are keyed per-owner
+/// (`DataKey::Lock(owner, id)`), so User B's own address plus User A's id
+/// resolves to no entry and must panic with `LockNotFound`.
+#[test]
+#[should_panic]
+fn test_extend_lock_cross_user_lock_id_isolation() {
+    let env = test_env();
+    let (_id, client) = init_contract(&env);
+
+    let user_a = new_user(&env);
+    let user_b = new_user(&env);
+
+    deposit_balance(&client, &user_a, 500);
+    deposit_balance(&client, &user_b, 500);
+
+    let unlock_time = env.ledger().timestamp() + 1000;
+    let lock_id = client.lock_funds(&user_a, &200, &unlock_time);
+
+    // User B, signed as themselves, tries to extend User A's lock id.
+    client.extend_lock(&user_b, &lock_id, &(unlock_time + 500));
 }

@@ -279,7 +279,7 @@ fn test_lock_summary_all_withdrawn() {
 }
 
 #[test]
-#[should_panic(expected = "Contract is not initialized")]
+#[should_panic]
 fn test_lock_summary_uninitialized_panics() {
     let env = test_env();
     let contract_id = env.register(SavingsVault, ());

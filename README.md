@@ -1,66 +1,25 @@
 # Stellar PocketPay — Savings Vault Contract
 
 [CHANGELOG](CHANGELOG.md)
-
-## Project Status and Scope
-
-This project is currently intended for development, learning, and Stellar testnet usage. It is **not production-ready or mainnet-ready**.
-
-The savings vault now uses internal balance tracking and real token transfers: `deposit` transfers tokens from the user to the contract, `withdraw` transfers tokens from the contract to the user, and locking operations manage which tokens are available to withdraw.
-
-See [Known Limitations](#known-limitations) for other current constraints.
-
-## Release Readiness
-
-Quick maturity summary for casual visitors. This contract is **experimental** and meant for educational / testnet use — do not treat it as production software.
-
-| Area | Status | Notes |
-| --- | --- | --- |
-| Maturity | Experimental | Development and learning project; APIs and behaviour may change |
-| Network target | Testnet only | Deploy and invoke on Stellar **testnet**; mainnet is not supported |
-| External audit | Not audited | No third-party security audit report is published; see [audit readiness](docs/audit-readiness.md) |
-| Real token transfers | Supported on testnet | SAC-backed `deposit` / `withdraw` / `withdraw_lock` move configured tokens; not a claim of mainnet safety |
-| Production / mainnet | Not ready | Not production-ready; missing items include structured errors, multi-sig admin, and an upgrade path |
-
-For remaining constraints and open risks, see [Known Limitations](#known-limitations).
-
-## Documentation
-
-- [Storage TTL Review](docs/storage-ttl.md) — notes on the current instance and persistent storage usage, TTL-sensitive entries, and renewal expectations for the vault contract.
-
 ## Security Considerations
 
 > **This contract is for educational and testnet use.** Review the following before any mainnet deployment.
 
 See the [Admin Role](docs/admin-role.md) document for details on what the `initialize(admin)` value records, what the admin can and cannot do today, and future admin design considerations.
-See the [Emergency Pause and Admin Misuse Threat Model](docs/admin-pause-threat-model.md) for malicious or compromised admin scenarios, withdrawal impact, recovery assumptions, mitigations, and residual risks.
-See the [Vault Fee Model](docs/vault-fee-model.md) document for clarification on fee assumptions, accounting implications, and user transparency requirements.
-See the [Vault Economic Assumptions and Fee Model Review](docs/economic-assumptions-review.md) for a consolidated look at fees, custody, lock-duration incentives, token behavior risk, admin power, and common user misconceptions.
+
+See the [Admin & Emergency Mechanism Threat Model](docs/admin-pause-threat-model.md) for a security analysis of malicious admin, compromised admin, accidental pause, and blocked-withdrawal scenarios, including mitigations and trust assumptions.
 
 ## Features
 
 | Function | Description |
-| --- | --- |
-| `initialize(admin, token)` | One-time setup; records the admin and token addresses |
+|---|---|
+| `initialize(admin)` | One-time setup; records the admin address |
 | `deposit(user, amount)` | Add funds to a user's vault |
 | `withdraw(user, amount)` | Remove funds from a user's vault |
-| `withdraw_lock(user, lock_id)` | Withdraw a specific matured lock entry |
 | `get_balance(user)` | Query available (unlocked) balance |
 | `lock_funds(user, amount, unlock_time)` | Lock funds until a Unix timestamp |
 | `get_locked_balance(user)` | Query locked balance |
-| `get_lock(user, lock_id)` | Read one lock record by ID |
-| `list_locks(user, offset, limit)` | Page through a user's lock records |
 | `can_withdraw(user)` | Check if locked funds are withdrawable |
-| `pause(admin, duration_secs)` | Activate emergency pause (blocks deposits/locks; withdrawals remain open) |
-| `unpause(admin)` | Deactivate an active pause |
-| `is_paused()` | Check whether the contract is currently paused |
-| `get_version()` | Query the deployed contract version |
-
-### Deposit and custody
-
-> **Deposits now transfer real tokens into the contract.** Calling `deposit` transfers the specified amount from the user to the contract, and calls `withdraw` transfer the specified amount from the contract to the user. The contract's internal balance tracking ensures withdrawals are limited to unlocked funds.
-
-The contract uses a Stellar Asset Contract (SAC) to manage token transfers, which is specified during contract initialization via the `token` parameter.
 
 ---
 
@@ -82,8 +41,6 @@ Install the following before you begin:
    ```bash
    rustup target add wasm32-unknown-unknown
    ```
-
-For detailed setup instructions, common issues, and troubleshooting, see the [Local Development Guide](docs/local-development.md).
 
 ---
 
@@ -136,8 +93,6 @@ cargo test
 
 All tests run natively (no WASM needed) using the Soroban SDK test utilities.
 
-For an in-depth reference on test structure, Soroban test fixtures, deterministic ledger time simulation, SAC token mocking, and failure scenario testing, see the **[Advanced Local Development and Testing Guide](docs/advanced-development-and-testing.md)**. For help with failing CI and reproducing errors locally, see the **[Test Reproduction Guide](docs/reproducing-test-failures.md)**.
-
 ---
 
 ## Task Runner
@@ -171,17 +126,16 @@ soroban keys address deployer
 
 Fund the account at [Stellar Friendbot](https://friendbot.stellar.org/?addr=YOUR_ADDRESS).
 
-3. Deploy the Contract
-
-Use the automated deployment script to build the release WASM and deploy it to the network. Pass your configured identity (e.g., `deployer`) as the first argument:
+### 3. Deploy the Contract
 
 ```bash
-./scripts/deploy-testnet.sh deployer
+soroban contract deploy \
+  --wasm target/wasm32-unknown-unknown/release/savings_vault.wasm \
+  --source deployer \
+  --network testnet
 ```
 
-The script will verify prerequisites, compile the contract, deploy it, and print your new Contract ID. Save the returned Contract ID — you'll need it to invoke functions.
-
-See the [deployment output example](docs/deployment-output-example.md) to learn what successful output looks like and which Contract ID value to copy.
+Save the returned **Contract ID** — you'll need it to invoke functions.
 
 ### 4. Initialize the Contract
 
@@ -192,11 +146,7 @@ soroban contract invoke \
   --network testnet \
   -- \
   initialize \
-  --admin deployer \
-  --token YOUR_SAC_TOKEN_ADDRESS
-```
-
-Replace `YOUR_SAC_TOKEN_ADDRESS` with the Stellar Asset Contract address the vault should custody.
+  --admin deployer
 ```
 
 ### 5. Invoke Functions
@@ -237,67 +187,15 @@ stellar-pocketpay-contracts/
         └── src/
             ├── lib.rs                  # Contract implementation
             └── test.rs                 # Unit tests
-└── docs/
-    ├── admin-role.md                   # Admin role documentation
-    ├── advanced-development-and-testing.md # Advanced dev & testing guide
-    ├── simulation-compatibility.md     # Per-function simulateTransaction reference
-    ├── reproducing-test-failures.md    # Local reproduction guide for failing tests
-    ├── accounting-invariants.md        # Formal accounting invariants
-    ├── api-reference.md                # Function naming conventions
-    ├── architecture.md                 # Architecture overview
-    ├── contract-id-handoff.md          # Contract ID handoff guide
-    ├── deployment-environments.md      # Deployment environment config
-    ├── events.md                       # Event schema documentation
-    ├── event-privacy-review.md         # Smart contract event privacy review
-    ├── state-machine.md                # Vault state machine documentation
-    ├── pause-design.md                 # Pause / emergency stop research
-    ├── admin-pause-threat-model.md     # Emergency pause and admin misuse threat model
-    ├── storage-migration.md            # Storage versioning and migration guide
-    ├── storage-ttl.md                  # Storage TTL guide
-    ├── testing.md                      # Test naming conventions
-    ├── ledger-time-locks.md            # Ledger time and lock maturity guide
-    ├── troubleshooting.md              # Troubleshooting guide
-    ├── upgrade-strategy.md             # Upgrade strategy research
-    └── withdrawal-queue-design.md      # Withdrawal queue design note
 ```
 
 ---
-
 ## Documentation
 
-- **[Advanced Local Development and Testing Guide](docs/advanced-development-and-testing.md)** — Comprehensive guide for building, running, extending, and debugging advanced contract tests, Soroban test fixtures, deterministic ledger time, SAC token mocking, and failure scenario rollbacks.
-- **[Contract Simulation Compatibility](docs/simulation-compatibility.md)** — Per-function reference for SDK integrators: which calls need a signature, which are safe to simulate speculatively, matured-withdrawal prediction via read helpers, and deterministic error/unsupported-call fixtures.
-- **[Audit Evidence Index](docs/audit-evidence-index.md)** — Comprehensive index of security documentation, invariants, test coverage, and threat models for auditors.
-- [Event Privacy Review](docs/event-privacy-review.md) — Event privacy risks, minimum payload guidance, data exposure boundaries, and indexing utility guidelines.
-- [Ledger Time and Lock Maturity Guide](docs/ledger-time-locks.md) — How the contract uses ledger timestamps for time-locking, maturity validation, boundary conditions, and testing.
-- [Contract Upgradeability](docs/upgradeability.md) — Current upgrade posture (non-upgradeable), trust model, storage migration impact, and future options.
-- [Audit Preparation Checklist](docs/audit-preparation.md) — Checklist of documentation, tests, threat model, and deployment details required before any external security review or audit.
-- [Emergency Pause and Admin Misuse Threat Model](docs/admin-pause-threat-model.md) — Threat scenarios, withdrawal impact, recovery assumptions, mitigations, limitations, and residual risks for admin-controlled pause mechanisms.
-- [Vault Fee Model](docs/vault-fee-model.md) — Clarification of no-fee assumptions, accounting implications, user transparency requirements, design rationale, and framework for potential future fee support.
-- [Vault Economic Assumptions and Fee Model Review](docs/economic-assumptions-review.md) — Consolidated review of fees, custody, lock-duration incentives, token behavior risk, admin power, and common user misconceptions.
-- [Storage Audit](docs/storage-audit.md) — Comprehensive details on the contract's storage layout, keys, mutating functions, and security invariants.
-- [Storage Migration Guide](docs/storage-migration.md) — Safe storage versioning and migration strategy for future contract upgrades.
-- [Deployment Environments](docs/deployment-environments.md) — Network configuration for local, testnet, and future mainnet, including RPC URLs, identities, environment variables, and deployment commands.
-- [Contract Error Reference](docs/error-codes.md) - Current savings vault failure conditions and guidance for SDK and mobile callers.
-- [SDK Error Mapping Guide](docs/sdk-error-mapping-guide.md) — Maps contract errors to SDK handling expectations with user-facing and developer-facing examples.
-- [State Machine Documentation](docs/state-machine.md) — Contract lifecycle, user account states, valid and invalid transitions, and error states.
 - [Architecture Documentation](docs/architecture.md) – Overview of project structure, state management, storage, SDK integration, and future extension points.
-- [API Reference: Function Naming Conventions](docs/api-reference.md) — Naming convention for `SavingsVault`'s public functions (commands, single-value queries, collection queries, capability and state queries), with the full function list and category for each.
-- [SDK ↔ Contract Sequence Diagrams](docs/sdk-contract-sequence.md) – Mermaid sequence diagrams for balance query, deposit, withdraw, and error paths across mobile, SDK, Soroban RPC, and the vault contract.
-- [Event Schema Documentation](docs/events.md) – Overview of event names, topics, payload schemas, and JSON examples for vault actions.
-- [Vault Contract ID Handoff](docs/contract-id-handoff.md) - How to pass a deployed vault contract ID safely to SDK configuration and the mobile app.
-- [Documentation Style Guide](docs/docs-style-guide.md) — Conventions for Testnet wording, avoiding production claims, placeholders, command formatting, and linking related docs.
-- [Sample Vault Interaction Walkthrough](docs/walkthrough.md) — End-to-end deploy, deposit, lock, query, and withdraw example with expected state changes and current limitations.
-- [CLI Smoke Test Guide](docs/cli-smoke-test.md) — Quick post-deployment verification flow using the Soroban CLI to confirm every contract function responds correctly on testnet or a local sandbox.
-- [Balance Reconciliation Design Note](docs/balance-reconciliation.md) — How internal accounting reconciles with real token balances under the current SAC integration, including failure modes and invariants tests must enforce.
-- [Formal Accounting Invariants](docs/accounting-invariants.md) - Audit-oriented invariants for available balances, locks, withdrawals, token custody, user isolation, failed operations, and identified test gaps.
-- [Version Metadata](docs/version-metadata.md) — How the `get_version` read-only function works, how SDKs and deployment scripts should use it, and how to bump the version.
-- [Lock Read Helpers](docs/lock-read-helpers.md) — Response shapes and pagination for `get_lock` and `list_locks`.
-- [Test Coverage Summary](docs/test-coverage.md) — Maps initialization, deposit, withdrawal, and locking behaviours to the tests that cover them, plus known test gaps.
-- [Test Reproduction Guide](docs/reproducing-test-failures.md) — How to reproduce failing contract tests and CI errors on your local machine.
-- [Failure Mode Catalogue](docs/failure-mode-catalogue.md) — Comprehensive list of all contract failure modes with expected behavior and test coverage.
-- [Test Naming Conventions](docs/testing.md) — Naming pattern for unit tests under `contracts/savings_vault/src/test/`, with good/bad examples and coverage guidance.
-- [Withdrawal Queue Design Note](docs/withdrawal-queue-design.md) — Design covering pending withdrawal state, queue identifiers, cancellation, maturity, storage and accounting implications, and scope decision.
+- [Admin Role](docs/admin-role.md) – Details on the admin address, current capabilities, and future design considerations.
+- [Admin & Emergency Mechanism Threat Model](docs/admin-pause-threat-model.md) – Security analysis of malicious admin, compromised admin, accidental pause, and blocked-withdrawal scenarios.
+- [Failure Mode Catalogue](docs/failure-mode-catalogue.md) – Summary of safe-failure behavior, expected errors, affected functions, and related tests for vault operations.
 
 ---
 
@@ -314,29 +212,19 @@ stellar-pocketpay-contracts/
 - Withdrawals exceeding the available balance are rejected.
 - Lock amounts exceeding the available balance are rejected.
 - Unlock times in the past are rejected.
-- Pause duration of zero is rejected.
 
 ### Re-initialization Protection
 - `initialize()` can only be called once; subsequent calls panic.
-
-### Emergency Pause
-- The admin can activate a time-bounded pause via `pause(admin, duration_secs)`.
-- During a pause, `deposit` and `lock_funds` are blocked; `withdraw` and `withdraw_lock` remain available.
-- The pause auto-expires after `duration_secs` seconds (auto-unpause).
-- Only the admin can pause or unpause (single admin key; multi-sig recommended for mainnet).
 
 ### Storage Design
 - User balances are stored in **persistent** storage (survives ledger expiry longer).
 - Admin and initialization flags use **instance** storage (tied to contract lifetime).
 
 ### Known Limitations
-- **No admin recovery**: There is no mechanism for the admin to recover or migrate user funds.
-- **No upgrade mechanism**: The contract does not implement `upgrade()`. See
-  [docs/upgrade-strategy.md](docs/upgrade-strategy.md) for research into possible upgrade paths.
-- **No custom error enum**: Contract uses panic strings instead of a structured `#[contracterror]` enum for off-chain callers. See [docs/error-codes.md](docs/error-codes.md).
-- **No external audit**: No third-party security audit report is published for this repository. See [docs/audit-readiness.md](docs/audit-readiness.md).
-- **Single-key admin**: Pause and admin transfer rely on one address; multi-sig is recommended before any mainnet use.
-- **Operational TTL dependency**: Persistent storage entries must be extended manually; see [docs/storage-ttl.md](docs/storage-ttl.md).
+- **No real token transfers**: This contract tracks balances internally but does not yet integrate with the Stellar Asset Contract (SAC) for actual XLM/token transfers. A production version should call the token contract's `transfer()` function.
+- **Single unlock time**: Locking funds multiple times overwrites the previous unlock timestamp. A production version might use per-lock entries.
+- **No admin recovery**: There is no mechanism for the admin to recover or migrate funds.
+- **No upgrade mechanism**: The contract does not implement `upgrade()`. Consider adding this for mainnet.
 
 ---
 
@@ -346,16 +234,9 @@ stellar-pocketpay-contracts/
 - **Network passphrase**: `Test SDF Network ; September 2015`
 - **Friendbot** (free testnet XLM): `https://friendbot.stellar.org`
 - **Soroban Explorer**: [stellar.expert](https://stellar.expert/explorer/testnet)
-- Deployment help: see the [troubleshooting guide](docs/troubleshooting.md)
-  for common Soroban CLI, Friendbot, WASM, network, and invocation issues.
-  For a full breakdown of environment-specific configuration, see the
-  [deployment environments guide](docs/deployment-environments.md).
 - Always test thoroughly on testnet before considering mainnet deployment.
-- Monitor contract storage TTL and extend as needed using `soroban contract extend`. See the [Storage TTL Guide](docs/storage-ttl.md) for persistent vs. instance storage details and example commands.
+- Monitor contract storage TTL and extend as needed using `soroban contract extend`.
 
-## Documentation
-
-For a full list of CLI command examples and arguments for each contract method, check out the [Contract Invocation Examples](docs/invocation-examples.md).
 ---
 
 ## Contributing
@@ -368,6 +249,15 @@ See **[CONTRIBUTING.md](CONTRIBUTING.md)** for the full guide, including:
 - How to lint code (`cargo clippy -- -D warnings`)
 - How to run the test suite (`cargo test`)
 - PR checklist and commit message conventions
+
+Every pull request must use the **[PR template](.github/PULL_REQUEST_TEMPLATE.md)**, which requires:
+
+- A reference to the issue being fixed (`Closes #N`)
+- A list of contract functions added, modified, or removed
+- A description of tests added or updated
+- A security considerations section (with checklist for contract changes)
+- Confirmation that `cargo fmt --check`, `cargo clippy --tests -- -D warnings`, and `cargo test --workspace` all pass
+- CI green before requesting review
 
 Quick start:
 
@@ -382,4 +272,4 @@ cargo test
 
 ## License
 
-This project is licensed under the [MIT License](LICENSE).
+MIT

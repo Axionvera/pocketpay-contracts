@@ -60,9 +60,15 @@ This document explains what the `admin` address recorded by `initialize(admin)` 
 
 ## Security & trust implications
 
+<<<<<<< HEAD
+- Recording an admin address by itself does not grant powers; the contract's code determines those powers. At present, storing the admin is informational and preparatory only.
+- Users and auditors should treat the admin as inert unless/until admin-only functions are explicitly added and documented.
+- For a full security analysis of admin-controlled mechanisms, including malicious admin, compromised key, accidental pause, and blocked-withdrawal scenarios, see the [Admin & Emergency Mechanism Threat Model](admin-pause-threat-model.md).
+=======
 - The admin's powers are currently limited to transferring admin rights; they cannot access or modify user funds.
 - Users and auditors should review any future changes to the admin's capabilities carefully.
 - Multi-signature (multisig) administration is recommended for the admin key to reduce the risk of a single point of failure.
+>>>>>>> upstream/main
 
 ## Future design considerations
 

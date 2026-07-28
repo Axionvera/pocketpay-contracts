@@ -57,6 +57,16 @@ rustup target add wasm32v1-none
 
 ## Build, format, and test
 
+Run all local verification checks in one command:
+
+```bash
+make verify
+```
+
+This runs formatting checks, the full workspace test suite, and builds the optimized contract WASM. Run this command before opening a pull request.
+
+Alternatively, run checks individually:
+
 Check formatting:
 
 ```bash
@@ -77,19 +87,26 @@ Build the optimized contract WASM with the command used by this repository's CI 
 cargo build --release --target wasm32-unknown-unknown
 ```
 
-The artifact is written under `target/wasm32-unknown-unknown/release/`. Run all three commands before opening a pull request. Logic changes must include tests for the changed behavior and relevant failure and edge cases.
+The artifact is written under `target/wasm32-unknown-unknown/release/`. Logic changes must include tests for the changed behavior and relevant failure and edge cases.
 
 Follow the [test naming convention](docs/testing.md) when adding or updating tests under `contracts/savings_vault/src/test/`.
 
 ## Pull request expectations
 
+Every pull request must fill in the **[PR template](.github/PULL_REQUEST_TEMPLATE.md)** in full. The template requires:
+
+- **Issue reference** — a `Closes #N` line linking to the issue being resolved.
+- **Contract functions changed** — a table listing every function added, modified, or removed (write "none" for documentation-only PRs).
+- **Tests added or updated** — names and file paths of new or changed tests, with checkboxes confirming happy-path, failure, and boundary coverage.
+- **Security considerations** — a plain-language description of security impact plus the per-section security checklist for any PR that touches contract logic (see `docs/security-checklist.md`).
+- **Commands run** — confirmation that `cargo fmt --check`, `cargo clippy --tests -- -D warnings`, and `cargo test --workspace` all pass locally.
+- **CI status** — all CI checks green before requesting review.
+
+Additional guidance:
+
 - Keep each pull request focused on one issue or related change.
-- Reference the issue number, for example `Closes #3`.
-- Explain what changed and why.
-- Include test notes listing the commands run and their results.
-- Call out contract behavior, storage, authorization, or interface changes.
+- Explain what changed and why in the summary field.
 - Avoid changing contract logic in documentation-only pull requests.
-- Add or update tests for every logic change.
 - When changing storage layout, follow the storage change checklist in `docs/storage-change-checklist.md`.
 - When adding or upgrading dependencies, follow the dependency review checklist in `docs/dependency-review.md`.
 
@@ -125,4 +142,5 @@ Changes involving balances, access control, signatures, storage, upgrades, or ex
 - Report vulnerabilities privately to the maintainers rather than publishing exploitable details in a public issue.
 
 Before pushing, review the staged diff for credentials and unrelated files.
-- Review the [security checklist](docs/security-checklist.md) for auth, storage, token transfer, locks, and admin behavior.
+- Review the [contributor security checklist](docs/security-checklist.md) covering accounting invariants, lock state, token transfer atomicity, authorisation, storage migration, event compatibility, error codes, and required tests.
+- Review the [invariant test checklist](docs/invariant-test-checklist.md) to understand which invariants your change affects and ensure appropriate test coverage. This is especially important for changes affecting balances, locks, withdrawals, or authorization.

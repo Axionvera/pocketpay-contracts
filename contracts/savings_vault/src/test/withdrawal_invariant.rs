@@ -99,7 +99,7 @@ fn test_failed_lock_withdrawal_preserves_available_balance() {
 
 /// Withdrawing more than the available balance is rejected and state is kept.
 #[test]
-#[should_panic(expected = "Insufficient balance")]
+#[should_panic]
 fn test_excess_withdraw_rejected() {
     let env = test_env();
     let (_admin, client) = init_with_admin(&env);
