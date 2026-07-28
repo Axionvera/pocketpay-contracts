@@ -348,6 +348,8 @@ stellar-pocketpay-contracts/
 - **Operational TTL dependency**: Persistent storage entries must be extended manually; see [docs/storage-ttl.md](docs/storage-ttl.md).
 
 ---
+## Security & Audit
+- **Audit Readiness Review:** Detailed analysis of high-risk areas and test gaps can be found in [docs/AUDIT_READINESS.md](./docs/audit-readiness.md).
 
 ## Deployment Notes
 
