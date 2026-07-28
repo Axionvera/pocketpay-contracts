@@ -57,3 +57,17 @@ fn test_unauthorized_withdraw_lock_fails() {
     // Calling withdraw_lock without authorized signer must panic
     client.withdraw_lock(&user_a, &1);
 }
+
+/// Test 5: An unauthorized `extend_lock` attempt fails when authorization is
+/// missing (issue #406 — authorisation boundary audit).
+#[test]
+#[should_panic]
+fn test_unauthorized_extend_lock_fails() {
+    let env = Env::default();
+    let contract_id = env.register(SavingsVault, ());
+    let client = SavingsVaultClient::new(&env, &contract_id);
+    let user_a = Address::generate(&env);
+
+    // Calling extend_lock without authorized signer must panic
+    client.extend_lock(&user_a, &1, &5_000);
+}

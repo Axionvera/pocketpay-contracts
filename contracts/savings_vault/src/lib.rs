@@ -498,9 +498,9 @@ impl SavingsVault {
     /// uses for deposits and withdrawals.
     ///
     /// # Authorisation Rules
-    /// - **Required Signer:** `user` (enforced via `user.require_auth()`).
-    /// - **Caller Expectation:** The vault owner depositing funds for themselves.
-    /// - **Known Assumptions:** Arbitrary accounts cannot deposit on behalf of unconsenting users.
+    /// - **Required Signer:** None. This is a public read-only query.
+    /// - **Caller Expectation:** Any account, indexer, or client may call this.
+    /// - **Known Assumptions:** The token address is not sensitive; exposing it cannot affect fund safety.
     ///
     /// # Arguments
     ///
@@ -591,16 +591,9 @@ impl SavingsVault {
     /// early restoration of normal operations after an incident is resolved.
     ///
     /// # Authorisation Rules
-    /// - **Required Signer:** `user` (enforced via `user.require_auth()`).
-    /// - **Caller Expectation:** The vault owner depositing funds for themselves.
-    /// - **Known Assumptions:** Arbitrary accounts cannot deposit on behalf of unconsenting users.
-    ///
-    /// ## Amount Normalisation & Units
-    /// * **Units:** `amount` is specified as an integer `i128` representing raw atomic base units
-    ///   (e.g., 1 stroop for XLM, where 1 XLM = 10,000,000 stroops).
-    /// * **Minimum Amount:** Must be strictly greater than zero (`amount >= 1` atomic unit).
-    /// * **Precision:** Determined by the configured Stellar Asset Contract (SAC) token decimals
-    ///   (typically 7 decimals for native XLM). Fractional values smaller than 1 atomic unit are not supported.
+    /// - **Required Signer:** `admin` (enforced via `admin.require_auth()`).
+    /// - **Caller Expectation:** Only the currently stored admin address.
+    /// - **Known Assumptions:** A non-admin signer for `admin` still fails `assert_admin`.
     ///
     /// # Arguments
     ///
