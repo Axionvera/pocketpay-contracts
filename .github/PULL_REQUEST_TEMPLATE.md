@@ -1,5 +1,12 @@
 # Pull Request
 
+<!-- Before filling this in, complete the Contributor Self-Review Template
+     (docs/self-review-template.md) — behaviour, tests, CI, security, edge
+     cases, and docs. Fixing gaps it finds is faster than a reviewer finding
+     them. -->
+
+- [ ] I completed the [Contributor Self-Review Template](../docs/self-review-template.md) before opening this PR.
+
 ## Issue Reference
 
 Closes #<!-- issue number -->

@@ -99,6 +99,8 @@ Follow the [test naming convention](docs/testing.md) when adding or updating tes
 
 ## Pull request expectations
 
+Before opening a pull request, fill in the **[Contributor Self-Review Template](docs/self-review-template.md)** — it covers behaviour, tests, CI, security, edge cases, and docs impact, and is meant to catch requirement gaps yourself before a reviewer does.
+
 Every pull request must fill in the **[PR template](.github/PULL_REQUEST_TEMPLATE.md)** in full. The template requires:
 
 - **Issue reference** — a `Closes #N` line linking to the issue being resolved.
