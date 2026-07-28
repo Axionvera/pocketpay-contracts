@@ -256,6 +256,7 @@ stellar-pocketpay-contracts/
     ├── storage-migration.md            # Storage versioning and migration guide
     ├── storage-ttl.md                  # Storage TTL guide
     ├── testing.md                      # Test naming conventions
+    ├── threat-model.md                  # Vault misuse threat model
     ├── ledger-time-locks.md            # Ledger time and lock maturity guide
     ├── troubleshooting.md              # Troubleshooting guide
     ├── upgrade-strategy.md             # Upgrade strategy research
@@ -274,6 +275,7 @@ stellar-pocketpay-contracts/
 - [Contract Upgradeability](docs/upgradeability.md) — Current upgrade posture (non-upgradeable), trust model, storage migration impact, and future options.
 - [Audit Preparation Checklist](docs/audit-preparation.md) — Checklist of documentation, tests, threat model, and deployment details required before any external security review or audit.
 - [Emergency Pause and Admin Misuse Threat Model](docs/admin-pause-threat-model.md) — Threat scenarios, withdrawal impact, recovery assumptions, mitigations, limitations, and residual risks for admin-controlled pause mechanisms.
+- [Vault Misuse Threat Model](docs/threat-model.md) — Assets, trust assumptions, and misuse scenarios covering users, malicious callers, compromised keys, incorrect contract IDs, lock manipulation, misleading UI, and future SAC transfer risks.
 - [Vault Fee Model](docs/vault-fee-model.md) — Clarification of no-fee assumptions, accounting implications, user transparency requirements, design rationale, and framework for potential future fee support.
 - [Vault Economic Assumptions and Fee Model Review](docs/economic-assumptions-review.md) — Consolidated review of fees, custody, lock-duration incentives, token behavior risk, admin power, and common user misconceptions.
 - [Storage Audit](docs/storage-audit.md) — Comprehensive details on the contract's storage layout, keys, mutating functions, and security invariants.
