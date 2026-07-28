@@ -144,7 +144,8 @@ soroban contract invoke \
   --network testnet \
   -- \
   initialize \
-  --admin deployer
+  --admin deployer \
+  --token YOUR_TOKEN_ADDRESS
 ```
 
 ### 5. Invoke Functions
@@ -174,23 +175,37 @@ soroban contract invoke \
 
 ## Project Structure
 
-```
+```text
 stellar-pocketpay-contracts/
 ├── Cargo.toml                          # Workspace root
 ├── .gitignore
 ├── README.md
+├── CHANGELOG.md
+├── CONTRIBUTING.md
+├── Makefile
+├── docs/
+│   ├── architecture.md                 # Architecture overview
+│   ├── admin-role.md                   # Admin role documentation
+│   └── failure-mode-catalogue.md       # Failure mode catalogue
+├── scripts/
+│   └── report-wasm-size.sh             # WASM size reporting
 └── contracts/
     └── savings_vault/
         ├── Cargo.toml                  # Contract crate
-        └── src/
-            ├── lib.rs                  # Contract implementation
-            └── test.rs                 # Unit tests
+        ├── src/
+        │   ├── lib.rs                  # Contract implementation
+        │   ├── test.rs                 # Unit tests
+        │   └── test_helpers.rs         # Test utilities
+        └── test_snapshots/
+            └── test/                   # Snapshot files
 ```
 
 ---
 ## Documentation
 
 - [Architecture Documentation](docs/architecture.md) – Overview of project structure, state management, storage, SDK integration, and future extension points.
+- [Admin Role](docs/admin-role.md) – Details on the admin address, current capabilities, and future design considerations.
+- [Failure Mode Catalogue](docs/failure-mode-catalogue.md) – Summary of safe-failure behavior, expected errors, affected functions, and related tests for vault operations.
 
 ---
 

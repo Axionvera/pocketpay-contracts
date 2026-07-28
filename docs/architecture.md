@@ -36,13 +36,14 @@ The contract uses **Soroban SDK storage primitives**:
 
 The state model is deliberately simple:
 
-| Key                | Type   | Description |
-|--------------------|--------|-------------|
-| `balance:{user}`   | `i128` | Unlocked funds available to a user.
-| `locked:{user}`    | `i128` | Funds currently locked.
-| `unlock_time:{user}` | `u64`| UNIX timestamp when locked funds become withdrawable.
-| `admin`            | `Address` | Contract admin (set during `initialize`).
-| `initialized`      | `bool`   | Guard to ensure `initialize` runs only once.
+| Key                | Type   | Storage    | Description |
+|--------------------|--------|------------|-------------|
+| `balance:{user}`   | `i128` | Persistent | Unlocked funds available to a user. |
+| `locked:{user}`    | `i128` | Persistent | Funds currently locked. |
+| `unlock_time:{user}` | `u64`| Persistent | UNIX timestamp when locked funds become withdrawable. |
+| `admin`            | `Address` | Instance | Contract admin (set during `initialize`). |
+| `token`            | `Address` | Instance | Stellar Asset Contract (SAC) token address used for transfers during `withdraw`. |
+| `initialized`      | `bool`   | Instance | Guard to ensure `initialize` runs only once. |
 
 All operations validate inputs (non‑negative amounts, sufficient balances, future unlock times) and emit descriptive `require_auth` checks.
 
