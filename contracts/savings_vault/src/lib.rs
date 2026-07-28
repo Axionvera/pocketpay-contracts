@@ -98,6 +98,37 @@ pub struct LockSummary {
     pub latest_unlock: u64,
 }
 
+/// Full contract configuration returned by [`SavingsVault::get_config`].
+///
+/// Aggregates every read-only configuration field into a single response
+/// so SDK and mobile clients can fetch all contract settings in one RPC
+/// call instead of issuing separate queries for each field.
+///
+/// # Fields
+///
+/// * `token` - Address of the accepted Stellar Asset Contract (SAC).
+/// * `admin` - Address of the contract admin.
+/// * `version` - Hard-coded semantic version of the deployed WASM.
+/// * `paused` - Whether the emergency pause is currently active.
+/// * `pause_expiry` - Unix timestamp when the current pause expires (0 = no
+///   active pause or no expiry set).
+/// * `min_deposit_amount` - Minimum deposit floor (0 = no floor enforced).
+/// * `max_lock_duration` - Maximum lock duration in seconds (0 = unbounded).
+/// * `min_lock_duration` - Minimum lock duration in seconds (0 = no lower
+///   bound enforced).
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ContractConfig {
+    pub token: Address,
+    pub admin: Address,
+    pub version: soroban_sdk::String,
+    pub paused: bool,
+    pub pause_expiry: u64,
+    pub min_deposit_amount: i128,
+    pub max_lock_duration: u64,
+    pub min_lock_duration: u64,
+}
+
 // ---------------------------------------------------------------------------
 // Storage Keys
 // ---------------------------------------------------------------------------
@@ -770,6 +801,95 @@ impl SavingsVault {
         }
 
         true
+    }
+
+    // -----------------------------------------------------------------------
+    // Configuration Read API
+    // -----------------------------------------------------------------------
+
+    /// Returns the full contract configuration in a single call.
+    ///
+    /// Aggregates all read-only configuration fields — accepted token, admin,
+    /// version, pause state, and configurable limits — into a
+    /// [`ContractConfig`] struct. This eliminates the need for SDK and mobile
+    /// clients to issue multiple separate RPC queries to assemble the
+    /// contract's configuration.
+    ///
+    /// # Arguments
+    ///
+    /// * `env` - The Soroban environment
+    ///
+    /// # Returns
+    ///
+    /// A [`ContractConfig`] containing every configuration field.
+    ///
+    /// # Authorization
+    ///
+    /// No authorization required (read-only operation).
+    ///
+    /// # Errors
+    ///
+    /// - [`ContractError::NotInitialized`] - If the contract has not been initialized.
+    /// - [`ContractError::StorageVersionUnsupported`] - If the stored version does not match.
+    /// - [`ContractError::TokenNotConfigured`] - If the token address is missing.
+    /// - [`ContractError::RequiredStorageEntryMissing`] - If the admin address is missing.
+    pub fn get_config(env: Env) -> ContractConfig {
+        Self::assert_initialized(&env).unwrap_or_else(|e| env.error_contract(e));
+        Self::try_migrate(&env).unwrap_or_else(|e| env.error_contract(e));
+        Self::assert_supported_storage_version(&env)
+            .unwrap_or_else(|e| env.error_contract(e));
+
+        let paused: bool = env
+            .storage()
+            .instance()
+            .get(&DataKey::Paused)
+            .unwrap_or(false);
+        let pause_expiry: u64 = env
+            .storage()
+            .instance()
+            .get(&DataKey::PauseExpiry)
+            .unwrap_or(0);
+
+        // Respect expiry: if the pause has lapsed, report not-paused.
+        let effective_paused =
+            if paused && pause_expiry != 0 && env.ledger().timestamp() >= pause_expiry {
+                false
+            } else {
+                paused
+            };
+
+        ContractConfig {
+            token: env
+                .storage()
+                .instance()
+                .get(&DataKey::Token)
+                .unwrap_or_else(|| env.error_contract(ContractError::TokenNotConfigured)),
+            admin: env
+                .storage()
+                .instance()
+                .get(&DataKey::Admin)
+                .unwrap_or_else(|| {
+                    env.error_contract(ContractError::RequiredStorageEntryMissing)
+                }),
+            version: soroban_sdk::String::from_str(&env, "0.1.0"),
+            paused: effective_paused,
+            pause_expiry,
+            min_deposit_amount: env
+                .storage()
+                .instance()
+                .get(&DataKey::MinDepositAmount)
+                .unwrap_or(0),
+            max_lock_duration: env
+                .storage()
+                .instance()
+                .get(&DataKey::MaxLockDurationSecs)
+                .unwrap_or(0),
+            min_lock_duration: env
+                .storage()
+                .instance()
+                .get(&DataKey::MinLockDurationSecs)
+                .unwrap_or(0),
+        }
     }
 
     // -----------------------------------------------------------------------
