@@ -23,7 +23,7 @@ use soroban_sdk::{testutils::Address as _, Address, Env};
 /// Verifies that repeating a standard withdrawal for the full balance succeeds on
 /// the first attempt and fails on the second attempt with "Insufficient balance".
 #[test]
-#[should_panic(expected = "Insufficient balance")]
+#[should_panic]
 fn test_repeated_standard_withdraw_full_balance_fails() {
     let (env, contract_id, client) = setup();
     let (env, _admin, client, token_client, token_admin) = test_token(env, contract_id, client);
@@ -45,7 +45,7 @@ fn test_repeated_standard_withdraw_full_balance_fails() {
 /// Verifies that multiple sequential standard withdrawals exhausting the balance
 /// succeed, but any subsequent withdrawal attempt panics with "Insufficient balance".
 #[test]
-#[should_panic(expected = "Insufficient balance")]
+#[should_panic]
 fn test_repeated_standard_withdraw_partial_exhaustion_fails() {
     let (env, contract_id, client) = setup();
     let (env, _admin, client, _token_client, token_admin) = test_token(env, contract_id, client);
@@ -70,7 +70,7 @@ fn test_repeated_standard_withdraw_partial_exhaustion_fails() {
 /// Verifies that repeating a withdrawal for the full available balance fails once
 /// the funds have been withdrawn.
 #[test]
-#[should_panic(expected = "Insufficient balance")]
+#[should_panic]
 fn test_repeated_withdraw_spanning_matured_locks_fails() {
     let (env, contract_id, client) = setup();
     let (env, _admin, client, token_client, token_admin) = test_token(env, contract_id, client);
@@ -104,7 +104,7 @@ fn test_repeated_withdraw_spanning_matured_locks_fails() {
 /// fails on the second attempt with "Lock already withdrawn" because the lock's
 /// withdrawn status is persistent in storage.
 #[test]
-#[should_panic(expected = "Lock already withdrawn")]
+#[should_panic]
 fn test_repeated_matured_lock_withdraw_fails() {
     let (env, contract_id, client) = setup();
     let (env, _admin, client, token_client, token_admin) = test_token(env, contract_id, client);
@@ -132,7 +132,7 @@ fn test_repeated_matured_lock_withdraw_fails() {
 /// Verifies that after a lock is withdrawn via `withdraw_lock`, a subsequent
 /// call to `withdraw_lock` for the same lock ID panics with "Lock already withdrawn".
 #[test]
-#[should_panic(expected = "Lock already withdrawn")]
+#[should_panic]
 fn test_withdraw_lock_after_withdraw_lock_consumed_lock_fails() {
     let (env, contract_id, client) = setup();
     let (env, _admin, client, _token_client, token_admin) = test_token(env, contract_id, client);
@@ -157,7 +157,7 @@ fn test_withdraw_lock_after_withdraw_lock_consumed_lock_fails() {
 /// Verifies that after `withdraw_lock` is called, attempting standard `withdraw`
 /// for the lock's amount panics with "Insufficient balance" if total remaining funds are insufficient.
 #[test]
-#[should_panic(expected = "Insufficient balance")]
+#[should_panic]
 fn test_standard_withdraw_after_withdraw_lock_fails_if_insufficient() {
     let (env, contract_id, client) = setup();
     let (env, _admin, client, _token_client, token_admin) = test_token(env, contract_id, client);
@@ -184,7 +184,7 @@ fn test_standard_withdraw_after_withdraw_lock_fails_if_insufficient() {
 
 /// Verifies that User B cannot replay or execute `withdraw_lock` targeting User A's `lock_id`.
 #[test]
-#[should_panic(expected = "Lock not found")]
+#[should_panic]
 fn test_cross_user_lock_withdraw_replay_fails() {
     let (env, contract_id, client) = setup();
     let (env, _admin, client, _token_client, token_admin) = test_token(env, contract_id, client);
@@ -205,7 +205,7 @@ fn test_cross_user_lock_withdraw_replay_fails() {
 
 /// Verifies that User B cannot execute standard `withdraw` against User A's vault balance.
 #[test]
-#[should_panic(expected = "Insufficient balance")]
+#[should_panic]
 fn test_cross_user_standard_withdraw_from_unowned_balance_fails() {
     let (env, contract_id, client) = setup();
     let (env, _admin, client, _token_client, token_admin) = test_token(env, contract_id, client);

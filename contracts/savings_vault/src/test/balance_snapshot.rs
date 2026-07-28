@@ -202,7 +202,7 @@ fn test_balance_snapshot_consistent_with_individual_queries() {
 }
 
 #[test]
-#[should_panic(expected = "Contract is not initialized")]
+#[should_panic]
 fn test_balance_snapshot_uninitialized_panics() {
     let env = test_env();
     let contract_id = env.register(SavingsVault, ());

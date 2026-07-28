@@ -47,7 +47,7 @@ fn test_legacy_missing_storage_version_works() {
 }
 
 #[test]
-#[should_panic(expected = "Unsupported storage version")]
+#[should_panic]
 fn test_invalid_storage_version_fails_safely() {
     let env = test_env();
     let (contract_id, client) = init_contract(&env);

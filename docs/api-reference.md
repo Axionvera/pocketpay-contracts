@@ -37,6 +37,7 @@ are no private/internal helper functions in `lib.rs` to name separately.
 | `get_version` | single-value query | See [Version Metadata](version-metadata.md). |
 | `get_token` | single-value query | |
 | `get_admin` | single-value query | |
+| `get_config` | single-value query | Returns full `ContractConfig` struct. See [Config Read Helpers](config-read-helpers.md). |
 | `list_locks` | collection query | Paginated. See [Lock Read Helpers](lock-read-helpers.md). |
 | `can_withdraw` | capability query | Answers "is this action currently allowed," not just current state. |
 | `is_paused` | state query | Answers "is the contract currently in this state," not an action's permission. |
@@ -55,7 +56,7 @@ prefix for both.
 
 ## Outcome of this review
 
-No renames were made. All seventeen public functions already follow one of
+No renames were made. All eighteen public functions already follow one of
 the patterns above, and per the acceptance criteria for this review,
 unnecessary breaking renames of public functions that SDK or mobile code may
 already depend on should be avoided (see

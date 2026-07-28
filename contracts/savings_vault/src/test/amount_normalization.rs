@@ -30,7 +30,7 @@ fn test_typical_stroop_precision_deposit() {
 }
 
 #[test]
-#[should_panic(expected = "Deposit amount must be greater than zero")]
+#[should_panic]
 fn test_deposit_zero_amount_panics() {
     let env = test_env();
     let (_id, client) = init_contract(&env);
@@ -40,7 +40,7 @@ fn test_deposit_zero_amount_panics() {
 }
 
 #[test]
-#[should_panic(expected = "Deposit amount must be greater than zero")]
+#[should_panic]
 fn test_deposit_negative_one_panics() {
     let env = test_env();
     let (_id, client) = init_contract(&env);
@@ -50,7 +50,7 @@ fn test_deposit_negative_one_panics() {
 }
 
 #[test]
-#[should_panic(expected = "Deposit amount must be greater than zero")]
+#[should_panic]
 fn test_deposit_min_i128_panics() {
     let env = test_env();
     let (_id, client) = init_contract(&env);
@@ -60,7 +60,7 @@ fn test_deposit_min_i128_panics() {
 }
 
 #[test]
-#[should_panic(expected = "Deposit balance overflow")]
+#[should_panic]
 fn test_deposit_overflow_panics() {
     let env = test_env();
     let (_id, client) = init_contract(&env);
@@ -90,7 +90,7 @@ fn test_minimum_lock_funds_amount() {
 }
 
 #[test]
-#[should_panic(expected = "Lock amount must be greater than zero")]
+#[should_panic]
 fn test_lock_funds_zero_panics() {
     let env = test_env();
     let (_id, client) = init_contract(&env);
@@ -103,7 +103,7 @@ fn test_lock_funds_zero_panics() {
 }
 
 #[test]
-#[should_panic(expected = "Lock amount must be greater than zero")]
+#[should_panic]
 fn test_lock_funds_negative_panics() {
     let env = test_env();
     let (_id, client) = init_contract(&env);

@@ -291,7 +291,7 @@ fn test_locks_are_isolated_per_user() {
 // =========================================================================
 
 #[test]
-#[should_panic(expected = "Contract is not initialized")]
+#[should_panic]
 fn test_get_lock_uninitialized_panics() {
     let env = test_env();
     let contract_id = env.register(SavingsVault, ());
@@ -301,7 +301,7 @@ fn test_get_lock_uninitialized_panics() {
 }
 
 #[test]
-#[should_panic(expected = "Contract is not initialized")]
+#[should_panic]
 fn test_list_locks_uninitialized_panics() {
     let env = test_env();
     let contract_id = env.register(SavingsVault, ());

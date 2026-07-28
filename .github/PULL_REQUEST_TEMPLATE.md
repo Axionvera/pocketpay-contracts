@@ -1,37 +1,88 @@
-## Description
+# Pull Request
 
-<!-- Provide a clear summary of the changes and why they are necessary. -->
+## Issue Reference
 
-Closes #<!-- Issue Number -->
+Closes #<!-- issue number -->
 
-## Contribution Quality Gate
+<!-- Every PR must reference an open issue. If one does not exist, create it before opening this PR. -->
 
-By opening this PR, I confirm that my work meets the [Contribution Quality Gate](docs/contribution-quality-gate.md):
+---
 
-### Implementation
-- [ ] Logic is fully implemented with no placeholders or `TODO`s.
-- [ ] Storage usage follows the [Storage Audit Map](docs/storage-audit.md).
-- [ ] Authorization checks (`require_auth`) are correctly applied.
+## Summary
 
-### Testing
-- [ ] Unit tests cover both success and failure paths.
-- [ ] Accounting changes are verified via [Property Tests](contracts/savings_vault/src/test/property_vault_accounting.rs).
-- [ ] Event changes have updated [Snapshots](contracts/savings_vault/test_snapshots/).
-- [ ] All tests pass locally (`cargo test`).
+<!-- What changed and why? Keep this concise — one or two sentences. -->
 
-### Documentation & CI
-- [ ] New behavior is documented in `docs/` and `README.md`.
-- [ ] Code is formatted (`cargo fmt`) and linted (`cargo clippy`).
-- [ ] WASM build succeeds (`make build-release`).
+## Contract Functions Changed
+
+<!-- List every contract function added, modified, or removed. Write "none" for documentation-only PRs. -->
+
+| Function | Change type (added / modified / removed) | Notes |
+|---|---|---|
+| | | |
+
+---
+
+## Tests Added or Updated
+
+<!-- Describe the tests that cover this change. Include file paths and test names where relevant.
+     Every logic change requires tests for the happy path and for failure/boundary conditions. -->
+
+- [ ] Happy-path tests added/updated
+- [ ] Failure and boundary-condition tests added/updated
+- [ ] Test naming follows the convention in [`docs/testing.md`](docs/testing.md)
+- [ ] [`docs/test-coverage.md`](docs/test-coverage.md) updated to reflect new or changed tests
+
+---
+
+## Security Considerations
+
+<!-- Describe any security impact this change has. Write "no security impact" only if the change
+     is truly non-functional (e.g. comment or doc fix). For anything that touches balances,
+     access control, storage, events, or external calls, work through the relevant sections of
+     docs/security-checklist.md and paste the results below. -->
+
+### Security checklist (contract changes only)
+
+- [ ] Balance & accounting invariants preserved — see [`docs/accounting-invariants.md`](docs/accounting-invariants.md)
+- [ ] Lock state and timed-operation rules unchanged (or documented if changed)
+- [ ] Token transfer atomicity maintained — see [`docs/atomicity.md`](docs/atomicity.md)
+- [ ] `require_auth()` called on the correct address in every state-changing function
+- [ ] Storage layout change checklist followed (if applicable) — see [`docs/storage-change-checklist.md`](docs/storage-change-checklist.md)
+- [ ] Event backward-compatibility policy followed (if applicable) — see [`docs/event-compatibility-policy.md`](docs/event-compatibility-policy.md)
+- [ ] New error codes use `ContractError` variants with `panic_with_error!`, not bare `panic!`
+- [ ] No secrets, private keys, or credentials committed or logged
+
+---
+
+## Commands Run
+
+<!-- Paste the commands you ran locally and confirm each passed. -->
+
+```
+cargo fmt --check
+cargo clippy --tests -- -D warnings
+cargo test --workspace
+```
+
+- [ ] `cargo fmt --check` — passed
+- [ ] `cargo clippy --tests -- -D warnings` — passed
+- [ ] `cargo test --workspace` — passed
+
+---
+
+## CI Status
+
+<!-- Confirm CI is green before requesting review. -->
+
+- [ ] All CI checks pass on this branch
+
+---
 
 ## Acceptance Criteria Coverage
 
-<!-- Explicitly state how each Acceptance Criterion (AC) from the issue was met. -->
-- AC 1: ...
-- AC 2: ...
+<!-- Reference the acceptance criteria from the linked issue and confirm each one is met.
+     Delete this section for straightforward bug fixes with no separate acceptance criteria. -->
 
-## Security & Risk
-<!-- Describe any security-sensitive changes (balances, auth, storage). -->
-
-## Screenshots / Evidence
-<!-- Include test output or other evidence of successful implementation. -->
+| Criterion | Met? | Notes |
+|---|---|---|
+| | | |

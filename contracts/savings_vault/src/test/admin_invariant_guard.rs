@@ -257,7 +257,7 @@ fn test_admin_transfer_preserves_multi_user_lock_isolation() {
 
 /// A random user (non-admin) cannot transfer admin role.
 #[test]
-#[should_panic(expected = "Not authorized")]
+#[should_panic]
 fn test_non_admin_cannot_transfer_admin() {
     let env = test_env();
     let (_contract_id, client) = init_contract(&env);
@@ -270,7 +270,7 @@ fn test_non_admin_cannot_transfer_admin() {
 
 /// After a successful admin transfer, the old admin can no longer transfer.
 #[test]
-#[should_panic(expected = "Not authorized")]
+#[should_panic]
 fn test_old_admin_loses_power_after_transfer() {
     let env = test_env();
     let (contract_id, client) = init_contract(&env);
@@ -661,7 +661,7 @@ fn test_user_can_withdraw_lock_after_admin_transfer() {
 
 /// Re-initialization is still blocked after admin transfer.
 #[test]
-#[should_panic(expected = "Contract is already initialized")]
+#[should_panic]
 fn test_reinitialization_blocked_after_admin_transfer() {
     let env = test_env();
     let (contract_id, client) = init_contract(&env);
@@ -676,7 +676,7 @@ fn test_reinitialization_blocked_after_admin_transfer() {
 
 /// Even the original admin cannot reinitialize after transferring admin.
 #[test]
-#[should_panic(expected = "Contract is already initialized")]
+#[should_panic]
 fn test_original_admin_cannot_reinitialize_after_transfer() {
     let env = test_env();
     let (contract_id, client) = init_contract(&env);

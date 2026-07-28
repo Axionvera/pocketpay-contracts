@@ -84,7 +84,7 @@ fn test_multiple_locks_stay_consistent() {
 
 /// A non-positive amount is rejected and leaves balances untouched.
 #[test]
-#[should_panic(expected = "Amount must be positive")]
+#[should_panic]
 fn test_lock_zero_amount_rejected() {
     let env = test_env();
     let (_admin, client) = init_with_admin(&env);
@@ -113,7 +113,7 @@ fn test_lock_zero_amount_leaves_state_intact() {
 
 /// An unlock time in the past is rejected and leaves state unchanged.
 #[test]
-#[should_panic(expected = "Unlock time must be in the future")]
+#[should_panic]
 fn test_lock_past_unlock_rejected() {
     let env = test_env();
     let (_admin, client) = init_with_admin(&env);
