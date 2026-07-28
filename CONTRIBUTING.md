@@ -131,3 +131,4 @@ Changes involving balances, access control, signatures, storage, upgrades, or ex
 
 Before pushing, review the staged diff for credentials and unrelated files.
 - Review the [contributor security checklist](docs/security-checklist.md) covering accounting invariants, lock state, token transfer atomicity, authorisation, storage migration, event compatibility, error codes, and required tests.
+- Review the [invariant test checklist](docs/invariant-test-checklist.md) to understand which invariants your change affects and ensure appropriate test coverage. This is especially important for changes affecting balances, locks, withdrawals, or authorization.

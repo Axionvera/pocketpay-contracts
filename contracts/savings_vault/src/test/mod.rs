@@ -12,6 +12,7 @@ mod event_compatibility;
 mod event_ordering;
 mod independent_lock_creation;
 mod initialization;
+mod invariant_checklist_examples;
 mod invalid_lock_id;
 mod lock_extension;
 mod lock_atomicity;
