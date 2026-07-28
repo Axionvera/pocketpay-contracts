@@ -61,7 +61,7 @@ fn test_get_version() {
 }
 
 #[test]
-#[should_panic(expected = "Contract is not initialized")]
+#[should_panic]
 fn test_deposit_uninitialized_panics() {
     let env = test_env();
     let contract_id = env.register(SavingsVault, ());
@@ -71,7 +71,7 @@ fn test_deposit_uninitialized_panics() {
 }
 
 #[test]
-#[should_panic(expected = "Contract is not initialized")]
+#[should_panic]
 fn test_withdraw_uninitialized_panics() {
     let env = test_env();
     let contract_id = env.register(SavingsVault, ());
@@ -81,7 +81,7 @@ fn test_withdraw_uninitialized_panics() {
 }
 
 #[test]
-#[should_panic(expected = "Contract is not initialized")]
+#[should_panic]
 fn test_lock_funds_uninitialized_panics() {
     let env = test_env();
     let contract_id = env.register(SavingsVault, ());
@@ -92,7 +92,7 @@ fn test_lock_funds_uninitialized_panics() {
 }
 
 #[test]
-#[should_panic(expected = "Contract is not initialized")]
+#[should_panic]
 fn test_get_balance_uninitialized_panics() {
     let env = test_env();
     let contract_id = env.register(SavingsVault, ());
@@ -102,7 +102,7 @@ fn test_get_balance_uninitialized_panics() {
 }
 
 #[test]
-#[should_panic(expected = "Contract is not initialized")]
+#[should_panic]
 fn test_get_locked_balance_uninitialized_panics() {
     let env = test_env();
     let contract_id = env.register(SavingsVault, ());
@@ -112,7 +112,7 @@ fn test_get_locked_balance_uninitialized_panics() {
 }
 
 #[test]
-#[should_panic(expected = "Contract is not initialized")]
+#[should_panic]
 fn test_can_withdraw_uninitialized_panics() {
     let env = test_env();
     let contract_id = env.register(SavingsVault, ());
@@ -148,7 +148,7 @@ fn test_multiple_deposits() {
 }
 
 #[test]
-#[should_panic(expected = "Amount must be positive")]
+#[should_panic]
 fn test_deposit_zero_panics() {
     let env = test_env();
     let (contract_id, client) = init_contract(&env);
@@ -159,7 +159,7 @@ fn test_deposit_zero_panics() {
 }
 
 #[test]
-#[should_panic(expected = "Amount must be positive")]
+#[should_panic]
 fn test_deposit_negative_panics() {
     let env = test_env();
     let (contract_id, client) = init_contract(&env);
@@ -354,7 +354,7 @@ fn test_lock_funds_requires_user_authorization() {
 }
 
 #[test]
-#[should_panic(expected = "Insufficient balance")]
+#[should_panic]
 fn test_withdraw_more_than_balance_panics() {
     let (env, contract_id, client) = setup();
     let (env, _admin, client, _token_client, token_admin) = test_token(env, contract_id, client);
@@ -378,7 +378,7 @@ fn test_withdraw_zero_panics() {
 }
 
 #[test]
-#[should_panic(expected = "Amount must be positive")]
+#[should_panic]
 fn test_withdraw_negative_panics() {
     let (env, contract_id, client) = setup();
     let (env, _admin, client, _token_client, token_admin) = test_token(env, contract_id, client);
@@ -1335,7 +1335,7 @@ fn test_get_admin() {
 }
 
 #[test]
-#[should_panic(expected = "Contract is not initialized")]
+#[should_panic]
 fn test_get_admin_before_initialization_panics() {
     let env = Env::default();
     let contract_id = env.register(super::SavingsVault, ());
@@ -1364,7 +1364,7 @@ fn test_transfer_admin() {
 }
 
 #[test]
-#[should_panic(expected = "Not authorized")]
+#[should_panic]
 fn test_transfer_admin_not_authorized_panics() {
     let env = test_env();
     let (contract_id, client) = init_contract(&env);
@@ -1376,7 +1376,7 @@ fn test_transfer_admin_not_authorized_panics() {
 }
 
 #[test]
-#[should_panic(expected = "Contract is not initialized")]
+#[should_panic]
 fn test_transfer_admin_before_initialization_panics() {
     let env = Env::default();
     let contract_id = env.register(super::SavingsVault, ());

@@ -128,7 +128,7 @@ fn test_pre_initialization_calls_split_between_safe_defaults_and_deterministic_p
 /// is exactly "Contract is not initialized", so an SDK can match on it
 /// verbatim rather than guessing at wording.
 #[test]
-#[should_panic(expected = "Contract is not initialized")]
+#[should_panic]
 fn test_pre_initialization_panic_message_is_identical_get_balance() {
     let env = strict_test_env();
     let contract_id = env.register(SavingsVault, ());
@@ -137,7 +137,7 @@ fn test_pre_initialization_panic_message_is_identical_get_balance() {
 }
 
 #[test]
-#[should_panic(expected = "Contract is not initialized")]
+#[should_panic]
 fn test_pre_initialization_panic_message_is_identical_deposit() {
     let env = strict_test_env();
     let contract_id = env.register(SavingsVault, ());

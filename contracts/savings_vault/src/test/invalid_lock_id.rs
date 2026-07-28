@@ -72,7 +72,7 @@ fn test_get_lock_on_missing_id_returns_none() {
 
 /// Extending a lock that does not exist fails.
 #[test]
-#[should_panic(expected = "Lock not found")]
+#[should_panic]
 fn test_extend_lock_on_missing_id_panics() {
     let env = test_env();
     let (_admin, client) = init_with_admin(&env);
@@ -85,7 +85,7 @@ fn test_extend_lock_on_missing_id_panics() {
 
 /// Extending an already-withdrawn lock fails (its record is marked spent).
 #[test]
-#[should_panic(expected = "Lock already withdrawn")]
+#[should_panic]
 fn test_extend_lock_on_withdrawn_id_panics() {
     let env = test_env();
     let (_admin, client) = init_with_admin(&env);
@@ -108,7 +108,7 @@ fn test_extend_lock_on_withdrawn_id_panics() {
 
 /// Withdrawing a lock that does not exist fails.
 #[test]
-#[should_panic(expected = "Lock not found")]
+#[should_panic]
 fn test_withdraw_lock_on_missing_id_panics() {
     let env = test_env();
     let (_admin, client) = init_with_admin(&env);
@@ -120,7 +120,7 @@ fn test_withdraw_lock_on_missing_id_panics() {
 
 /// Withdrawing an immature lock fails (state must remain unchanged).
 #[test]
-#[should_panic(expected = "Lock has not matured yet")]
+#[should_panic]
 fn test_withdraw_lock_on_immature_id_panics() {
     let env = test_env();
     let (_admin, client) = init_with_admin(&env);

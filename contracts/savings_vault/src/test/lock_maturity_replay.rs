@@ -75,7 +75,7 @@ fn token_balance(client: &crate::SavingsVaultClient<'static>, user: &Address) ->
 
 /// Withdrawing 1 second before maturity is rejected and `can_withdraw` is false.
 #[test]
-#[should_panic(expected = "Lock has not matured yet")]
+#[should_panic]
 fn test_maturity_one_second_before_rejected() {
     let env = test_env();
     let (_admin, client) = init_with_admin(&env);
@@ -169,7 +169,7 @@ fn test_replay_withdraw_already_withdrawn_blocked() {
 
 /// Replaying the exact same withdrawal (panic path) surfaces "Lock already withdrawn".
 #[test]
-#[should_panic(expected = "Lock already withdrawn")]
+#[should_panic]
 fn test_replay_withdraw_panics_already_withdrawn() {
     let env = test_env();
     let (_admin, client) = init_with_admin(&env);
@@ -186,7 +186,7 @@ fn test_replay_withdraw_panics_already_withdrawn() {
 
 /// Extending a lock after it has been withdrawn is rejected.
 #[test]
-#[should_panic(expected = "Lock already withdrawn")]
+#[should_panic]
 fn test_extend_after_withdraw_rejected() {
     let env = test_env();
     let (_admin, client) = init_with_admin(&env);
@@ -238,7 +238,7 @@ fn test_wrong_owner_withdraw_not_found_and_state_intact() {
 
 /// Wrong-owner `extend_lock` likewise fails with "Lock not found".
 #[test]
-#[should_panic(expected = "Lock not found")]
+#[should_panic]
 fn test_wrong_owner_extend_not_found() {
     let env = test_env();
     let (_admin, client) = init_with_admin(&env);

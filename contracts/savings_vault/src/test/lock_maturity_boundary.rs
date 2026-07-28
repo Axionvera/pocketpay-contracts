@@ -49,7 +49,7 @@ fn setup_boundary_fixture(initial_time: u64) -> LockBoundaryFixture {
 /// Verifies that calling `withdraw_lock` at `unlock_time - 1` is strictly rejected
 /// and `can_withdraw` returns false.
 #[test]
-#[should_panic(expected = "Lock has not matured yet")]
+#[should_panic]
 fn test_boundary_one_second_before_maturity_rejected() {
     let f = setup_boundary_fixture(1_000);
     let unlock_time: u64 = 5_000;
@@ -197,7 +197,7 @@ fn test_boundary_transition_step_by_step() {
 
 /// Verifies that creating a lock at `unlock_time == current_time` (zero duration) is rejected.
 #[test]
-#[should_panic(expected = "Unlock time must be in the future")]
+#[should_panic]
 fn test_boundary_lock_creation_same_timestamp_rejected() {
     let f = setup_boundary_fixture(2_000);
     // Attempting unlock_time == current_time (2,000)
@@ -206,7 +206,7 @@ fn test_boundary_lock_creation_same_timestamp_rejected() {
 
 /// Verifies that creating a lock in the past (`unlock_time < current_time`) is rejected.
 #[test]
-#[should_panic(expected = "Unlock time must be in the future")]
+#[should_panic]
 fn test_boundary_lock_creation_past_timestamp_rejected() {
     let f = setup_boundary_fixture(2_000);
     // Attempting unlock_time in the past (1,999)

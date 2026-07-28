@@ -44,34 +44,7 @@ use soroban_sdk::{
 // helpers
 // ────────────────────────────────────────────────────────────
 
-/// Returns (token address, token client, token admin) for a SAC token
-/// registered on the given env.
-fn sac_setup(env: &Env) -> (Address, token::Client, token::StellarAssetClient) {
-    let issuer = Address::generate(env);
-    let sac = env.register_stellar_asset_contract_v2(issuer);
-    let token_addr = sac.address();
-    let token_client = token::Client::new(env, &token_addr);
-    let token_admin = token::StellarAssetClient::new(env, &token_addr);
-    (token_addr, token_client, token_admin)
-}
 
-/// Deploy and init the vault with a SAC token, returning everything
-/// needed for deposit/withdraw tests.
-fn vault_with_sac(
-    env: &Env,
-) -> (
-    Address,
-    SavingsVaultClient,
-    token::Client,
-    token::StellarAssetClient,
-) {
-    let contract_id = env.register(SavingsVault, ());
-    let client = SavingsVaultClient::new(env, &contract_id);
-    let admin = Address::generate(env);
-    let (token_addr, token_client, token_admin) = sac_setup(env);
-    client.initialize(&admin, &token_addr);
-    (contract_id, client, token_client, token_admin)
-}
 
 /// Returns a snapshot of all vault state for a given user.
 fn snapshot(env: &Env, client: &SavingsVaultClient, user: &Address) -> (i128, i128, u32) {
@@ -90,7 +63,7 @@ fn test_failed_deposit_insufficient_token_balance() {
     // User has 50 tokens in SAC but tries to deposit 100.
     // The SAC transfer must fail, and vault state must be unchanged.
     let env = test_env();
-    let (contract_id, client, token_client, token_admin) = vault_with_sac(&env);
+    let (contract_id, client, token_client, token_admin, _) = vault_with_sac(&env);
     let user = Address::generate(&env);
 
     // Give the user fewer tokens than the deposit amount
@@ -129,7 +102,7 @@ fn test_failed_deposit_insufficient_token_balance() {
 fn test_failed_deposit_zero_token_balance() {
     // User has zero tokens, tries to deposit 100.
     let env = test_env();
-    let (_contract_id, client, _token_client, _token_admin) = vault_with_sac(&env);
+    let (_contract_id, client, _token_client, _token_admin, _) = vault_with_sac(&env);
     let user = Address::generate(&env);
 
     // No mint — user has 0 tokens
@@ -152,7 +125,7 @@ fn test_failed_deposit_zero_token_balance() {
 fn test_failed_deposit_state_rollback_with_existing_balance() {
     // User has existing balance and locks — failed deposit must leave both intact.
     let env = test_env();
-    let (_contract_id, client, _token_client, token_admin) = vault_with_sac(&env);
+    let (_contract_id, client, _token_client, token_admin, _) = vault_with_sac(&env);
     let user = Address::generate(&env);
 
     // Build up real state first
@@ -194,7 +167,7 @@ fn test_failed_deposit_state_rollback_with_existing_balance() {
 fn test_failed_withdraw_state_unchanged() {
     // User has 100 balance, tries to withdraw 200 — must panic, state unchanged.
     let env = test_env();
-    let (_contract_id, client, _token_client, token_admin) = vault_with_sac(&env);
+    let (_contract_id, client, _token_client, token_admin, _) = vault_with_sac(&env);
     let user = Address::generate(&env);
 
     token_admin.mint(&user, &200);
@@ -220,7 +193,7 @@ fn test_failed_withdraw_with_locks_state_unchanged() {
     // User deposits 500, locks 300, tries to withdraw 201 from 200 available.
     // Must panic and leave both available + locked balances intact.
     let env = test_env();
-    let (_contract_id, client, _token_client, token_admin) = vault_with_sac(&env);
+    let (_contract_id, client, _token_client, token_admin, _) = vault_with_sac(&env);
     let user = Address::generate(&env);
 
     // Simulate the same setup as the existing failing-withdraw test but with
@@ -249,7 +222,7 @@ fn test_failed_withdraw_exceeds_total_with_matured_locks() {
     // User deposits only enough for a small balance, then creates locks.
     // After locks mature, attempt to withdraw more than total (balance + matured locks).
     let env = test_env();
-    let (_contract_id, client, _token_client, token_admin) = vault_with_sac(&env);
+    let (_contract_id, client, _token_client, token_admin, _) = vault_with_sac(&env);
     let user = Address::generate(&env);
 
     set_ledger_timestamp(&env, 1_000);
@@ -287,7 +260,7 @@ fn test_failed_withdraw_lock_state_unchanged() {
     // User has a matured lock but withdraw_lock ID doesn't exist.
     // Must panic and leave state unchanged.
     let env = test_env();
-    let (_contract_id, client, _token_client, token_admin) = vault_with_sac(&env);
+    let (_contract_id, client, _token_client, token_admin, _) = vault_with_sac(&env);
     let user = Address::generate(&env);
 
     set_ledger_timestamp(&env, 1_000);
@@ -321,7 +294,7 @@ fn test_failed_withdraw_lock_state_unchanged() {
 fn test_multiple_failed_operations_no_cumulative_drift() {
     // Repeated failed operations must not accumulate any state drift.
     let env = test_env();
-    let (_contract_id, client, _token_client, token_admin) = vault_with_sac(&env);
+    let (_contract_id, client, _token_client, token_admin, _) = vault_with_sac(&env);
     let user = Address::generate(&env);
 
     token_admin.mint(&user, &500);
@@ -352,7 +325,7 @@ fn test_balance_consistency_after_mixed_failures() {
     // Alternating successful and failed operations across two users.
     // The contract must never show inconsistent totals.
     let env = test_env();
-    let (_contract_id, client, _token_client, token_admin) = vault_with_sac(&env);
+    let (_contract_id, client, _token_client, token_admin, _) = vault_with_sac(&env);
     let user_a = Address::generate(&env);
     let user_b = Address::generate(&env);
 
@@ -391,7 +364,7 @@ fn test_failed_withdraw_lock_token_transfer_failure_preserves_state() {
     // remains unchanged. This simulates a scenario where the contract doesn't
     // have enough tokens to transfer back (e.g., due to a bug or external factor).
     let env = test_env();
-    let (contract_id, client, token_client, token_admin) = vault_with_sac(&env);
+    let (contract_id, client, token_client, token_admin, _) = vault_with_sac(&env);
     let user = Address::generate(&env);
 
     set_ledger_timestamp(&env, 1_000);
@@ -456,7 +429,7 @@ fn test_failed_withdraw_token_transfer_failure_preserves_state() {
     // (available balance, locked balance, events, lock entries) is preserved
     // exactly as it was before the call.
     let env = test_env();
-    let (contract_id, client, token_client, token_admin) = vault_with_sac(&env);
+    let (contract_id, client, token_client, token_admin, _) = vault_with_sac(&env);
     let user = Address::generate(&env);
 
     set_ledger_timestamp(&env, 1_000);
