@@ -81,13 +81,20 @@ Follow the [test naming convention](docs/testing.md) when adding or updating tes
 
 ## Pull request expectations
 
+Every pull request must fill in the **[PR template](.github/PULL_REQUEST_TEMPLATE.md)** in full. The template requires:
+
+- **Issue reference** — a `Closes #N` line linking to the issue being resolved.
+- **Contract functions changed** — a table listing every function added, modified, or removed (write "none" for documentation-only PRs).
+- **Tests added or updated** — names and file paths of new or changed tests, with checkboxes confirming happy-path, failure, and boundary coverage.
+- **Security considerations** — a plain-language description of security impact plus the per-section security checklist for any PR that touches contract logic (see `docs/security-checklist.md`).
+- **Commands run** — confirmation that `cargo fmt --check`, `cargo clippy --tests -- -D warnings`, and `cargo test --workspace` all pass locally.
+- **CI status** — all CI checks green before requesting review.
+
+Additional guidance:
+
 - Keep each pull request focused on one issue or related change.
-- Reference the issue number, for example `Closes #3`.
-- Explain what changed and why.
-- Include test notes listing the commands run and their results.
-- Call out contract behavior, storage, authorization, or interface changes.
+- Explain what changed and why in the summary field.
 - Avoid changing contract logic in documentation-only pull requests.
-- Add or update tests for every logic change.
 - When changing storage layout, follow the storage change checklist in `docs/storage-change-checklist.md`.
 - When adding or upgrading dependencies, follow the dependency review checklist in `docs/dependency-review.md`.
 
