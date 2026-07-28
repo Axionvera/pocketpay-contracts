@@ -1064,8 +1064,34 @@ impl SavingsVault {
     // -----------------------------------------------------------------------
 
     /// Locks a portion of the user's available balance until `unlock_time`.
-    /// Returns the lock ID. Panics if amount <= 0, exceeds balance, or
-    /// unlock_time is not in the future.
+    ///
+    /// Each call to `lock_funds` creates an independent [`LockEntry`] with a
+    /// unique, auto-incrementing ID. Locks do **not** overwrite — multiple
+    /// calls produce separate entries, each with its own `unlock_time`. Each
+    /// lock matures independently and can be withdrawn individually via
+    /// [`withdraw_lock`](Self::withdraw_lock) once its `unlock_time` has
+    /// passed.
+    ///
+    /// Lock durations are bounded by the admin-configured
+    /// `max_lock_duration_secs` and `min_lock_duration_secs` (if set).
+    ///
+    /// # Returns
+    ///
+    /// The unique lock ID assigned to the new lock entry.
+    ///
+    /// # Errors
+    ///
+    /// - [`ContractError::AmountNotPositive`] if `amount <= 0`
+    /// - [`ContractError::UnlockTimeNotInFuture`] if `unlock_time` is not
+    ///   strictly in the future
+    /// - [`ContractError::LockDurationExceedsMaximum`] / [`ContractError::LockDurationBelowMinimum`]
+    ///   if the duration falls outside the admin-configured bounds
+    /// - [`ContractError::InsufficientBalanceToLock`] if the user's available
+    ///   balance is insufficient
+    ///
+    /// # Authorization
+    ///
+    /// Requires `user.require_auth()`.
     pub fn lock_funds(env: Env, user: Address, amount: i128, unlock_time: u64) -> u64 {
         Self::assert_initialized(&env);
         Self::try_migrate(&env);
@@ -1122,7 +1148,34 @@ impl SavingsVault {
         );
     }
 
-    /// Withdraws a specific matured lock entry by its ID.\n    ///\n    /// # Repeated-call behaviour\n    ///\n    /// Each lock created by [`lock_funds`] must be withdrawn independently.\n    /// Calling this function does **not** affect any other locks — each\n    /// `LockEntry` has its own maturity schedule and withdrawal state.\n    /// Once a lock is withdrawn, it is marked as `withdrawn = true` and cannot\n    /// be withdrawn again (errors with\n    /// [`ContractError::LockAlreadyWithdrawn`]).\n    ///\n    /// Errors with [`ContractError::LockNotFound`] if the lock ID doesn't\n    /// exist, [`ContractError::LockNotMatured`] if it hasn't matured yet, or\n    /// [`ContractError::LockAlreadyWithdrawn`] if already withdrawn.\n    pub fn withdraw_lock(env: Env, user: Address, lock_id: u64) {
+    /// Withdraws a specific matured lock entry by its lock ID.
+    ///
+    /// Each lock created by [`lock_funds`](Self::lock_funds) is identified by
+    /// its unique, auto-incrementing ID. Locks must be withdrawn individually
+    /// — there is no batch-withdrawal function. Calling this function does
+    /// **not** affect any other locks; each `LockEntry` has its own maturity
+    /// schedule and withdrawal state. Locks can be withdrawn in any order —
+    /// not necessarily in the order they were created.
+    ///
+    /// Once withdrawn, the lock is marked `withdrawn = true` and its `amount`
+    /// is set to zero. The entry remains in persistent storage for audit
+    /// purposes but cannot be withdrawn again.
+    ///
+    /// # Arguments
+    ///
+    /// * `user` - The user address that owns the lock
+    /// * `lock_id` - The unique ID of the lock entry to withdraw
+    ///
+    /// # Errors
+    ///
+    /// - [`ContractError::LockNotFound`] if no lock with `lock_id` exists
+    /// - [`ContractError::LockAlreadyWithdrawn`] if already withdrawn
+    /// - [`ContractError::LockNotMatured`] if `unlock_time` has not yet passed
+    ///
+    /// # Authorization
+    ///
+    /// Requires `user.require_auth()`.
+    pub fn withdraw_lock(env: Env, user: Address, lock_id: u64) {
         Self::assert_initialized(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
         Self::try_migrate(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
         Self::assert_supported_storage_version(&env)
