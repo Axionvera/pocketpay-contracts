@@ -311,3 +311,6 @@ Before submitting code, review the [Low-Effort Contribution Examples Guide](docs
 
 ## Local Deployment Verification
 To build, deploy, initialize, and smoke-test PocketPay contracts locally, follow the [Local Deployment Verification Flow](docs/LOCAL_DEPLOYMENT_VERIFICATION.md).
+
+## PR Reviewer Evidence
+Maintainers reviewing pull requests must verify submissions against the [Reviewer Evidence Checklist](docs/REVIEWER_EVIDENCE_CHECKLIST.md) to ensure scope, test coverage, CI green status, and documentation quality.
