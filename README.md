@@ -216,6 +216,7 @@ stellar-pocketpay-contracts/
 - [Admin & Emergency Mechanism Threat Model](docs/admin-pause-threat-model.md) – Security analysis of malicious admin, compromised admin, accidental pause, and blocked-withdrawal scenarios.
 - [Failure Mode Catalogue](docs/failure-mode-catalogue.md) – Summary of safe-failure behavior, expected errors, affected functions, and related tests for vault operations.
 - [Meaningful Change Threshold](docs/meaningful-change-threshold.md) – Outcome- and evidence-based guidance for distinguishing small complete changes from small incomplete changes.
+- [Contributor Security Checklist](docs/security-checklist.md) – Practical review checklist for vault contract changes covering accounting, lock state, token transfer safety, authorisation, storage, events, error handling, and tests.
 - [Contributor Self-Review Template](docs/self-review-template.md) – Copy-paste checklist covering behaviour, tests, CI, security, edge cases, and docs impact — fill it in before opening a PR.
 - [Traceability Table Guide](docs/traceability-table.md) – Standard format for mapping PR changes to issue acceptance criteria, with worked examples.
 - [Payment-Period Conduct Guidance](docs/payment-period-conduct.md) – Expectations for how contributors raise payment-status questions, and how GrantFox's evaluation process relates to this repository's review process.
@@ -280,11 +281,13 @@ Every pull request must use the **[PR template](.github/PULL_REQUEST_TEMPLATE.md
 
 - A reference to the issue being fixed (`Closes #N`)
 - A list of contract functions added, modified, or removed
-- A description of tests added or updated
+- **Test evidence** — description of tests added, no-test justification, and references to existing contract test patterns
 - A **[traceability table](docs/traceability-table.md)** mapping each acceptance criterion to changed functions, tests, and edge cases
 - A security considerations section (with checklist for contract changes)
 - Confirmation that `make verify` passes (or equivalently `cargo fmt --check`, `cargo clippy --tests -- -D warnings`, and `cargo test --workspace`)
 - CI green before requesting review
+
+> **Test evidence requirement:** Every contract PR must include clear testing evidence. Changes without tests require a justification. See the [PR template](.github/PULL_REQUEST_TEMPLATE.md) and [CONTRIBUTING.md](CONTRIBUTING.md#pull-request-expectations) for details.
 
 Before asking about payment status on an issue or PR, read the **[Payment-Period Conduct Guidance](docs/payment-period-conduct.md)** — it explains how to self-review first and how this repository's review process relates to GrantFox's own evaluation process.
 
@@ -300,3 +303,18 @@ make verify
 ## License
 
 MIT
+
+## Payment & Evaluation Policy
+Contributors participating in campaigns or rewarded issues must follow the [Payment-Period Communication Policy](docs/PAYMENT_POLICY.md). Payments follow the GrantFox evaluation process and are evaluated post-merge. Repeated complaints or spam regarding payouts are prohibited.
+
+## Acceptance Criteria Audit
+All PRs are required to include an [Acceptance Criteria Audit Table](docs/ACCEPTANCE_CRITERIA_AUDIT.md) mapping issue requirements to code and test evidence.
+
+## Contribution Quality & Examples
+Before submitting code, review the [Low-Effort Contribution Examples Guide](docs/LOW_EFFORT_EXAMPLES.md) to understand common anti-patterns (such as partial implementations or missing tests) and their required high-quality alternatives.
+
+## Local Deployment Verification
+To build, deploy, initialize, and smoke-test PocketPay contracts locally, follow the [Local Deployment Verification Flow](docs/LOCAL_DEPLOYMENT_VERIFICATION.md).
+
+## PR Reviewer Evidence
+Maintainers reviewing pull requests must verify submissions against the [Reviewer Evidence Checklist](docs/REVIEWER_EVIDENCE_CHECKLIST.md) to ensure scope, test coverage, CI green status, and documentation quality.
