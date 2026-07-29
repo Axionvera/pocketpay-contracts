@@ -42,8 +42,8 @@ reviewer.
 - [ ] Every acceptance criterion in the issue is addressed by this PR (or I've
       explained in the PR description which ones are deferred and why).
 - [ ] I've filled in the [traceability table](traceability-table.md) mapping
-      each acceptance criterion to the function(s), test(s), and edge cases
-      that satisfy it.
+      each acceptance criterion to implementation evidence, test evidence,
+      documentation impact, edge cases, and status.
 - [ ] No `TODO`, `FIXME`, or `HACK` markers remain in the code this PR touches.
 - [ ] The change is scoped to one issue — unrelated refactors or fixes are
       split into a separate PR.
@@ -129,8 +129,8 @@ table get filled in for reviewers.
   incomplete work looks like. This template is the condensed, fill-in-the-blank
   version of that gate.
 - [Traceability Table Guide](traceability-table.md) — the standard format for
-  mapping acceptance criteria to functions and tests; fill this in as part of
-  the Behaviour section above.
+  the canonical acceptance criteria audit; fill this in as part of the
+  Behaviour section above.
 - [Contract Contributor Security Checklist](security-checklist.md) and
   [Invariant Test Checklist](invariant-test-checklist.md) — the detailed
   checklists the Security and Edge Cases sections above summarize.

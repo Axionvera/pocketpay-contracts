@@ -214,7 +214,7 @@ stellar-pocketpay-contracts/
 - [Admin & Emergency Mechanism Threat Model](docs/admin-pause-threat-model.md) – Security analysis of malicious admin, compromised admin, accidental pause, and blocked-withdrawal scenarios.
 - [Failure Mode Catalogue](docs/failure-mode-catalogue.md) – Summary of safe-failure behavior, expected errors, affected functions, and related tests for vault operations.
 - [Contributor Self-Review Template](docs/self-review-template.md) – Copy-paste checklist covering behaviour, tests, CI, security, edge cases, and docs impact — fill it in before opening a PR.
-- [Traceability Table Guide](docs/traceability-table.md) – Standard format for mapping PR changes to issue acceptance criteria, with worked examples.
+- [Traceability Table Guide](docs/traceability-table.md) – Canonical acceptance criteria audit template mapping implementation, tests, documentation impact, edge cases, and status, with worked examples.
 - [Payment-Period Conduct Guidance](docs/payment-period-conduct.md) – Expectations for how contributors raise payment-status questions, and how GrantFox's evaluation process relates to this repository's review process.
 
 ---
@@ -278,7 +278,7 @@ Every pull request must use the **[PR template](.github/PULL_REQUEST_TEMPLATE.md
 - A reference to the issue being fixed (`Closes #N`)
 - A list of contract functions added, modified, or removed
 - A description of tests added or updated
-- A **[traceability table](docs/traceability-table.md)** mapping each acceptance criterion to changed functions, tests, and edge cases
+- A **[traceability table](docs/traceability-table.md)** mapping each acceptance criterion to implementation evidence, test evidence, documentation impact, edge cases, and status
 - A security considerations section (with checklist for contract changes)
 - Confirmation that `make verify` passes (or equivalently `cargo fmt --check`, `cargo clippy --tests -- -D warnings`, and `cargo test --workspace`)
 - CI green before requesting review

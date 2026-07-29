@@ -109,6 +109,10 @@ Every pull request must fill in the **[PR template](.github/PULL_REQUEST_TEMPLAT
 - **Security considerations** — a plain-language description of security impact plus the per-section security checklist for any PR that touches contract logic (see `docs/security-checklist.md`).
 - **Commands run** — confirmation that `make verify` passes (format, Clippy, workspace tests, and release WASM build), or equivalently that `cargo fmt --check`, `cargo clippy --tests -- -D warnings`, and `cargo test --workspace` all pass locally.
 - **CI status** — all CI checks green before requesting review.
+- **Acceptance criteria audit** — the canonical
+  [Traceability Table](docs/traceability-table.md) maps every criterion to
+  implementation evidence, test evidence, documentation impact, edge cases,
+  and status.
 
 Additional guidance:
 

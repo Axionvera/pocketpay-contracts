@@ -87,17 +87,18 @@ make verify
 
 ## Traceability Table
 
-<!-- Map every acceptance criterion from the linked issue to the contract functions, tests,
-     and edge cases that satisfy it. See docs/traceability-table.md for the full guide.
+<!-- Complete this canonical acceptance criteria audit template by mapping every
+     criterion from the linked issue to implementation, tests, documentation
+     impact, and edge cases. See docs/traceability-table.md for the full guide.
 
      For documentation-only PRs with no acceptance criteria, replace the table below with:
      "No acceptance criteria — documentation-only change."
 
      Example row (delete this comment block before submitting):
 
-     | AC-1 | `extend_lock` rejects extensions exceeding `MaxLockDurationSecs` | `extend_lock` | `test_extend_lock_exceeds_max_duration` (`src/test/lock_extension.rs`) | Extension exactly at max (accepted); 1s over max (rejected) | ✅ Met |
+     | AC-1 | `extend_lock` rejects extensions exceeding `MaxLockDurationSecs` | `extend_lock` in `contracts/savings_vault/src/lib.rs` | `test_extend_lock_exceeds_max_duration` (`src/test/lock_extension.rs`) | N/A — behavior already documented | Extension exactly at max (accepted); 1s over max (rejected) | ✅ Met |
 -->
 
-| Criterion ID | Criterion Text | Changed Function(s) | Test(s) | Edge Cases Covered | Status |
-|---|---|---|---|---|---|
-| | | | | | |
+| Criterion ID | Criterion Text | Implementation Evidence | Test Evidence | Documentation Impact | Edge Cases Covered | Status |
+|---|---|---|---|---|---|---|
+| | | | | | | |
