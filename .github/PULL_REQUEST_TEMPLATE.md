@@ -29,15 +29,48 @@ Closes #<!-- issue number -->
 
 ---
 
-## Tests Added or Updated
+## Test Evidence
 
-<!-- Describe the tests that cover this change. Include file paths and test names where relevant.
-     Every logic change requires tests for the happy path and for failure/boundary conditions. -->
+<!-- Provide clear evidence of testing for this change. Every logic change requires tests
+     for the happy path and for failure/boundary conditions. -->
+
+### Tests added or updated
 
 - [ ] Happy-path tests added/updated
 - [ ] Failure and boundary-condition tests added/updated
 - [ ] Test naming follows the convention in [`docs/testing.md`](docs/testing.md)
 - [ ] [`docs/test-coverage.md`](docs/test-coverage.md) updated to reflect new or changed tests
+
+### No-test justification
+
+<!-- If no tests were added, explain why. Examples: documentation-only change,
+     refactor with no behaviour change, CI-only change. -->
+
+- [ ] N/A — tests added (or)
+- [ ] Justification provided below:
+
+**Justification for no tests:**
+
+### Contract-specific test examples
+
+<!-- Review and reference existing contract test patterns relevant to this change.
+     Common test categories in this repo:
+
+     | Category | Example files |
+     |---|---|
+     | Balance & accounting invariants | `test/balance_conservation.rs`, `test/total_vault_balance.rs`, `test/property_vault_accounting.rs` |
+     | Lock operations | `test/lock_amount_validation.rs`, `test/lock_extension.rs`, `test/lock_maturity_boundary.rs`, `test/multi_lock_invariants.rs` |
+     | Authorization & isolation | `test/unauthorized_access.rs`, `test/cross_user_isolation.rs` |
+     | Edge cases & boundaries | `test/zero_duration_lock.rs`, `test/maximum_amount_boundary.rs`, `test/independent_lock_creation.rs` |
+     | Negative paths | `test/negative_paths.rs` |
+     | Event correctness | `test/event_schema.rs`, `test/event_compatibility.rs`, `test/event_ordering.rs` |
+     | Pause & admin | `test/pause.rs`, `test/pause_state_read.rs`, `test/pause_transition.rs`, `test/admin_rotation.rs` |
+     | Replay protection | `test/replay_protection.rs`, `test/lock_maturity_replay.rs` |
+     | Invariant checklist | `test/invariant_checklist_examples.rs` |
+
+     See [`docs/testing.md`](docs/testing.md) for the full testing guide. -->
+
+- [ ] Existing contract test examples reviewed and relevant patterns referenced
 
 ---
 
