@@ -299,3 +299,6 @@ make verify
 ## License
 
 MIT
+
+## Payment & Evaluation Policy
+Contributors participating in campaigns or rewarded issues must follow the [Payment-Period Communication Policy](docs/PAYMENT_POLICY.md). Payments follow the GrantFox evaluation process and are evaluated post-merge. Repeated complaints or spam regarding payouts are prohibited.
