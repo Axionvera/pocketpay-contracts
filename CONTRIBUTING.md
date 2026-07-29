@@ -105,10 +105,15 @@ Every pull request must fill in the **[PR template](.github/PULL_REQUEST_TEMPLAT
 
 - **Issue reference** — a `Closes #N` line linking to the issue being resolved.
 - **Contract functions changed** — a table listing every function added, modified, or removed (write "none" for documentation-only PRs).
-- **Tests added or updated** — names and file paths of new or changed tests, with checkboxes confirming happy-path, failure, and boundary coverage.
+- **Test evidence** — a description of tests added or updated with file paths and test names, including:
+  - Happy-path, failure, and boundary-condition test coverage.
+  - Justification when no tests are added (documentation-only, refactor with no behaviour change, CI-only).
+  - Reference to existing contract test patterns relevant to the change (see `docs/testing.md` for test categories and examples).
 - **Security considerations** — a plain-language description of security impact plus the per-section security checklist for any PR that touches contract logic (see `docs/security-checklist.md`).
 - **Commands run** — confirmation that `make verify` passes (format, Clippy, workspace tests, and release WASM build), or equivalently that `cargo fmt --check`, `cargo clippy --tests -- -D warnings`, and `cargo test --workspace` all pass locally.
 - **CI status** — all CI checks green before requesting review.
+
+> **Test evidence requirement:** Every contract PR must provide clear testing evidence. Changes without tests must include a justification explaining why tests are not needed.
 
 Maintainers should use the [Reviewer Evidence
 Checklist](docs/reviewer-evidence-checklist.md) to verify implementation scope,
