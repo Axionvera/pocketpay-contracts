@@ -308,3 +308,6 @@ All PRs are required to include an [Acceptance Criteria Audit Table](docs/ACCEPT
 
 ## Contribution Quality & Examples
 Before submitting code, review the [Low-Effort Contribution Examples Guide](docs/LOW_EFFORT_EXAMPLES.md) to understand common anti-patterns (such as partial implementations or missing tests) and their required high-quality alternatives.
+
+## Local Deployment Verification
+To build, deploy, initialize, and smoke-test PocketPay contracts locally, follow the [Local Deployment Verification Flow](docs/LOCAL_DEPLOYMENT_VERIFICATION.md).
