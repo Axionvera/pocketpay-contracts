@@ -110,6 +110,11 @@ Every pull request must fill in the **[PR template](.github/PULL_REQUEST_TEMPLAT
 - **Commands run** — confirmation that `make verify` passes (format, Clippy, workspace tests, and release WASM build), or equivalently that `cargo fmt --check`, `cargo clippy --tests -- -D warnings`, and `cargo test --workspace` all pass locally.
 - **CI status** — all CI checks green before requesting review.
 
+Maintainers should use the [Reviewer Evidence
+Checklist](docs/reviewer-evidence-checklist.md) to verify implementation scope,
+test evidence, exact-head CI, acceptance criteria, documentation impact, and
+risk before approving a pull request.
+
 Additional guidance:
 
 - Keep each pull request focused on one issue or related change.
