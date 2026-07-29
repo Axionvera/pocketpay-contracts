@@ -198,6 +198,8 @@ stellar-pocketpay-contracts/
 ├── Cargo.toml                          # Workspace root
 ├── .gitignore
 ├── README.md
+├── docs/
+│   └── meaningful-change-threshold.md  # Contribution scope review guide
 └── contracts/
     └── savings_vault/
         ├── Cargo.toml                  # Contract crate
@@ -213,6 +215,7 @@ stellar-pocketpay-contracts/
 - [Admin Role](docs/admin-role.md) – Details on the admin address, current capabilities, and future design considerations.
 - [Admin & Emergency Mechanism Threat Model](docs/admin-pause-threat-model.md) – Security analysis of malicious admin, compromised admin, accidental pause, and blocked-withdrawal scenarios.
 - [Failure Mode Catalogue](docs/failure-mode-catalogue.md) – Summary of safe-failure behavior, expected errors, affected functions, and related tests for vault operations.
+- [Meaningful Change Threshold](docs/meaningful-change-threshold.md) – Outcome- and evidence-based guidance for distinguishing small complete changes from small incomplete changes.
 - [Contributor Self-Review Template](docs/self-review-template.md) – Copy-paste checklist covering behaviour, tests, CI, security, edge cases, and docs impact — fill it in before opening a PR.
 - [Traceability Table Guide](docs/traceability-table.md) – Standard format for mapping PR changes to issue acceptance criteria, with worked examples.
 - [Payment-Period Conduct Guidance](docs/payment-period-conduct.md) – Expectations for how contributors raise payment-status questions, and how GrantFox's evaluation process relates to this repository's review process.
