@@ -305,3 +305,6 @@ Contributors participating in campaigns or rewarded issues must follow the [Paym
 
 ## Acceptance Criteria Audit
 All PRs are required to include an [Acceptance Criteria Audit Table](docs/ACCEPTANCE_CRITERIA_AUDIT.md) mapping issue requirements to code and test evidence.
+
+## Contribution Quality & Examples
+Before submitting code, review the [Low-Effort Contribution Examples Guide](docs/LOW_EFFORT_EXAMPLES.md) to understand common anti-patterns (such as partial implementations or missing tests) and their required high-quality alternatives.
