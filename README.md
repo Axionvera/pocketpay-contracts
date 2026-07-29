@@ -215,6 +215,7 @@ stellar-pocketpay-contracts/
 - [Failure Mode Catalogue](docs/failure-mode-catalogue.md) – Summary of safe-failure behavior, expected errors, affected functions, and related tests for vault operations.
 - [Contributor Security Checklist](docs/security-checklist.md) – Practical review checklist for vault contract changes covering accounting, lock state, token transfer safety, authorisation, storage, events, error handling, and tests.
 - [Contributor Self-Review Template](docs/self-review-template.md) – Copy-paste checklist covering behaviour, tests, CI, security, edge cases, and docs impact — fill it in before opening a PR.
+- [Approval Readiness Checklist](docs/approval-readiness-checklist.md) – Final checklist before requesting evaluation: implementation completeness, tests, CI status, acceptance criteria review, docs, known limitations, and the post-merge-is-not-approval note.
 - [Traceability Table Guide](docs/traceability-table.md) – Standard format for mapping PR changes to issue acceptance criteria, with worked examples.
 - [Payment-Period Conduct Guidance](docs/payment-period-conduct.md) – Expectations for how contributors raise payment-status questions, and how GrantFox's evaluation process relates to this repository's review process.
 
