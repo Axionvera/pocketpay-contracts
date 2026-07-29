@@ -277,11 +277,13 @@ Every pull request must use the **[PR template](.github/PULL_REQUEST_TEMPLATE.md
 
 - A reference to the issue being fixed (`Closes #N`)
 - A list of contract functions added, modified, or removed
-- A description of tests added or updated
+- **Test evidence** — description of tests added, no-test justification, and references to existing contract test patterns
 - A **[traceability table](docs/traceability-table.md)** mapping each acceptance criterion to changed functions, tests, and edge cases
 - A security considerations section (with checklist for contract changes)
 - Confirmation that `make verify` passes (or equivalently `cargo fmt --check`, `cargo clippy --tests -- -D warnings`, and `cargo test --workspace`)
 - CI green before requesting review
+
+> **Test evidence requirement:** Every contract PR must include clear testing evidence. Changes without tests require a justification. See the [PR template](.github/PULL_REQUEST_TEMPLATE.md) and [CONTRIBUTING.md](CONTRIBUTING.md#pull-request-expectations) for details.
 
 Before asking about payment status on an issue or PR, read the **[Payment-Period Conduct Guidance](docs/payment-period-conduct.md)** — it explains how to self-review first and how this repository's review process relates to GrantFox's own evaluation process.
 
