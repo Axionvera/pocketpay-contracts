@@ -12,11 +12,11 @@ mod event_compatibility;
 mod event_ordering;
 mod independent_lock_creation;
 mod initialization;
-mod invariant_checklist_examples;
 mod invalid_lock_id;
-mod lock_extension;
-mod lock_atomicity;
+mod invariant_checklist_examples;
 mod lock_amount_validation;
+mod lock_atomicity;
+mod lock_extension;
 mod lock_id_generation;
 mod lock_maturity_boundary;
 mod lock_maturity_replay;
@@ -48,7 +48,6 @@ use super::*;
 use soroban_sdk::{testutils::Address as _, testutils::Events, Address, IntoVal};
 
 use test_helpers::*;
-
 
 // =========================================================================
 // Version Metadata Tests
@@ -1477,10 +1476,7 @@ fn test_withdraw_emits_event() {
     let (amount, new_balance): (i128, i128) = data.try_into_val(&env).unwrap();
     assert_eq!(topic0, symbol_short!("withdraw"));
     assert_eq!(topic1, user);
-    assert_eq!(
-        (amount, new_balance),
-        (50_i128, 50_i128)
-    );
+    assert_eq!((amount, new_balance), (50_i128, 50_i128));
 }
 
 #[test]
@@ -1497,7 +1493,7 @@ fn test_withdraw_lock_emits_event() {
 
     deposit_balance(&client, &user, 500);
     let id = client.lock_funds(&user, &200, &2_000);
-    
+
     set_ledger_timestamp(&env, 2_000);
     client.withdraw_lock(&user, &id);
 
@@ -1505,10 +1501,10 @@ fn test_withdraw_lock_emits_event() {
     let (_contract, topics, data) = events.get(events.len() - 1).unwrap();
     let topic0: soroban_sdk::Symbol = topics.get(0).unwrap().try_into_val(&env).unwrap();
     let topic1: Address = topics.get(1).unwrap().try_into_val(&env).unwrap();
-    let (amount, new_balance): (i128, i128) = data.try_into_val(&env).unwrap();
-    assert_eq!(topic0, symbol_short!("wdr_lock"));
+    let (lock_id, amount): (u64, i128) = data.try_into_val(&env).unwrap();
+    assert_eq!(topic0, Symbol::new(&env, "withdraw_lock"));
     assert_eq!(topic1, user);
-    assert_eq!((amount, new_balance), (200_i128, 300_i128));
+    assert_eq!((lock_id, amount), (id, 200_i128));
 }
 
 #[test]
@@ -1561,13 +1557,14 @@ fn test_deposit_unauthorized_caller_fails() {
 fn test_withdraw_cross_user_unauthorized_fails() {
     let env = Env::default();
     let (contract_id, client) = init_contract(&env);
-    let (env, _admin, client, token_client, token_admin) = test_token(env, contract_id.clone(), client);
+    let (env, _admin, client, token_client, token_admin) =
+        test_token(env, contract_id.clone(), client);
 
     let alice = Address::generate(&env);
     let attacker = Address::generate(&env);
 
     token_admin.mint(&alice, &1000);
-    
+
     // Deposit for Alice with Alice's auth mocked
     env.mock_auths(&[soroban_sdk::testutils::MockAuth {
         address: &alice,
@@ -1637,7 +1634,8 @@ fn test_lock_funds_cross_user_unauthorized_fails() {
 fn test_admin_cannot_withdraw_user_funds_without_user_auth() {
     let env = Env::default();
     let (contract_id, client) = init_contract(&env);
-    let (env, admin, client, token_client, token_admin) = test_token(env, contract_id.clone(), client);
+    let (env, admin, client, token_client, token_admin) =
+        test_token(env, contract_id.clone(), client);
 
     let user = Address::generate(&env);
     token_admin.mint(&user, &1000);
@@ -1668,4 +1666,3 @@ fn test_admin_cannot_withdraw_user_funds_without_user_auth() {
     // Fails because withdraw requires `user.require_auth()`
     client.withdraw(&user, &500);
 }
-

@@ -143,6 +143,7 @@ fn example_withdraw_unauthorized_caller_fails() {
 
     // Attacker tries to withdraw user's funds
     // This should fail because user did not authorize the operation
+    env.mock_auths(&[]);
     let result = client.try_withdraw(&user, &500);
     assert!(
         result.is_err(),
@@ -171,6 +172,7 @@ fn example_lock_funds_unauthorized_caller_fails() {
 
     // Attacker tries to lock user's funds
     set_ledger_timestamp(&env, 1000);
+    env.mock_auths(&[]);
     let result = client.try_lock_funds(&user, &500, &2000);
     assert!(
         result.is_err(),
@@ -309,7 +311,10 @@ fn example_balances_never_negative() {
     // Deposit
     token_admin.mint(&user, &1000);
     client.deposit(&user, &1000);
-    assert!(client.get_balance(&user) >= 0, "Balance negative after deposit");
+    assert!(
+        client.get_balance(&user) >= 0,
+        "Balance negative after deposit"
+    );
     assert!(
         client.get_locked_balance(&user) >= 0,
         "Locked balance negative after deposit"
@@ -377,7 +382,10 @@ fn example_time_advancement_does_not_modify_accounting_state() {
     );
 
     // Note: lock is now matured but still in locked balance until withdrawn
-    assert_eq!(locked_after, 300, "Matured lock should remain in locked balance");
+    assert_eq!(
+        locked_after, 300,
+        "Matured lock should remain in locked balance"
+    );
 }
 
 // ---------------------------------------------------------------------------
