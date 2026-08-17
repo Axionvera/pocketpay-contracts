@@ -2,6 +2,11 @@
 
 This document defines the objective criteria for "payment-ready" or "production-ready" work in the PocketPay Contracts repository. To maintain high security and reliability, every Pull Request (PR) must pass through this quality gate before being considered for final approval.
 
+Change size is not a quality requirement. Use the
+[Meaningful Change Threshold](meaningful-change-threshold.md) to distinguish a
+small complete change from a small incomplete one and to assess scope without
+using line count as a proxy for value.
+
 ## 1. Quality Gate Checklist
 
 Every PR must satisfy the following checklist. If any item is missing or incomplete, the PR will be flagged for further work.
