@@ -160,3 +160,24 @@ pub fn strict_setup() -> (Env, Address, SavingsVaultClient<'static>) {
     let client = SavingsVaultClient::new(&env, &contract_id);
     (env, contract_id, client)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn can_withdraw_returns_false_for_new_user() {
+        let (env, _, client) = setup();
+        let user = new_user(&env);
+        assert!(!client.can_withdraw(&user));
+    }
+
+    #[test]
+    fn can_withdraw_returns_true_for_available_balance_without_lock() {
+        let (env, _, client) = setup();
+        let user = new_user(&env);
+        deposit_balance(&client, &user, 100);
+        assert!(client.can_withdraw(&user));
+    }
+}
+

@@ -266,3 +266,32 @@ fn test_multiple_locks_independent_boundaries() {
     assert!(f.client.can_withdraw(&f.user));
     f.client.withdraw_lock(&f.user, &lock_2);
 }
+
+// =========================================================================
+// 8. Default `can_withdraw` State
+// =========================================================================
+
+/// Verifies that `can_withdraw` returns false for a brand-new user with no
+/// balance and no lock.
+#[test]
+fn test_can_withdraw_new_user_default_false() {
+    let f = setup_boundary_fixture(1_000);
+    let fresh_user = new_user(&f.env);
+
+    assert!(
+        !f.client.can_withdraw(&fresh_user),
+        "can_withdraw must default to false for a user with no balance and no lock"
+    );
+}
+
+/// Verifies that `can_withdraw` returns false when the user only has available
+/// (unlocked) balance and no lock has been created.
+#[test]
+fn test_can_withdraw_available_balance_no_lock_default_false() {
+    let f = setup_boundary_fixture(1_000);
+
+    assert!(
+        !f.client.can_withdraw(&f.user),
+        "can_withdraw must default to false when no lock exists, even with available balance"
+    );
+}

@@ -29,6 +29,74 @@ use soroban_sdk::{
     token, Address, Env, Symbol, Vec,
 };
 
+#[cfg(test)]
+mod can_withdraw_default_tests {
+    use super::*;
+    use soroban_sdk::testutils::{Address as _, Env as _};
+
+    #[test]
+    fn can_withdraw_returns_false_for_new_user() {
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let admin = Address::generate(&env);
+        let token = Address::generate(&env);
+        let contract_id = env.register_contract(None, SavingsVault);
+        let client = SavingsVaultClient::new(&env, &contract_id);
+        client.initialize(&admin, &token);
+
+        let user = Address::generate(&env);
+
+        assert!(!client.can_withdraw(&user));
+    }
+
+    #[test]
+    fn can_withdraw_returns_false_for_user_with_available_balance_and_no_lock() {
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let token_admin = Address::generate(&env);
+        let token = env.register_stellar_asset_contract(token_admin);
+        let admin = Address::generate(&env);
+        let contract_id = env.register_contract(None, SavingsVault);
+        let client = SavingsVaultClient::new(&env, &contract_id);
+        client.initialize(&admin, &token);
+
+        let user = Address::generate(&env);
+        soroban_sdk::token::StellarAssetClient::new(&env, &token).mint(&user, &1_000_i128);
+
+        client.deposit(&user, &250_i128);
+
+        assert_eq!(client.get_balance(&user), 250_i128);
+        assert!(!client.can_withdraw(&user));
+    }
+
+    #[test]
+    fn can_withdraw_returns_true_after_lock_matures() {
+        let env = Env::default();
+        env.mock_all_auths();
+
+        let token_admin = Address::generate(&env);
+        let token = env.register_stellar_asset_contract(token_admin);
+        let admin = Address::generate(&env);
+        let contract_id = env.register_contract(None, SavingsVault);
+        let client = SavingsVaultClient::new(&env, &contract_id);
+        client.initialize(&admin, &token);
+
+        let user = Address::generate(&env);
+        soroban_sdk::token::StellarAssetClient::new(&env, &token).mint(&user, &1_000_i128);
+
+        env.ledger().set_timestamp(1_000_u64);
+        client.deposit(&user, &500_i128);
+        client.lock_funds(&user, &200_i128, &2_000_u64);
+
+        assert!(!client.can_withdraw(&user));
+
+        env.ledger().set_timestamp(2_000_u64);
+        assert!(client.can_withdraw(&user));
+    }
+}
+
 const MAX_LOCK_PAGE_SIZE: u32 = 50;
 
 // ---------------------------------------------------------------------------

@@ -1,5 +1,65 @@
 use super::*;
-use soroban_sdk::{testutils::Address as _, testutils::Ledger, Address, Env};
+use soroban_sdk::{
+    testutils::Address as _,
+    testutils::Ledger,
+    Address,
+    Env,
+};
+
+#[test]
+fn test_can_withdraw_new_user_returns_false() {
+    let (env, _contract_id, client) = setup();
+    let user = new_user(&env);
+    set_ledger_timestamp(&env, 1000);
+
+    assert!(!client.can_withdraw(&user));
+}
+
+#[test]
+fn test_can_withdraw_available_balance_no_lock_returns_true() {
+    let (env, contract_id, client) = setup();
+    let (env, _admin, client, _token_client, token_admin) = test_token(env, contract_id, client);
+    let user = new_user(&env);
+    set_ledger_timestamp(&env, 1000);
+
+    token_admin.mint(&user, &1000);
+    client.deposit(&user, &1000);
+
+    assert (client.can_withdraw(&user));
+}
+
+#[test]
+fn test_can_withdraw_only_locked_balance_returns_false() {
+    let (env, contract_id, client) = setup();
+    let (env, _admin, client, _token_client, token_admin) = test_token(env, contract_id, client);
+    let user = new_user(&env);
+
+    set_ledger_timestamp(&env, 1000);
+    token_admin.mint(&user, &1000);
+    client.deposit(&user, &1000);
+
+    // Lock the entire balance
+    client.lock_funds(&user, &1000, &2000);
+
+    // No available balance; cannot withdraw
+    assert!(!client.can_withdraw(&user));
+}
+
+#[test]
+fn test_can_withdraw_available_balance_with_lock_returns_true() {
+    let (env, contract_id, client) = setup();
+    let (env, _admin, client, _token_client, token_admin) = test_token(env, contract_id, client);
+    let user = new_user(&env);
+
+    set_ledger_timestamp(&env, 1000);
+    token_admin.mint(&user, &1000);
+    client.deposit(&user, &1000);
+
+    // Lock part of the balance, leaving 600 available
+    client.lock_funds(&user, &400, &2000);
+
+    assert (client.can_withdraw(&user));
+}
 
 #[test]
 fn test_withdraw_matured_lock_success() {
