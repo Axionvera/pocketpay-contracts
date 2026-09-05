@@ -165,3 +165,95 @@ fn test_failed_lock_creates_no_partial_record() {
     assert_eq!(client.get_balance(&user), 900);
     assert_eq!(client.get_locked_balance(&user), 100);
 }
+
+// ---------------------------------------------------------------------------
+// Failed withdrawal leaves state unchanged
+// ---------------------------------------------------------------------------
+
+/// A withdrawal for more than the available balance is rejected and leaves balances untouched.
+#[test]
+fn test_failed_withdrawal_insufficient_balance_leaves_state_intact() {
+    let env = test_env();
+    let (_admin, client) = init_with_admin(&env);
+    let user = Address::generate(&env);
+
+    env.ledger().set_timestamp(1_000);
+    fund(&client, &user, 1_000);
+
+    let balance_before = client.get_balance(&user);
+    let locked_before = client.get_locked_balance(&user);
+
+    let res = client.try_withdraw(&user, &(balance_before + 1));
+    assert!(res.is_err());
+
+    assert_eq!(client.get_balance(&user), balance_before);
+    assert_eq!(client.get_locked_balance(&user), locked_before);
+}
+
+/// A zero-amount withdrawal is rejected and leaves balances untouched.
+#[test]
+fn test_failed_withdrawal_zero_amount_leaves_state_intact() {
+    let env = test_env();
+    let (_admin, client) = init_with_admin(&env);
+    let user = Address::generate(&env);
+
+    env.ledger().set_timestamp(1_000);
+    fund(&client, &user, 1_000);
+
+    let balance_before = client.get_balance(&user);
+    let locked_before = client.get_locked_balance(&user);
+
+    let res = client.try_withdraw(&user, &0);
+    assert!(res.is_err());
+
+    assert_eq!(client.get_balance(&user), balance_before);
+    assert_eq!(client.get_locked_balance(&user), locked_before);
+}
+
+/// A failed withdrawal does not alter existing lock records or locked balances.
+#[test]
+fn test_failed_withdrawal_preserves_locks() {
+    let env = test_env();
+    let (_admin, client) = init_with_admin(&env);
+    let user = Address::generate(&env);
+
+    env.ledger().set_timestamp(1_000);
+    fund(&client, &user, 1_000);
+    let id = client.lock_funds(&user, &300, &(env.ledger().timestamp() + 100));
+    let lock_before = client.get_lock(&user, &id).expect("lock should exist");
+
+    let balance_before = client.get_balance(&user);
+    let res = client.try_withdraw(&user, &(balance_before + 1));
+    assert!(res.is_err());
+
+    assert_eq!(client.get_balance(&user), balance_before);
+    assert_eq!(client.get_locked_balance(&user), 300);
+    let lock_after = client.get_lock(&user, &id).expect("lock should still exist");
+    assert_eq!(lock_after.amount, lock_before.amount);
+    assert_eq!(lock_after.withdrawn, lock_before.withdrawn);
+}
+
+// ---------------------------------------------------------------------------
+// Failed deposit leaves state unchanged
+// ---------------------------------------------------------------------------
+
+/// A zero-amount deposit is rejected and leaves balances untouched.
+#[test]
+fn test_failed_deposit_zero_amount_leaves_state_intact() {
+    let env = test_env();
+    let (_admin, client) = init_with_admin(&env);
+    let user = Address::generate(&env);
+
+    env.ledger().set_timestamp(1_000);
+    fund(&client, &user, 1_000);
+
+    let balance_before = client.get_balance(&user);
+    let locked_before = client.get_locked_balance(&user);
+
+    let res = client.try_deposit(&user, &0);
+    assert!(res.is_err());
+
+    assert_eq!(client.get_balance(&user), balance_before);
+    assert_eq!(client.get_locked_balance(&user), locked_before);
+}
+

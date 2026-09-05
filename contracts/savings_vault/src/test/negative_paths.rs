@@ -220,6 +220,79 @@ fn test_state_remains_consistent_after_failed_lock() {
 }
 
 #[test]
+fn test_state_remains_consistent_after_failed_withdrawal() {
+    let env = test_env();
+    let (_contract_id, client, _token_client, token_admin, _vault_admin) = vault_with_sac(&env);
+    let user = Address::generate(&env);
+    
+    env.mock_all_auths();
+    set_ledger_timestamp(&env, 1000);
+    token_admin.mint(&user, &1000);
+    client.deposit(&user, &1000);
+    
+    let lock_id = client.lock_funds(&user, &500, &5000);
+    let initial_balance = client.get_balance(&user);
+    let initial_locked = client.get_locked_balance(&user);
+    
+    // Attempt to withdraw the lock before it matures
+    set_ledger_timestamp(&env, 4999);
+    let res = client.try_withdraw_lock(&user, &lock_id);
+    assert!(res.is_err(), "Early withdrawal should fail");
+    
+    assert_eq!(client.get_balance(&user), initial_balance, "Balance should not change after failed withdrawal");
+    assert_eq!(client.get_locked_balance(&user), initial_locked, "Locked balance should not change after failed withdrawal");
+}
+
+#[test]
+fn test_state_remains_consistent_after_failed_withdraw() {
+    let env = test_env();
+    let (contract_id, client, token_client, token_admin, _vault_admin) = vault_with_sac(&env);
+    let user = Address::generate(&env);
+
+    env.mock_all_auths();
+    token_admin.mint(&user, &1000);
+    client.deposit(&user, &1000);
+
+    let initial_balance = client.get_balance(&user);
+    let initial_locked = client.get_locked_balance(&user);
+    let initial_user_tokens = token_client.balance(&user);
+    let initial_vault_tokens = token_client.balance(&contract_id);
+
+    // Attempt to withdraw more than the unlocked balance
+    let res = client.try_withdraw(&user, &1001);
+    assert!(res.is_err(), "Withdraw should fail due to insufficient unlocked balance");
+
+    assert_eq!(client.get_balance(&user), initial_balance, "Balance should not change after failed withdraw");
+    assert_eq!(client.get_locked_balance(&user), initial_locked, "Locked balance should not change after failed withdraw");
+    assert_eq!(token_client.balance(&user), initial_user_tokens, "User tokens should not change after failed withdraw");
+    assert_eq!(token_client.balance(&contract_id), initial_vault_tokens, "Vault tokens should not change after failed withdraw");
+}
+
+#[test]
+fn test_state_remains_consistent_after_invalid_amount() {
+    let env = test_env();
+    let (_contract_id, client, _token_client, token_admin, _vault_admin) = vault_with_sac(&env);
+    let user = Address::generate(&env);
+    
+    env.mock_all_auths();
+    token_admin.mint(&user, &1000);
+    client.deposit(&user, &1000);
+    
+    let initial_balance = client.get_balance(&user);
+    let initial_locked = client.get_locked_balance(&user);
+    
+    // Invalid deposit amounts must not change user state
+    let res = client.try_deposit(&user, &0);
+    assert!(res.is_err());
+    assert_eq!(client.get_balance(&user), initial_balance, "Balance should not change after zero deposit");
+    assert_eq!(client.get_locked_balance(&user), initial_locked, "Locked balance should not change after zero deposit");
+    let res = client.try_deposit(&user, &-1);
+    assert!(res.is_err());
+    assert_eq!(client.get_balance(&user), initial_balance, "Balance should not change after negative deposit");
+    assert_eq!(client.get_locked_balance(&user), initial_locked, "Locked balance should not change after negative deposit");
+}
+
+#[test]
 fn test_state_consistency_after_failed_token_transfer() {
     let env = test_env();
     let (contract_id, client) = init_contract(&env);

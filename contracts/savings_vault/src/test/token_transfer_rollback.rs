@@ -90,7 +90,9 @@ fn test_failed_deposit_insufficient_token_balance() {
     );
     assert_eq!(
         locked_after, locked_before,
-        "locked balance must not change on failed deposit"
+        "locked balance unchanged after 5 failed ops"
+    );
+}cked balance must not change on failed deposit"
     );
     assert_eq!(
         events_after, events_before,
@@ -500,4 +502,93 @@ fn test_failed_withdraw_token_transfer_failure_preserves_state() {
         lock_snapshot_after.withdrawn, lock_snapshot_before.withdrawn,
         "lock withdrawn flag unchanged after failed withdraw"
     );
+}
+
+// ────────────────────────────────────────────────────────────
+// invalid amount rollback
+// ────────────────────────────────────────────────────────────
+
+#[test]
+fn test_failed_deposit_invalid_amount_rollback() {
+    // Negative amounts are rejected before any state can be written.
+    let env = test_env();
+    let (_contract_id, client, _token_client, token_admin, _) = vault_with_sac(&env);
+    let user = Address::generate(&env);
+
+    token_admin.mint(&user, &1_000);
+
+    let (bal_before, locked_before, events_before) = snapshot(&env, &client, &user);
+
+    let result = client.try_deposit(&user, &(-1));
+    assert!(result.is_err(), "deposit with negative amount must fail");
+
+    let (bal_after, locked_after, events_after) = snapshot(&env, &client, &user);
+    assert_eq!(bal_after, bal_before);
+    assert_eq!(locked_after, locked_before);
+    assert_eq!(events_after, events_before);
+}
+
+#[test]
+fn test_failed_withdraw_invalid_amount_rollback() {
+    // User has a real balance; a negative withdrawal must not touch it.
+    let env = test_env();
+    let (_contract_id, client, _token_client, token_admin, _) = vault_with_sac(&env);
+    let user = Address::generate(&env);
+
+    token_admin.mint(&user, &1_000);
+    client.deposit(&user, &500);
+
+    let (bal_before, locked_before, events_before) = snapshot(&env, &client, &user);
+
+    let result = client.try_withdraw(&user, &(-1));
+    assert!(result.is_err(), "withdraw with negative amount must fail");
+
+    let (bal_after, locked_after, events_after) = snapshot(&env, &client, &user);
+    assert_eq!(bal_after, bal_before);
+    assert_eq!(locked_after, locked_before);
+    assert_eq!(events_after, events_before);
+}
+
+#[test]
+fn test_failed_lock_funds_invalid_amount_rollback() {
+    // A failed lock_funds call must leave available balance and existing lock
+    // state unchanged.
+    let env = test_env();
+    let (_contract_id, client, _token_client, token_admin, _) = vault_with_sac(&env);
+    let user = Address::generate(&env);
+
+    token_admin.mint(&user, &1_000);
+    client.deposit(&user, &500);
+
+    let (bal_before, locked_before, events_before) = snapshot(&env, &client, &user);
+
+    let result = client.try_lock_funds(&user, &(-1), &10_000);
+    assert!(result.is_err(), "lock_funds with negative amount must fail");
+
+    let (bal_after, locked_after, events_after) = snapshot(&env, &client, &user);
+    assert_eq!(bal_after, bal_before);
+    assert_eq!(locked_after, locked_before);
+    assert_eq!(events_after, events_before);
+}
+
+#[test]
+fn test_failed_lock_funds_insufficient_available_rollback() {
+    // Locking more than the available balance must fail without changing state.
+    let env = test_env();
+    let (_contract_id, client, _token_client, token_admin, _) = vault_with_sac(&env);
+    let user = Address::generate(&env);
+
+    token_admin.mint(&user, &1_000);
+    client.deposit(&user, &500);
+
+    let (bal_before, locked_before, events_before) = snapshot(&env, &client, &user);
+    assert_eq!(bal_before, 500);
+
+    let result = client.try_lock_funds(&user, &501, &10_000);
+    assert!(result.is_err(), "lock_funds exceeding available must fail");
+
+    let (bal_after, locked_after, events_after) = snapshot(&env, &client, &user);
+    assert_eq!(bal_after, bal_before);
+    assert_eq!(locked_after, locked_before);
+    assert_eq!(events_after, events_before);
 }

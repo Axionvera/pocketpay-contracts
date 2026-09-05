@@ -1,5 +1,4 @@
 name: Trigger Auto Merge Automation
-
 on:
   pull_request_target:
     types:
@@ -7,24 +6,20 @@ on:
       - reopened
       - synchronize
       - ready_for_review
-
 permissions:
   contents: read
-
 jobs:
   trigger-auto-merge:
-    name: Trigger central auto-merge
     runs-on: ubuntu-latest
-
     steps:
       - name: Trigger automation repo
         env:
-          GH_TOKEN: ${{ secrets.AXIONVERA_AUTOMATION_TOKEN }}
+          GH_TOKEN: $.{{ secrets.AXIONVERA_AUTOMATION_TOKEN }}
         run: |
           gh api \
             --method POST \
             -H "Accept: application/vnd.github+json" \
             /repos/Axionvera/pocketpay-issue-automation/dispatches \
             -f event_type=axionvera-pr-opened \
-            -F client_payload[repo]="${{ github.repository }}" \
-            -F client_payload[pr_number]="${{ github.event.pull_request.number }}"
+            -f "client_payload[repo]=${ {{ github.repository }}" \
+            -f "client_payload[pr_number]=${ {{ github.event.pull_request.number }}" || true

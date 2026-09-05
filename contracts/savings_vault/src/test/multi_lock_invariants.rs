@@ -226,46 +226,74 @@ fn multi_lock_failed_operations_do_not_mutate() {
     assert_conserved(&client, &user, expected);
 
     // Create 3 locks: available=400, locked=600
-    client.lock_funds(&user, &200, &3_000);
+    let id1 = client.lock_funds(&user, &200, &3_000);
     client.lock_funds(&user, &300, &5_000);
     client.lock_funds(&user, &100, &7_000);
     assert_conserved(&client, &user, expected);
 
     let before = snapshot(&client, &user);
+    let locks_before = client.list_locks(&user, &0u32, &50u32);
+
+    macro_rules! assert_unchanged {
+        () => {
+            assert_eq!(snapshot(&client, &user), before);
+            assert_eq!(client.list_locks(&user, &0u32, &50u32), locks_before);
+        }
+    }
 
     // Lock more than available
     let res = client.try_lock_funds(&user, &401, &10_000);
     assert!(res.is_err());
-    assert_eq!(snapshot(&client, &user), before);
+    assert_unchanged!();
 
     // Lock zero
     let res = client.try_lock_funds(&user, &0, &10_000);
     assert!(res.is_err());
-    assert_eq!(snapshot(&client, &user), before);
+    assert_unchanged!();
+
+    // Lock negative amount
+    let res = client.try_lock_funds(&user, &-50, &10_000);
+    assert!(res.is_err());
+    assert_unchanged!();
 
     // Lock with past unlock
     let res = client.try_lock_funds(&user, &50, &500);
     assert!(res.is_err());
-    assert_eq!(snapshot(&client, &user), before);
+    assert_unchanged!();
 
     // Withdraw more than available
     let res = client.try_withdraw(&user, &401);
     assert!(res.is_err());
-    assert_eq!(snapshot(&client, &user), before);
+    assert_unchanged!();
 
     // Withdraw zero
     let res = client.try_withdraw(&user, &0);
     assert!(res.is_err());
-    assert_eq!(snapshot(&client, &user), before);
+    assert_unchanged!();
+
+    // Withdraw negative amount
+    let res = client.try_withdraw(&user, &-10);
+    assert!(res.is_err());
+    assert_unchanged!();
 
     // Deposit zero / negative
     let res = client.try_deposit(&user, &0);
     assert!(res.is_err());
-    assert_eq!(snapshot(&client, &user), before);
+    assert_unchanged!();
 
     let res = client.try_deposit(&user, &-10);
     assert!(res.is_err());
-    assert_eq!(snapshot(&client, &user), before);
+    assert_unchanged!();
+
+    // Withdraw_lock on unmatured lock
+    let res = client.try_withdraw_lock(&user, &id1);
+    assert!(res.is_err());
+    assert_unchanged!();
+
+    // Withdraw_lock on nonexistent lock
+    let res = client.try_withdraw_lock(&user, &999);
+    assert!(res.is_err());
+    assert_unchanged!();
 
     // State still intact
     assert_lock_sum_consistency(&env, &client, &user);
@@ -625,6 +653,14 @@ fn multi_lock_deterministic_sequence_invariants() {
         Operation::Deposit {
             user_idx: 2,
             amount: 30_000,
+        },
+        Operation::FailDeposit {
+            user_idx: 0,
+            amount: 0,
+        },
+        Operation::FailDeposit {
+            user_idx: 1,
+            amount: -50,
         },
         Operation::Lock {
             user_idx: 0,
