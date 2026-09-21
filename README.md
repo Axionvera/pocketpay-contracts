@@ -217,6 +217,7 @@ stellar-pocketpay-contracts/
 - [Contributor Self-Review Template](docs/self-review-template.md) – Copy-paste checklist covering behaviour, tests, CI, security, edge cases, and docs impact — fill it in before opening a PR.
 - [Contract Evaluation-Readiness Checklist](docs/evaluation-readiness-checklist.md) – Pre-evaluation checklist covering issue requirements, contract tests, required checks, security, edge cases, acceptance criteria, and the fact that merge does not guarantee approval or payment.
 - [Approval Readiness Checklist](docs/approval-readiness-checklist.md) – Final checklist before requesting evaluation: implementation completeness, tests, CI status, acceptance criteria review, docs, known limitations, and the post-merge-is-not-approval note.
+- [Contributor Evaluation Policy](docs/contributor-evaluation-policy.md) – Formal GrantFox post-merge evaluation boundary, contract testing/CI expectations, acceptance-criteria completion, self-review, maintainer review, and payment-period conduct.
 - [Traceability Table Guide](docs/traceability-table.md) – Standard format for mapping PR changes to issue acceptance criteria, with worked examples.
 - [Payment-Period Conduct Guidance](docs/payment-period-conduct.md) – Expectations for how contributors raise payment-status questions, and how GrantFox's evaluation process relates to this repository's review process.
 
