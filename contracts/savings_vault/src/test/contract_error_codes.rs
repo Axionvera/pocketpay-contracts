@@ -355,6 +355,25 @@ fn error_code_5004_extend_lock_time_not_increased() {
     );
 }
 
+#[test]
+fn error_code_5005_lock_cancellation_unsupported() {
+    let env = test_env();
+    let (_contract_id, client, _token_client, token_admin, _vault_admin) = vault_with_sac(&env);
+    let user = Address::generate(&env);
+    set_ledger_timestamp(&env, 1_000);
+    token_admin.mint(&user, &10_000);
+    env.mock_all_auths();
+    client.deposit(&user, &5_000);
+    let id = client.lock_funds(&user, &2_000, &20_000);
+    let msg = catch_panic_message(|| { client.cancel_lock(&user, &id); });
+    assert!(
+        msg.contains((ContractError::LockCancellationUnsupported as u32).to_string().as_str())
+            || msg.contains("LockCancellationUnsupported"),
+        "panic payload must reference error code 5005; got: {}",
+        msg
+    );
+}
+
 // =========================================================================
 // CATEGORY 8000: Admin Rotation
 // =========================================================================
