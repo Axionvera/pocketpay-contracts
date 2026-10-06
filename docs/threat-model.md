@@ -130,6 +130,7 @@ security properties may not hold.
 | User creates many small locks | Storage grows linearly; gas costs increase for `list_locks` and `get_locked_balance` | No hard limit; `list_locks` supports pagination |
 | User locks the same funds multiple times | Each lock deducts from available balance; repeated locks consume available balance until unlocked | Contract enforces that locked amount is deducted once; only available balance is lockable |
 | Lock is created with unlock time far in the future | Funds are locked for an extended period | No maximum unlock time; UI should show lock duration |
+| User or compromised key attempts to cancel a committed lock | Early release would defeat the savings guarantee | `cancel_lock` authenticates the owner, validates lock state, then fails closed with `LockCancellationUnsupported` (5005); no admin override. See [Lock Cancellation Policy](lock-cancellation-policy.md) |
 | User attempts to withdraw a lock before maturity | `withdraw` checks available balance (excludes unmatured locks); `withdraw_lock` checks maturity | Both paths enforce lock maturity |
 | User withdraws a matured lock, then attempts to withdraw it again | Panics — `withdraw_lock` checks lock existence and maturity; lock is consumed on first withdrawal | Replay protection on lock consumption |
 

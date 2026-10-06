@@ -269,6 +269,10 @@ pub enum ContractError {
     /// `extend_lock` attempted with a `new_unlock_time` that does not
     /// exceed the lock's current `unlock_time`.
     ExtendLockTimeNotIncreased = 5004,
+    /// `cancel_lock` was invoked for a valid lock. Lock cancellation is
+    /// intentionally unsupported so a committed lock cannot be shortened
+    /// or released outside the normal maturity/withdrawal path.
+    LockCancellationUnsupported = 5005,
 
     // ---- 6000s: Storage / Migration --------------------------------------
     /// `try_migrate` read a `StorageVersion` greater than
@@ -1464,6 +1468,40 @@ impl SavingsVault {
             old_unlock_time,
             new_unlock_time
         );
+    }
+
+    /// Explicitly rejects cancellation of an existing lock.
+    ///
+    /// PocketPay's savings guarantee treats a lock's maturity as a commitment:
+    /// once created, the lock can only be extended or withdrawn after maturity.
+    /// This entrypoint exists so SDKs and UIs receive a stable, typed failure
+    /// instead of inferring policy from a missing method.
+    ///
+    /// The owner must authorize the call and the referenced lock must exist and
+    /// remain active. After those checks the call always fails with
+    /// [`ContractError::LockCancellationUnsupported`]. No balance, lock,
+    /// custody, or event state is changed.
+    pub fn cancel_lock(env: Env, user: Address, lock_id: u64) {
+        Self::assert_initialized(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
+        Self::try_migrate(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
+        Self::assert_supported_storage_version(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
+
+        user.require_auth();
+
+        let lock: LockEntry = match env
+            .storage()
+            .persistent()
+            .get::<_, LockEntry>(&DataKey::Lock(user.clone(), lock_id))
+        {
+            Some(l) => l,
+            None => panic_with_error!(&env, ContractError::LockNotFound),
+        };
+
+        if lock.withdrawn {
+            panic_with_error!(&env, ContractError::LockAlreadyWithdrawn)
+        }
+
+        panic_with_error!(&env, ContractError::LockCancellationUnsupported)
     }
 
     /// Returns the sum of all lock amounts that have not been withdrawn yet

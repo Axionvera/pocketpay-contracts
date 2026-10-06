@@ -193,6 +193,14 @@ as arbitrary panic strings.
 - **Meaning:** `new_unlock_time <= lock.unlock_time`.
 - **Likely cause:** UX that lets the user pick an earlier time when "extending".
 - **Caller action:** Pre-clamp to `max(lock.unlock_time + 1, selection)`.
+### `LockCancellationUnsupported` (5005)
+
+- **Raised by:** `cancel_lock` after owner authorization and lock-state validation.
+- **Meaning:** Savings-vault locks cannot be cancelled or released early.
+- **Likely cause:** A client exposed cancellation as though it were a supported
+  state transition.
+- **Caller action:** Do not retry. Keep the lock until maturity, then use
+  `withdraw_lock`. See [Lock Cancellation Policy](lock-cancellation-policy.md).
 
 ## 6000s — Storage
 
