@@ -42,6 +42,7 @@ mod token_transfer_rollback;
 mod unauthorized_access;
 mod withdraw_lock;
 mod withdrawal_invariant;
+mod withdrawal_limits;
 mod zero_duration_lock;
 
 use super::*;

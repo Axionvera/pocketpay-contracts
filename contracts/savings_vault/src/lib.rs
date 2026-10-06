@@ -180,6 +180,12 @@ pub enum DataKey {
     /// (`unlock_time - current_time`) is strictly below it. A value of zero
     /// (or unset) means no lower bound is enforced.
     MinLockDurationSecs,
+    /// Optional per-user maximum amount allowed in a single withdrawal.
+    /// A value of zero (or an absent entry) disables the ceiling.
+    ///
+    /// This limit is controlled by the user, not the vault admin, so an
+    /// administrator cannot use configuration to strand existing principal.
+    WithdrawalLimit(Address),
 }
 
 pub const STORAGE_VERSION: u64 = 1;
@@ -232,6 +238,8 @@ pub enum ContractError {
     PauseDurationMustBePositive = 1006,
     /// `set_min_deposit_amount` called with a negative value.
     MinDepositAmountNegative = 1007,
+    /// `set_withdrawal_limit` called with a negative value.
+    WithdrawalLimitNegative = 1008,
 
     // ---- 2000s: Authorisation --------------------------------------------
     /// Caller is not the stored admin (failed `assert_admin` check inside
@@ -256,6 +264,9 @@ pub enum ContractError {
     /// Semantic twin of `InsufficientBalance` used specifically by
     /// `lock_funds` so SDKs can map the two contexts to different copy.
     InsufficientBalanceToLock = 4002,
+    /// A withdrawal amount exceeds the user's configured per-transaction
+    /// ceiling. The user may raise or disable the ceiling before retrying.
+    WithdrawalLimitExceeded = 4003,
 
     // ---- 5000s: Locks ----------------------------------------------------
     /// `get_lock`, `withdraw_lock` or `extend_lock` referenced a lock id
@@ -359,6 +370,24 @@ impl SavingsVault {
             .unwrap_or_else(|| panic_with_error!(&env, ContractError::RequiredStorageEntryMissing));
         if admin != &stored_admin {
             Err(ContractError::NotAuthorizedAdmin)
+        } else {
+            Ok(())
+        }
+    }
+
+    fn validate_withdrawal_limit(
+        env: &Env,
+        user: &Address,
+        amount: i128,
+    ) -> Result<(), ContractError> {
+        let limit: i128 = env
+            .storage()
+            .persistent()
+            .get(&DataKey::WithdrawalLimit(user.clone()))
+            .unwrap_or(0);
+
+        if limit > 0 && amount > limit {
+            Err(ContractError::WithdrawalLimitExceeded)
         } else {
             Ok(())
         }
@@ -756,6 +785,55 @@ impl SavingsVault {
             .unwrap_or(0)
     }
 
+    // -----------------------------------------------------------------------
+    // Per-user withdrawal ceiling (issue #453)
+    // -----------------------------------------------------------------------
+
+    /// Sets the caller's maximum amount allowed in one withdrawal.
+    ///
+    /// The ceiling applies to both available-balance withdrawals and matured
+    /// lock withdrawals. Pass `0` to disable it. Because the lock withdrawal
+    /// path is intentionally all-or-nothing, a user whose matured lock exceeds
+    /// the current ceiling can raise or disable the ceiling before withdrawing.
+    ///
+    /// This is a user-controlled transaction guard, not an administrative
+    /// custody control and not protection against a compromised user key.
+    pub fn set_withdrawal_limit(env: Env, user: Address, max_amount: i128) {
+        Self::assert_initialized(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
+        Self::try_migrate(&env).unwrap_or_else(|e| panic_with_error!(&env, e));
+        Self::assert_supported_storage_version(&env)
+            .unwrap_or_else(|e| panic_with_error!(&env, e));
+
+        user.require_auth();
+
+        if max_amount < 0 {
+            panic_with_error!(&env, ContractError::WithdrawalLimitNegative)
+        }
+
+        env.storage()
+            .persistent()
+            .set(&DataKey::WithdrawalLimit(user.clone()), &max_amount);
+
+        let topics = (symbol_short!("wd_limit"), user.clone());
+        env.events().publish(topics, max_amount);
+
+        log!(
+            &env,
+            "Withdrawal limit set to {} by user={}",
+            max_amount,
+            user
+        );
+    }
+
+    /// Returns the caller-specific per-transaction withdrawal ceiling.
+    /// `0` means no additional ceiling is enforced.
+    pub fn get_withdrawal_limit(env: Env, user: Address) -> i128 {
+        env.storage()
+            .persistent()
+            .get(&DataKey::WithdrawalLimit(user))
+            .unwrap_or(0)
+    }
+
     /// Check whether the contract is currently paused.
     ///
     /// Returns `true` when the pause flag is set **and** the pause has not yet
@@ -968,6 +1046,9 @@ impl SavingsVault {
             panic_with_error!(&env, ContractError::AmountNotPositive)
         }
 
+        Self::validate_withdrawal_limit(&env, &user, amount)
+            .unwrap_or_else(|e| panic_with_error!(&env, e));
+
         let mut current_balance: i128 = env
             .storage()
             .persistent()
@@ -1044,6 +1125,9 @@ impl SavingsVault {
         if current_time < lock.unlock_time {
             panic_with_error!(&env, ContractError::LockNotMatured)
         }
+
+        Self::validate_withdrawal_limit(&env, &user, lock.amount)
+            .unwrap_or_else(|e| panic_with_error!(&env, e));
 
         let token = env
             .storage()
