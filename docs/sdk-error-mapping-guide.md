@@ -109,6 +109,7 @@ Columns:
 | 5002 | `withdraw_lock` / `extend_lock` | "This lock has already been withdrawn." | `vault.err.5002.{method}` | NEVER (treat as success) |
 | 5003 | `withdraw_lock` | "This lock hasn't matured yet. Check back at {unlockTimeISO}." | `vault.err.5003` | NEVER |
 | 5004 | `extend_lock` | "New unlock time must be later than the current unlock time." | `vault.err.5004` | UI-GATED |
+| 5005 | `cancel_lock` | "This savings lock cannot be cancelled. It can be withdrawn after maturity." | `vault.err.5005` | NEVER |
 | 6001 | any guarded method | "A vault storage version mismatch was detected. Please contact support." | `vault.err.6001.{method}` | PAGE-ONCALL |
 | 6002 | any guarded method | "A vault storage entry is missing. Please contact support." | `vault.err.6002.{method}` | PAGE-ONCALL |
 | 7001 | `deposit` / `withdraw` / `withdraw_lock` | "The vault's token is misconfigured. Please contact support." | `vault.err.7001.{method}` | PAGE-ONCALL |
@@ -141,6 +142,7 @@ export const VaultError = {
   LockAlreadyWithdrawn: 5002,
   LockNotMatured: 5003,
   ExtendLockTimeNotIncreased: 5004,
+  LockCancellationUnsupported: 5005,
 
   StorageVersionUnsupported: 6001,
   RequiredStorageEntryMissing: 6002,
