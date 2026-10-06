@@ -84,6 +84,14 @@ as arbitrary panic strings.
 - **Likely cause:** Admin-console sign bug.
 - **Caller action:** Admin console validation.
 
+### `WithdrawalLimitNegative` (1008)
+
+- **Raised by:** `set_withdrawal_limit` (user)
+- **Meaning:** Attempt to set the user's per-transaction withdrawal ceiling to
+  a negative `i128`. `0` is valid and disables the ceiling.
+- **Likely cause:** Client-side sign or amount-normalization bug.
+- **Caller action:** Reject negative values before submission.
+
 ## 2000s — Authorisation
 
 ### `NotAuthorizedAdmin` (2001)
@@ -155,6 +163,16 @@ as arbitrary panic strings.
   operation. SDKs SHOULD show a distinct copy:
   - 4001 → "You don't have enough available to withdraw **X** tokens."
   - 4002 → "You don't have enough unlocked balance to lock **X** tokens."
+
+### `WithdrawalLimitExceeded` (4003)
+
+- **Raised by:** `withdraw`, `withdraw_lock`
+- **Meaning:** The requested withdrawal is larger than the authenticated
+  user's configured per-transaction ceiling.
+- **Caller action:** Confirm the intended amount. The user may raise the
+  ceiling or set it to `0` before retrying.
+- **Security boundary:** This is a self-imposed transaction guard, not an
+  administrator control and not protection against a compromised user key.
 
 ## 5000s — Locks
 
