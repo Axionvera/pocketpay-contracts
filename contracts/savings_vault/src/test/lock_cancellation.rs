@@ -1,5 +1,5 @@
 use super::*;
-use soroban_sdk::{testutils::Address as _, testutils::Ledger, token, Address, Env};
+use soroban_sdk::{testutils::Address as _, token, Address, Env};
 
 #[test]
 fn cancel_lock_fails_closed_without_mutating_active_lock() {
@@ -78,9 +78,9 @@ fn cancel_lock_requires_owner_authorization() {
 #[test]
 fn cancel_lock_rejects_unknown_lock_without_creating_state() {
     let (env, contract_id, client) = setup();
-    let (_env, _admin, client, _token_client, _token_admin) =
+    let (env, _admin, client, _token_client, _token_admin) =
         test_token(env, contract_id, client);
-    let user = new_user(&client.env);
+    let user = new_user(&env);
 
     let result = client.try_cancel_lock(&user, &999);
     assert!(result.is_err(), "unknown lock id must fail");
