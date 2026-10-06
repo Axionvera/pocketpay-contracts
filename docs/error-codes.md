@@ -24,6 +24,30 @@ as arbitrary panic strings.
 | **7001–7099** | **Token** | Token configuration issues |
 | **8001–8099** | **Admin rotation** | Invalid new-admin address |
 
+## Consumer flow quick map
+
+Use this table as the first routing layer in SDK or mobile error handling. The
+numbered entries below remain the canonical definitions; this table only
+groups them by the product flow called out in issue #558.
+
+| Consumer flow | Contract errors to handle first | Notes |
+| --- | --- | --- |
+| **Initialization** | `AlreadyInitialized` (3001), `NotInitialized` (3002), `StorageVersionUnsupported` (6001) | Treat a storage-version mismatch as an operator/deployment problem, not a user retry. |
+| **Deposit** | `AmountNotPositive` (1001), `AmountBelowMinimumDeposit` (1005), `ContractPaused` (3003), `TokenNotConfigured` (7001) | User authorization is enforced separately by Soroban host auth. |
+| **Withdrawal** | `AmountNotPositive` (1001), `InsufficientBalance` (4001), `TokenNotConfigured` (7001) | Emergency pause deliberately does not block exits. |
+| **Locks** | `UnlockTimeNotInFuture` (1002), duration errors (1003–1004), `InsufficientBalanceToLock` (4002), lock-state errors (5001–5004) | `lock_funds` and `extend_lock` are pause-gated; matured-lock withdrawal is not. |
+| **Balance / read helpers** | `NotInitialized` (3002), `StorageVersionUnsupported` (6001) | Normal reads are not user-signature gated; missing required singleton storage (6002) is an operator alert. |
+| **Admin / authorisation** | `NotAuthorizedAdmin` (2001), pause validation (1006), admin-rotation errors (8001–8002) | A missing/invalid signature is a Soroban host auth failure and is intentionally distinct from contract code 2001. |
+
+### Contract errors vs. host errors
+
+`ContractError` codes describe failures raised by this contract. Soroban host
+failures—most notably missing or invalid signatures from `require_auth()`—do
+not become one of these numeric contract codes. Client code should preserve
+that distinction: map the stable codes below when the failure is a contract
+error, and handle host authorization / invocation failures through the SDK's
+host-error surface.
+
 ## 1000s — Validation
 
 ### `AmountNotPositive` (1001)
