@@ -18,6 +18,7 @@ See the [Admin & Emergency Mechanism Threat Model](docs/admin-pause-threat-model
 | `withdraw(user, amount)` | Remove funds from a user's vault |
 | `get_balance(user)` | Query available (unlocked) balance |
 | `lock_funds(user, amount, unlock_time)` | Lock funds until a Unix timestamp |
+| `cancel_lock(user, lock_id)` | Explicitly reject lock cancellation; locks remain committed until maturity ([policy](docs/lock-cancellation-policy.md)) |
 | `get_locked_balance(user)` | Query locked balance |
 | `can_withdraw(user)` | Check if locked funds are withdrawable |
 
