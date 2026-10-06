@@ -67,11 +67,11 @@ Core accounting and security invariants are verified through a combination of un
 
 | Invariant | Description | Test Reference |
 | :--- | :--- | :--- |
-| **Balance Conservation** | `Available + Locked == Total` for all users at all times. | [balance_conservation.rs](file:///c:/Users/abbat/.trae/GrantFox/pocketpay-contracts/contracts/savings_vault/src/test/balance_conservation.rs) |
-| **Token Custody** | `Contract SAC Balance == Σ(User Balances)`. | [property_fee_invariants.rs](file:///c:/Users/abbat/.trae/GrantFox/pocketpay-contracts/contracts/savings_vault/src/test/property_fee_invariants.rs) |
-| **Atomic Rollback** | Failed transfers must not credit/debit internal accounting. | [token_transfer_rollback.rs](file:///c:/Users/abbat/.trae/GrantFox/pocketpay-contracts/contracts/savings_vault/src/test/token_transfer_rollback.rs) |
-| **Lock Integrity** | `Locked Balance == Σ(Active Lock Entries)`. | [multi_lock_invariants.rs](file:///c:/Users/abbat/.trae/GrantFox/pocketpay-contracts/contracts/savings_vault/src/test/multi_lock_invariants.rs) |
-| **ID Uniqueness** | `NextLockId` must never produce a duplicate ID for a user. | [multi_lock_invariants.rs](file:///c:/Users/abbat/.trae/GrantFox/pocketpay-contracts/contracts/savings_vault/src/test/multi_lock_invariants.rs) |
+| **Balance Conservation** | `Available + Locked == Total` for all users at all times. | [balance_conservation.rs](../contracts/savings_vault/src/test/balance_conservation.rs) |
+| **Token Custody** | `Contract SAC Balance == Σ(User Balances)`. | [property_fee_invariants.rs](../contracts/savings_vault/src/test/property_fee_invariants.rs) |
+| **Atomic Rollback** | Failed transfers must not credit/debit internal accounting. | [token_transfer_rollback.rs](../contracts/savings_vault/src/test/token_transfer_rollback.rs) |
+| **Lock Integrity** | `Locked Balance == Σ(Active Lock Entries)`. | [multi_lock_invariants.rs](../contracts/savings_vault/src/test/multi_lock_invariants.rs) |
+| **ID Uniqueness** | `NextLockId` must never produce a duplicate ID for a user. | [multi_lock_invariants.rs](../contracts/savings_vault/src/test/multi_lock_invariants.rs) |
 
 ---
 
