@@ -17,6 +17,7 @@ mod invariant_checklist_examples;
 mod lock_amount_validation;
 mod lock_atomicity;
 mod lock_extension;
+mod lock_cancellation;
 mod lock_id_generation;
 mod lock_maturity_boundary;
 mod lock_maturity_replay;
