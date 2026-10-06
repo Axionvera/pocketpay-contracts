@@ -10,7 +10,11 @@ if [ ! -f "$wasm_path" ]; then
   exit 1
 fi
 
-bytes=$(wc -c < "$wasm_path" | tr -d '[:space:]')
+if ! bytes=$(wc -c < "$wasm_path"); then
+  echo "error: could not read WASM file size: $wasm_path" >&2
+  exit 1
+fi
+bytes=$(printf '%s' "$bytes" | tr -d '[:space:]')
 human_size=$(awk -v bytes="$bytes" 'BEGIN {
   split("B KiB MiB GiB", units, " ")
   size = bytes
