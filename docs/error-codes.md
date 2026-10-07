@@ -141,13 +141,14 @@ host-error surface.
 
 ### `NotInitialized` (3002)
 
-- **Raised by:** every guarded public entrypoint (`get_version`, `get_token`,
-  `pause`, `deposit`, `withdraw`, `lock_funds`, `list_locks`, `get_admin`, …)
+- **Raised by:** public entrypoints guarded by `assert_initialized` (`get_token`,
+  `pause`, `deposit`, `withdraw`, `lock_funds`, `list_locks`, `get_admin`, …).
+  `get_version` is intentionally callable before initialization.
 - **Meaning:** The contract was deployed but `initialize` hasn't run.
 - **Likely cause:** A deploy script that forgot the init call, or a race where
   the UI renders operations before init lands on-chain.
-- **Caller action:** Gate all vault UI behind a contract-ready check
-  (`get_version()` succeeds).
+- **Caller action:** Gate vault operations behind a guarded readiness probe such
+  as `get_token()`; `get_version()` alone is not an initialization check.
 
 ### `ContractPaused` (3003)
 
