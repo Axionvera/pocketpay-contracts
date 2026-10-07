@@ -121,6 +121,11 @@ make verify         # Format, lint, test, and release WASM build
 make build-release  # Optimized WASM build with size report
 make wasm-size      # Report size of an existing release WASM
 ```
+
+## Advanced Development & Testing
+
+For in-depth guidance on Soroban contract development, deterministic ledger timestamps, token mocks, and failure test writing, consult the [Advanced Contract Development Guide](docs/advanced-contract-development.md).
+
 ---
 
 ## Deploy to Testnet
