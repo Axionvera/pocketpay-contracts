@@ -23,6 +23,7 @@ mod lock_maturity_replay;
 mod lock_read_helpers;
 mod matured_lock_discovery;
 mod maximum_amount_boundary;
+mod maximum_deposit_amount;
 mod maximum_lock_duration;
 mod minimum_deposit_amount;
 mod minimum_lock_duration;
