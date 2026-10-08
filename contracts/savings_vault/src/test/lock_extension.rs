@@ -199,3 +199,38 @@ fn test_extend_lock_while_paused_rejected() {
     // Attempting to extend lock must panic
     f.client.extend_lock(&f.user, &lock_id, &10_000);
 }
+
+// --- Issue #454: withdrawal eligibility and configured extension ceiling ---
+
+/// At the original maturity boundary, extension must not revoke an
+/// already-acquired right to withdraw.
+#[test]
+#[should_panic]
+fn test_extend_lock_at_original_maturity_rejected() {
+    let f = setup_extension_fixture();
+    let lock_id = f.client.lock_funds(&f.user, &1_000, &3_000);
+    set_ledger_timestamp(&f.env, 3_000);
+    f.client.extend_lock(&f.user, &lock_id, &7_000);
+}
+
+#[test]
+fn test_extend_lock_at_max_remaining_duration_succeeds() {
+    let f = setup_extension_fixture();
+    let admin = f.client.get_admin();
+    f.client.set_max_lock_duration(&admin, &5_000);
+    let lock_id = f.client.lock_funds(&f.user, &1_000, &3_000);
+
+    f.client.extend_lock(&f.user, &lock_id, &6_000);
+    assert_eq!(f.client.get_lock(&f.user, &lock_id).unwrap().unlock_time, 6_000);
+}
+
+#[test]
+#[should_panic]
+fn test_extend_lock_over_max_remaining_duration_rejected() {
+    let f = setup_extension_fixture();
+    let admin = f.client.get_admin();
+    f.client.set_max_lock_duration(&admin, &5_000);
+    let lock_id = f.client.lock_funds(&f.user, &1_000, &3_000);
+
+    f.client.extend_lock(&f.user, &lock_id, &6_001);
+}

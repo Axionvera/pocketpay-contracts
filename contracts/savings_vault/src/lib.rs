@@ -269,6 +269,8 @@ pub enum ContractError {
     /// `extend_lock` attempted with a `new_unlock_time` that does not
     /// exceed the lock's current `unlock_time`.
     ExtendLockTimeNotIncreased = 5004,
+    /// An already-matured lock cannot be re-locked after withdrawal eligibility.
+    LockAlreadyMatured = 5006,
 
     // ---- 6000s: Storage / Migration --------------------------------------
     /// `try_migrate` read a `StorageVersion` greater than
@@ -1437,12 +1439,25 @@ impl SavingsVault {
         }
 
         let current_time = env.ledger().timestamp();
+        // A mature lock is already withdrawable; reject attempts to defer it.
+        if lock.unlock_time <= current_time {
+            panic_with_error!(&env, ContractError::LockAlreadyMatured)
+        }
         if new_unlock_time <= current_time {
             panic_with_error!(&env, ContractError::UnlockTimeNotInFuture)
         }
 
         if new_unlock_time <= lock.unlock_time {
             panic_with_error!(&env, ContractError::ExtendLockTimeNotIncreased)
+        }
+
+        let max_duration: u64 = env
+            .storage()
+            .instance()
+            .get(&DataKey::MaxLockDurationSecs)
+            .unwrap_or(0);
+        if max_duration > 0 && new_unlock_time - current_time > max_duration {
+            panic_with_error!(&env, ContractError::LockDurationExceedsMaximum)
         }
 
         let old_unlock_time = lock.unlock_time;

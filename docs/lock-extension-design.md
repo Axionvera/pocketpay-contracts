@@ -25,10 +25,14 @@ pub fn extend_lock(env: Env, user: Address, lock_id: u64, new_unlock_time: u64)
 | **Emergency Pause** | Contract is paused and pause hasn't expired | Panics with `"Contract is paused"` |
 | **Caller Authorization** | `user.require_auth()` | Reverts if caller signature does not match `user` |
 | **Lock Existence** | Lock ID `lock_id` exists in persistent storage | Panics with `"Lock not found"` |
-| **Withdrawal Status** | `lock.withdrawn == false` | Panics with `"Lock already withdrawn"` |
+| **Withdrawal Status** | `lock.withdrawn == false` | Rejects already-withdrawn locks (`LockAlreadyWithdrawn`, 5002) |
+| **Original Maturity** | `lock.unlock_time > env.ledger().timestamp()` | Once matured, extension is forbidden (`LockAlreadyMatured`, 5006); withdraw instead |
 | **Future Timestamp** | `new_unlock_time > env.ledger().timestamp()` | Panics with `"Unlock time must be in the future"` |
 | **Strict Duration Extension** | `new_unlock_time > lock.unlock_time` | Panics with `"New unlock time must be strictly greater than current unlock time"` |
+| **Configured Maximum** | `max_duration == 0` (unlimited) or `new_unlock_time - ledger_timestamp <= max_duration` | Rejects an over-cap extension (`LockDurationExceedsMaximum`, 1003) |
 
+> **No retroactive re-locking:** At or after the original `unlock_time`, a non-withdrawn lock is already eligible for release via `withdraw_lock`; `extend_lock` must not revoke that entitlement. Extensions are owner-authorized, strictly increasing, strictly pre-maturity and subject to the administrator's maximum remaining duration at the time of extension. A configured maximum of zero means unbounded. The minimum initial lock duration is checked at creation, not retrospectively at extension.
+>
 > **Note on Lock Shortening**: Lock duration shortening (`new_unlock_time <= lock.unlock_time`) is **strictly forbidden**. Allowing lock shortening would defeat the purpose of time-bound savings locks and allow users to bypass lock commitments.
 
 ---
@@ -85,3 +89,7 @@ The feature is locked down by unit test suite [`contracts/savings_vault/src/test
 5. `test_extend_lock_past_timestamp_rejected`: Verifies rejection of timestamps $\le$ current ledger time.
 6. `test_extend_already_withdrawn_lock_rejected`: Verifies rejection on withdrawn locks.
 7. `test_extend_lock_while_paused_rejected`: Verifies pause restriction.
+8. `test_extend_lock_at_original_maturity_rejected`: Rejects extension exactly when the original deadline arrives.
+9. `test_extend_lock_at_max_remaining_duration_succeeds`: Allows the exact configured remaining-duration ceiling.
+10. `test_extend_lock_over_max_remaining_duration_rejected`: Rejects a new deadline one second beyond the ceiling.
+11. `error_code_5006_extend_lock_already_matured`: Pins the typed mature-lock rejection code for SDKs.

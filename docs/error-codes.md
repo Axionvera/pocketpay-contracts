@@ -47,7 +47,7 @@ as arbitrary panic strings.
 
 ### `LockDurationExceedsMaximum` (1003)
 
-- **Raised by:** `lock_funds`
+- **Raised by:** `lock_funds`, `extend_lock`
 - **Meaning:** `unlock_time - now > max_lock_duration`.
 - **Likely cause:** Wrong asset config read, or a UI picker allowing years
   beyond the configured max.
@@ -193,6 +193,19 @@ as arbitrary panic strings.
 - **Meaning:** `new_unlock_time <= lock.unlock_time`.
 - **Likely cause:** UX that lets the user pick an earlier time when "extending".
 - **Caller action:** Pre-clamp to `max(lock.unlock_time + 1, selection)`.
+
+### `LockAlreadyMatured` (5006)
+
+- **Raised by:** `extend_lock`
+- **Meaning:** The stored `unlock_time` is at or before the current ledger
+  timestamp, so the lock is already eligible for withdrawal and cannot be
+  re-locked by changing its deadline.
+- **Likely cause:** The user tapped an extension action after the original
+  lock matured, perhaps while displaying a stale cached maturity.
+- **Caller action:** Refresh the lock entry using the latest ledger state;
+  offer `withdraw_lock` instead of retrying extension. This rule applies at
+  the **exact** maturity timestamp as well as later. Numeric code 5005 is
+  reserved for the separate cancellation policy in issue #455; do not alias it.
 
 ## 6000s — Storage
 
