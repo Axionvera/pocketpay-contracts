@@ -6,6 +6,15 @@
 >
 > This document describes the pause mechanism that is now part of the Savings Vault contract. The implementation follows the "withdraw-only" safety net model: during a pause, deposits and locks are blocked, but withdrawals remain open so users can always exit.
 
+### Implemented contract semantics and acceptance tests (issue #457)
+
+The production entrypoints are `pause(admin: Address, duration_secs: u64)`, `unpause(admin: Address)`, and `is_paused()`. Both mutators enforce the stored admin identity **and** `Address::require_auth`; a zero-duration pause is rejected. The pause interval begins at the current ledger timestamp and expires at `start + duration_secs`. At the **exact** expiry timestamp, the pause no longer blocks new operations; an expired pause is cleared by `require_not_paused` on a guarded write.
+
+**While a pause is actually active:** `deposit` and `lock_funds` reject without changing vault balances; `withdraw` and *matured* `withdraw_lock` remain available, and read-only `get_balance`, `get_locked_balance`, `can_withdraw` and `is_paused` remain available. `unpause` clears the flag and expiry early. The current implementation does not use the guardian, reason-string, upgrade or full-pause alternatives described later in this design document.
+
+The regression cases in `contracts/savings_vault/src/test/pause_transition.rs` and `pause.rs` explicitly fund before pausing to reach the **lock** guard, and keep the pause active **through** lock maturity when testing withdrawal. A failure during precondition setup, or a withdrawal after the pause expired, is not a valid proof of these policies.
+
+
 ---
 
 ## Table of Contents

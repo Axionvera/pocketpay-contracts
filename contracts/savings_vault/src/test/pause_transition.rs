@@ -69,18 +69,27 @@ fn test_deposit_blocked_while_paused() {
     client.deposit(&user, &100);
 }
 
-/// While paused, `lock_funds` is rejected.
+/// While paused, `lock_funds` is rejected without creating or funding
+/// any lock. Fund BEFORE pausing: a #[should_panic] test with funding after
+/// pause only proves deposit rejects, never exercising the lock path.
 #[test]
-#[should_panic]
 fn test_lock_funds_blocked_while_paused() {
     let env = test_env();
     let (admin, client) = init_with_admin(&env);
     let user = Address::generate(&env);
 
-    client.pause(&admin, &10_000);
+    env.ledger().set_timestamp(1_000);
     fund(&client, &user, 1_000);
+    let available_before = client.get_balance(&user);
+    let locked_before = client.get_locked_balance(&user);
+    client.pause(&admin, &10_000);
+    assert!(client.is_paused(), "the guard must be active during this test");
 
-    client.lock_funds(&user, &100, &(env.ledger().timestamp() + 60));
+    let rejected = client.try_lock_funds(&user, &100, &(env.ledger().timestamp() + 60));
+    assert!(rejected.is_err(), "the actual lock operation must reject");
+    assert!(client.is_paused());
+    assert_eq!(client.get_balance(&user), available_before);
+    assert_eq!(client.get_locked_balance(&user), locked_before);
 }
 
 // ---------------------------------------------------------------------------
