@@ -355,6 +355,26 @@ fn error_code_5004_extend_lock_time_not_increased() {
     );
 }
 
+#[test]
+fn error_code_5006_extend_lock_already_matured() {
+    let env = test_env();
+    let (_contract_id, client, _token_client, token_admin, _vault_admin) = vault_with_sac(&env);
+    let user = Address::generate(&env);
+    set_ledger_timestamp(&env, 1_000);
+    token_admin.mint(&user, &10_000);
+    env.mock_all_auths();
+    client.deposit(&user, &5_000);
+    let id = client.lock_funds(&user, &2_000, &3_000);
+    set_ledger_timestamp(&env, 3_000);
+    let msg = catch_panic_message(|| client.extend_lock(&user, &id, &7_000));
+    assert!(
+        msg.contains((ContractError::LockAlreadyMatured as u32).to_string().as_str())
+            || msg.contains("LockAlreadyMatured"),
+        "panic payload must reference error code 5006; got: {}",
+        msg
+    );
+}
+
 // =========================================================================
 // CATEGORY 8000: Admin Rotation
 // =========================================================================
