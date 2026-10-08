@@ -1,66 +1,57 @@
-# Storage Versioning and Migration Behavior
+# Savings Vault Storage Versioning
 
-## Overview
+The contract's **storage schema marker** and **WASM release version** are separate.
+For the actual key/value layout, compatibility considerations, upgrade review,
+and required focused migration evidence, see the
+[Storage Migration and Upgrade Review](storage-migration.md).
 
-The Savings Vault contract uses storage versioning to ensure safe compatibility between different contract versions and support future migrations. This document defines how versioning works, expected migration behavior, and compatibility guarantees.
+## Current behavior
 
----
+The code in `contracts/savings_vault/src/lib.rs` defines
+`STORAGE_VERSION: u64 = 1`, stored at instance
+`DataKey::StorageVersion`. `get_version()` currently returns
+`"0.1.0"` as a separate release identifier.
 
-## Storage Version
+| StorageVersion | Behavior |
+| --- | --- |
+| `1` | Current schema; proceed |
+| Absent | `try_migrate()` reads `0` and writes a `1` marker, preserving legacy v0 data |
+| `2` or any unsupported value | Reject with `StorageVersionUnsupported` (6001); no downgrade |
 
-The contract uses `DataKey::StorageVersion` stored in **instance storage** to track the version of the storage layout.
+The only implemented migration is marker adoption from v0 to v1. There is
+**no v1→v2 data migration yet**. Before changing any storage value layout,
+the contract must gain the exact transformation for older supported state.
+Bumping `STORAGE_VERSION` on its own is unsafe.
 
-### Current Version
+The v0→v1 path writes a log record but **does not publish a migration event**.
+Future migration events should only be documented as supported after they
+exist in the contract and their topics/payloads have focused tests.
 
-- `1`: Initial versioned storage layout (supports balances, locks, admin, token, initialized flag)
+## Required guarantees for future upgrades
 
----
+- Atomic invocations: a failed on-chain call must not leave partial writes.
+- Preservation of deposited, available, locked, matured and withdrawn
+  principal, owner/lock identities, contract-held tokens, and authorization.
+- Explicit handling of unsupported future schema markers.
+- Documented instance/persistent storage TTL implications.
+- Targeted before/after storage tests with representative old-format values.
+- SDK/mobile compatibility plan for changed public state reads, events and
+  error codes.
+- Forward-fix/rollback limitations. **Older WASM is not automatically a safe
+  rollback**, and the current version guard rejects schema downgrades.
 
-## Compatibility Guarantees
+## Existing focused evidence
 
-### Backward Compatibility
+In `contracts/savings_vault/src/test/storage_version.rs`:
 
-- **Missing StorageVersion**: Contracts deployed before versioning was added are treated as version `1` (backward compatible, no changes to existing storage).
-- **Supported Versions**: All future contract versions must explicitly support all previous storage versions (or panic with `Unsupported storage version`).
+- `test_initialize_sets_storage_version_1`
+- `test_legacy_missing_storage_version_works`
+- `test_invalid_storage_version_fails_safely`
 
-### Forward Compatibility
+These cover current marker logic, **not** a future v2 migration. A new schema
+requires new focused tests as described in
+[Storage Migration and Upgrade Review](storage-migration.md).
 
-- Newer versions of the contract can choose to support older storage versions (via migration or fallback handling).
-- Unsupported versions cause the contract to panic safely (`Unsupported storage version: X`).
-
----
-
-## Expected Migration Behavior
-
-Migrations should follow these principles:
-
-1. **Atomicity**: Migrations must either fully succeed or leave storage unchanged (utilize Soroban's transaction atomicity).
-2. **Safety**: Migrations must never corrupt user balances or lock entries.
-3. **Transparency**: Migrations must emit events so off-chain monitors can verify progress.
-4. **Opt-in**: Users should have the choice to migrate (or not) whenever possible.
-
-### Migration Path Example (Version 1 → 2)
-
-If a future version (v2) changes the storage layout, it should:
-1. Detect if storage is version 1 (via `DataKey::StorageVersion`).
-2. Migrate the storage to the new layout.
-3. Set `DataKey::StorageVersion` to 2.
-4. Emit a `StorageMigrated` event.
-5. Fail safely and revert if any step fails.
-
----
-
-## Testing Coverage
-
-The test suite covers these scenarios:
-- `test_initialize_sets_storage_version_1`: Initialization sets StorageVersion to `1`.
-- `test_legacy_missing_storage_version_works`: Legacy pre-versioning contracts function normally (treated as version `1`).
-- `test_invalid_storage_version_fails_safely`: Unsupported storage versions cause a panic.
-
----
-
-## Links
-
-- [Contract Upgrade Strategy](upgrade-strategy.md)
-- [Comprehensive Codebase Analysis](comprehensive-analysis.md)
-- [Security Review](security-review.md)
+See also the [Storage Change Checklist](storage-change-checklist.md),
+[Contract Upgrade Strategy](upgrade-strategy.md), and
+[Storage Audit](storage-audit.md).
