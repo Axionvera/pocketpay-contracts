@@ -210,6 +210,7 @@ stellar-pocketpay-contracts/
 ## Documentation
 
 - [Architecture Documentation](docs/architecture.md) – Overview of project structure, state management, storage, SDK integration, and future extension points.
+- [Vault Public API & Compatibility Policy](docs/vault-api.md) – Source-bound public function, type, error, event, storage, versioning, and breaking-change contract for SDK/mobile consumers.
 - [Admin Role](docs/admin-role.md) – Details on the admin address, current capabilities, and future design considerations.
 - [Admin & Emergency Mechanism Threat Model](docs/admin-pause-threat-model.md) – Security analysis of malicious admin, compromised admin, accidental pause, and blocked-withdrawal scenarios.
 - [Failure Mode Catalogue](docs/failure-mode-catalogue.md) – Summary of safe-failure behavior, expected errors, affected functions, and related tests for vault operations.
