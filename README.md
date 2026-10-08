@@ -83,6 +83,15 @@ The reporting command exits with an error and identifies the expected path when 
 
 ---
 
+## SDK/mobile integration fixtures
+
+Deterministic, offline contract-level examples for SDK and app consumers are
+available in [the versioned Savings Vault scenario fixtures](fixtures/sdk-consumer/README.md).
+The fixtures cover deposit, available balance, lock/maturity, withdrawal,
+contract errors and event payloads using normalized values. They are expected
+source-derived scenarios, **not** captured on-chain responses or a substitute
+for the focused Soroban contract tests below.
+
 ## Test
 
 Run the full unit test suite:
