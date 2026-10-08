@@ -130,13 +130,19 @@ fn test_withdraw_lock_allowed_during_pause() {
     client.deposit(&user, &500);
     let lock_id = client.lock_funds(&user, &200, &2_000);
 
-    client.pause(&admin, &600);
+    // The pause must outlive lock maturity. The former 600-second pause
+    // expired at t=1_600, making a t=2_000 withdrawal a false positive.
+    client.pause(&admin, &1_500); // pause expiry t=2_500
+    assert!(client.is_paused());
+    assert_eq!(client.get_locked_balance(&user), 200);
 
-    // Advance past unlock time
-    set_ledger_timestamp(&env, 2_000);
+    set_ledger_timestamp(&env, 2_000); // mature lock, pause STILL active
+    assert!(client.is_paused(), "withdrawal must be tested under active pause");
 
-    // withdraw_lock should succeed during pause
     client.withdraw_lock(&user, &lock_id);
+    assert!(client.is_paused(), "withdrawal must not silently clear an active pause");
+    assert_eq!(client.get_locked_balance(&user), 0);
+    assert_eq!(client.get_balance(&user), 300);
 }
 
 // =========================================================================
