@@ -26,6 +26,7 @@ Returns the full contract configuration. No authorization required
 | `paused`             | `bool`    | Whether the emergency pause is currently active.                |
 | `pause_expiry`       | `u64`     | Unix timestamp when the current pause expires (0 = no active pause). |
 | `min_deposit_amount` | `i128`    | Minimum deposit floor in atomic units (0 = no floor enforced).  |
+| `max_deposit_amount` | `i128`    | Maximum amount per individual deposit in atomic units (0 = no ceiling). |
 | `max_lock_duration`  | `u64`     | Maximum lock duration in seconds (0 = unbounded).               |
 | `min_lock_duration`  | `u64`     | Minimum lock duration in seconds (0 = no lower bound enforced). |
 
@@ -38,6 +39,7 @@ After initialization with no admin configuration applied:
 | `paused`             | `false` |
 | `pause_expiry`       | `0`     |
 | `min_deposit_amount` | `0`     |
+| `max_deposit_amount` | `0`     |
 | `max_lock_duration`  | `0`     |
 | `min_lock_duration`  | `0`     |
 
@@ -79,6 +81,7 @@ soroban contract invoke \
   "paused": false,
   "pause_expiry": 0,
   "min_deposit_amount": 0,
+  "max_deposit_amount": 0,
   "max_lock_duration": 0,
   "min_lock_duration": 0
 }
@@ -94,6 +97,7 @@ console.log("Accepted token:", config.token);
 console.log("Admin:", config.admin);
 console.log("Paused:", config.paused);
 console.log("Min deposit:", config.min_deposit_amount);
+console.log("Max single deposit:", config.max_deposit_amount);
 ```
 
 ### Rust (soroban-sdk)
@@ -133,3 +137,4 @@ test suite.
 - [Pause Design](pause-design.md) — emergency pause model
 - [API Reference](api-reference.md) — function naming conventions
 - [Read Models](read-models.md) — balance snapshot and lock summary
+- [Deposit Limit Policy](deposit-limits-policy.md) — inclusive min/max rules, authorization, and no per-user lifetime cap
