@@ -210,6 +210,8 @@ stellar-pocketpay-contracts/
 ## Documentation
 
 - [Architecture Documentation](docs/architecture.md) – Overview of project structure, state management, storage, SDK integration, and future extension points.
+- [Storage Migration and Upgrade Review](docs/storage-migration.md) – Actual v1 schema, legacy marker adoption, safety limits, and required old-state tests before layout changes.
+- [Storage Change PR Checklist](docs/storage-change-checklist.md) – Required compatibility, release, review and migration evidence for any key/value layout change.
 - [Admin Role](docs/admin-role.md) – Details on the admin address, current capabilities, and future design considerations.
 - [Admin & Emergency Mechanism Threat Model](docs/admin-pause-threat-model.md) – Security analysis of malicious admin, compromised admin, accidental pause, and blocked-withdrawal scenarios.
 - [Failure Mode Catalogue](docs/failure-mode-catalogue.md) – Summary of safe-failure behavior, expected errors, affected functions, and related tests for vault operations.
