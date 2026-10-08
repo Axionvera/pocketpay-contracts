@@ -1,0 +1,348 @@
+{
+  "schema_version": 1,
+  "contract": "SavingsVault",
+  "source": "contracts/savings_vault/src/lib.rs",
+  "verification": "expected contract semantics inferred from source; NOT executed against Soroban",
+  "wire_format": "normalized deterministic JSON, NOT raw Soroban XDR or RPC response",
+  "amount_encoding": "decimal strings (i128 integer token base units; no floating point)",
+  "ledger_timestamp_base": 1700000000,
+  "public_test_addresses": {
+    "user": "GBQ3UUVRLPBINPRTKWKPRQWKA4LYXJCTYYHR5DAICXVYXVFQ32P5CADH"
+  },
+  "no_private_key_material": true,
+  "scenarios": [
+    {
+      "id": "deposit_1000",
+      "operation": "deposit",
+      "ledger_timestamp": 1700000000,
+      "args": {
+        "user": "GBQ3UUVRLPBINPRTKWKPRQWKA4LYXJCTYYHR5DAICXVYXVFQ32P5CADH",
+        "amount": "1000"
+      },
+      "before": {
+        "unlocked": "0",
+        "locked": "0",
+        "total": "0",
+        "withdrawable": "0"
+      },
+      "expected": {
+        "ok": true,
+        "return": null,
+        "after": {
+          "unlocked": "1000",
+          "locked": "0",
+          "total": "1000",
+          "withdrawable": "0"
+        },
+        "events": [
+          {
+            "topics": [
+              "deposit",
+              "GBQ3UUVRLPBINPRTKWKPRQWKA4LYXJCTYYHR5DAICXVYXVFQ32P5CADH"
+            ],
+            "value": [
+              "1000",
+              "1000"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "lock_600_until_1700003600",
+      "operation": "lock_funds",
+      "ledger_timestamp": 1700000000,
+      "args": {
+        "user": "GBQ3UUVRLPBINPRTKWKPRQWKA4LYXJCTYYHR5DAICXVYXVFQ32P5CADH",
+        "amount": "600",
+        "unlock_time": 1700003600
+      },
+      "before": {
+        "unlocked": "1000",
+        "locked": "0",
+        "total": "1000",
+        "withdrawable": "0"
+      },
+      "expected": {
+        "ok": true,
+        "return": "1",
+        "after": {
+          "unlocked": "400",
+          "locked": "600",
+          "total": "1000",
+          "withdrawable": "0"
+        },
+        "lock": {
+          "id": "1",
+          "owner": "GBQ3UUVRLPBINPRTKWKPRQWKA4LYXJCTYYHR5DAICXVYXVFQ32P5CADH",
+          "amount": "600",
+          "created_time": 1700000000,
+          "unlock_time": 1700003600,
+          "withdrawn": false
+        },
+        "events": [
+          {
+            "topics": [
+              "lock",
+              "GBQ3UUVRLPBINPRTKWKPRQWKA4LYXJCTYYHR5DAICXVYXVFQ32P5CADH"
+            ],
+            "value": [
+              "600",
+              1700003600,
+              "400",
+              "600"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "early_lock_withdrawal_rejected",
+      "operation": "withdraw_lock",
+      "ledger_timestamp": 1700000001,
+      "args": {
+        "user": "GBQ3UUVRLPBINPRTKWKPRQWKA4LYXJCTYYHR5DAICXVYXVFQ32P5CADH",
+        "lock_id": "1"
+      },
+      "before": {
+        "unlocked": "400",
+        "locked": "600",
+        "total": "1000",
+        "withdrawable": "0"
+      },
+      "expected": {
+        "ok": false,
+        "error": {
+          "code": 5003,
+          "variant": "LockNotMatured"
+        },
+        "after": {
+          "unlocked": "400",
+          "locked": "600",
+          "total": "1000",
+          "withdrawable": "0"
+        },
+        "events": []
+      }
+    },
+    {
+      "id": "matured_lock_is_withdrawable",
+      "operation": "get_balance_snapshot",
+      "ledger_timestamp": 1700003600,
+      "args": {
+        "user": "GBQ3UUVRLPBINPRTKWKPRQWKA4LYXJCTYYHR5DAICXVYXVFQ32P5CADH"
+      },
+      "before": {
+        "unlocked": "400",
+        "locked": "600",
+        "total": "1000",
+        "withdrawable": "600"
+      },
+      "expected": {
+        "ok": true,
+        "return": {
+          "unlocked": "400",
+          "locked": "600",
+          "total": "1000",
+          "withdrawable": "600"
+        },
+        "after": {
+          "unlocked": "400",
+          "locked": "600",
+          "total": "1000",
+          "withdrawable": "600"
+        },
+        "events": []
+      }
+    },
+    {
+      "id": "withdraw_matured_lock",
+      "operation": "withdraw_lock",
+      "ledger_timestamp": 1700003600,
+      "args": {
+        "user": "GBQ3UUVRLPBINPRTKWKPRQWKA4LYXJCTYYHR5DAICXVYXVFQ32P5CADH",
+        "lock_id": "1"
+      },
+      "before": {
+        "unlocked": "400",
+        "locked": "600",
+        "total": "1000",
+        "withdrawable": "600"
+      },
+      "expected": {
+        "ok": true,
+        "return": null,
+        "after": {
+          "unlocked": "400",
+          "locked": "0",
+          "total": "400",
+          "withdrawable": "0"
+        },
+        "lock": {
+          "id": "1",
+          "owner": "GBQ3UUVRLPBINPRTKWKPRQWKA4LYXJCTYYHR5DAICXVYXVFQ32P5CADH",
+          "amount": "0",
+          "created_time": 1700000000,
+          "unlock_time": 1700003600,
+          "withdrawn": true
+        },
+        "events": [
+          {
+            "topics": [
+              "withdraw_lock",
+              "GBQ3UUVRLPBINPRTKWKPRQWKA4LYXJCTYYHR5DAICXVYXVFQ32P5CADH"
+            ],
+            "value": [
+              "1",
+              "600"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "withdraw_available_250",
+      "operation": "withdraw",
+      "ledger_timestamp": 1700003601,
+      "args": {
+        "user": "GBQ3UUVRLPBINPRTKWKPRQWKA4LYXJCTYYHR5DAICXVYXVFQ32P5CADH",
+        "amount": "250"
+      },
+      "before": {
+        "unlocked": "400",
+        "locked": "0",
+        "total": "400",
+        "withdrawable": "0"
+      },
+      "expected": {
+        "ok": true,
+        "return": null,
+        "after": {
+          "unlocked": "150",
+          "locked": "0",
+          "total": "150",
+          "withdrawable": "0"
+        },
+        "events": [
+          {
+            "topics": [
+              "withdraw",
+              "GBQ3UUVRLPBINPRTKWKPRQWKA4LYXJCTYYHR5DAICXVYXVFQ32P5CADH"
+            ],
+            "value": [
+              "250",
+              "150"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "insufficient_available_balance_rejected",
+      "operation": "withdraw",
+      "ledger_timestamp": 1700003602,
+      "args": {
+        "user": "GBQ3UUVRLPBINPRTKWKPRQWKA4LYXJCTYYHR5DAICXVYXVFQ32P5CADH",
+        "amount": "151"
+      },
+      "before": {
+        "unlocked": "150",
+        "locked": "0",
+        "total": "150",
+        "withdrawable": "0"
+      },
+      "expected": {
+        "ok": false,
+        "error": {
+          "code": 4001,
+          "variant": "InsufficientBalance"
+        },
+        "after": {
+          "unlocked": "150",
+          "locked": "0",
+          "total": "150",
+          "withdrawable": "0"
+        },
+        "events": []
+      }
+    },
+    {
+      "id": "zero_amount_deposit_rejected",
+      "operation": "deposit",
+      "ledger_timestamp": 1700003603,
+      "args": {
+        "user": "GBQ3UUVRLPBINPRTKWKPRQWKA4LYXJCTYYHR5DAICXVYXVFQ32P5CADH",
+        "amount": "0"
+      },
+      "before": {
+        "unlocked": "150",
+        "locked": "0",
+        "total": "150",
+        "withdrawable": "0"
+      },
+      "expected": {
+        "ok": false,
+        "error": {
+          "code": 1001,
+          "variant": "AmountNotPositive"
+        },
+        "after": {
+          "unlocked": "150",
+          "locked": "0",
+          "total": "150",
+          "withdrawable": "0"
+        },
+        "events": []
+      }
+    },
+    {
+      "id": "lock_double_withdrawal_rejected",
+      "operation": "withdraw_lock",
+      "ledger_timestamp": 1700003603,
+      "args": {
+        "user": "GBQ3UUVRLPBINPRTKWKPRQWKA4LYXJCTYYHR5DAICXVYXVFQ32P5CADH",
+        "lock_id": "1"
+      },
+      "before": {
+        "unlocked": "150",
+        "locked": "0",
+        "total": "150",
+        "withdrawable": "0"
+      },
+      "expected": {
+        "ok": false,
+        "error": {
+          "code": 5002,
+          "variant": "LockAlreadyWithdrawn"
+        },
+        "after": {
+          "unlocked": "150",
+          "locked": "0",
+          "total": "150",
+          "withdrawable": "0"
+        },
+        "events": []
+      }
+    },
+    {
+      "id": "non_initialized_deposit_rejected",
+      "operation": "deposit",
+      "ledger_timestamp": 1700000000,
+      "precondition": "fresh registered contract not initialized",
+      "args": {
+        "user": "GBQ3UUVRLPBINPRTKWKPRQWKA4LYXJCTYYHR5DAICXVYXVFQ32P5CADH",
+        "amount": "1000"
+      },
+      "before": null,
+      "expected": {
+        "ok": false,
+        "error": {
+          "code": 3002,
+          "variant": "NotInitialized"
+        },
+        "after": null,
+        "events": []
+      }
+    }
+  ]
+}
