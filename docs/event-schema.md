@@ -84,9 +84,10 @@ reverted deposit emits **no** event.
 
 ### 3. `withdraw`
 
-Emitted after a successful withdrawal. The withdrawal path can pull from both
-the unlocked deposit balance and matured locks; the emitted `new_locked`
-reflects only the still-unmatured lock total.
+Emitted after a successful withdrawal. `withdraw` spends only the user's
+available (unlocked) balance; matured locks require a separate `withdraw_lock`
+invocation. The event reports the remaining available balance and does **not**
+include a locked-balance field.
 
 **Topics**
 
@@ -101,7 +102,7 @@ reflects only the still-unmatured lock total.
 |---------------|--------|---------------------------------------------------------|
 | `amount`      | `i128` | Amount withdrawn this call (always `> 0`)               |
 | `new_balance` | `i128` | User's available balance **after** withdrawal            |
-| `new_locked`  | `i128` | User's remaining unmatured locked total after withdrawal |
+
 
 ---
 
@@ -240,7 +241,7 @@ import { scValToNative, xdr } from "@stellar/stellar-sdk";
 type VaultEvent =
   | { kind: "initialize"; admin: string; token: string }
   | { kind: "deposit"; user: string; amount: bigint; newBalance: bigint }
-  | { kind: "withdraw"; user: string; amount: bigint; newBalance: bigint; newLocked: bigint }
+  | { kind: "withdraw"; user: string; amount: bigint; newBalance: bigint }
   | { kind: "lock"; user: string; amount: bigint; unlockTime: bigint; newBalance: bigint; newLocked: bigint }
   | { kind: "withdraw_lock"; user: string; lockId: bigint; amount: bigint }
   | { kind: "pause"; admin: string; expiry: bigint }
@@ -261,8 +262,8 @@ export function decodeVaultEvent(topics: xdr.ScVal[], data: xdr.ScVal): VaultEve
       return { kind, user: subject, amount, newBalance };
     }
     case "withdraw": {
-      const [amount, newBalance, newLocked] = payload as [bigint, bigint, bigint];
-      return { kind, user: subject, amount, newBalance, newLocked };
+      const [amount, newBalance] = payload as [bigint, bigint];
+      return { kind, user: subject, amount, newBalance };
     }
     case "lock": {
       const [amount, unlockTime, newBalance, newLocked] =
